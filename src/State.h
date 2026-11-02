@@ -1,6 +1,7 @@
 #pragma once
 #include "Protocol.h"
 #include "ModelCatalog.h"
+#include "Transform.h"
 #include <filesystem>
 #include <map>
 #include <mutex>
@@ -21,9 +22,10 @@ struct Group {
  uint64_t selected=0,defaultPreset=0;
 };
 struct Document {
- bool enabled=true,autoDefault=true,autoOpen=false,autoFind=true,hideDragHint=false;int menuKey=VK_F9;float scale=1.0f;
+ bool enabled=true,autoDefault=true,autoOpen=false,autoFind=true,hideDragHint=false,transformsEnabled=true;int menuKey=VK_F9;float scale=1.0f;
  uint64_t nextId=1;std::vector<Group> groups;
  std::map<std::string,std::string> bindings;
+ std::vector<TransformRule> transforms;
 };
 struct State {
  std::recursive_mutex mutex;Document data;std::vector<Model> models;
@@ -33,6 +35,7 @@ struct State {
  std::map<std::string,std::string> loadedFingerprints;
  std::map<std::string,std::string> profileSnapshots;
  bool migrating=false;
+ TransformRuntime transform;
 };
 State& Get();
 void Initialize(SharedState*,const std::filesystem::path& pluginDir,const std::filesystem::path& gameRoot);
