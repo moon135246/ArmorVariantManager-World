@@ -65,6 +65,8 @@ void ResetMeshOrder(const Model&);
 bool CreateGroup(const std::string& name,const std::string& scope,bool global,const std::set<Target>& members,uint64_t& id);
 bool DeleteGroup(uint64_t);
 bool RenameGroup(uint64_t,const std::string&);
+bool MoveGroupBefore(uint64_t source,uint64_t before=UINT64_MAX);
+bool MovePresetBefore(Group&,uint64_t source,uint64_t before=UINT64_MAX);
 bool SavePreset(Group&,const std::string&,bool overwrite=false);
 bool ApplyPreset(Group&,uint64_t);
 bool DeletePreset(Group&,uint64_t);
