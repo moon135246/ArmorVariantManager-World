@@ -1,9 +1,12 @@
 #pragma once
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 #include <cstdint>
 namespace worlddiff {
-constexpr uint32_t kMagic=0x32304457,kVersion=102,kMaxRows=8192;
-constexpr wchar_t kMappingPrefix[]=L"Local\\WorldDiff102_";
+constexpr uint32_t kMagic=0x33304457,kVersion=103,kMaxRows=8192;
+constexpr wchar_t kMappingPrefix[]=L"Local\\WorldDiff103_";
 struct alignas(8) LiveRow {
  volatile LONG ready;
  char modelPath[256];

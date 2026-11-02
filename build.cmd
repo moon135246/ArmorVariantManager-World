@@ -8,18 +8,17 @@ if not defined VSPATH exit /b 1
 call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" >nul
 if errorlevel 1 exit /b 1
 if not exist build mkdir build
-if not exist "发布" mkdir "发布"
-if /i "%~1"=="--ui-only" goto :ui
 cl /nologo /TC /O2 /MT /W3 /c /D ZYDIS_STATIC_BUILD /D ZYCORE_STATIC_BUILD /Ithird_party\safetyhook third_party\safetyhook\Zydis.c /Fo:build\Zydis.obj
 if errorlevel 1 exit /b 1
-cl /nologo /std:c++latest /utf-8 /O2 /MT /W4 /EHsc /LD /D ZYDIS_STATIC_BUILD /D ZYCORE_STATIC_BUILD /Ithird_party\safetyhook src\Runtime.cpp third_party\safetyhook\safetyhook.cpp build\Zydis.obj /Fo:build\ /Fe:build\WorldDiff.dll /link user32.lib
+cl /nologo /std:c++latest /utf-8 /O2 /MT /W4 /EHsc /LD /D WIN32_LEAN_AND_MEAN /D ZYDIS_STATIC_BUILD /D ZYCORE_STATIC_BUILD /Ithird_party\safetyhook /Ithird_party\imgui ^
+src\Runtime.cpp src\State.cpp src\ModelCatalog.cpp src\Overlay.cpp src\Panel.cpp src\Dx12Backend.cpp ^
+third_party\safetyhook\safetyhook.cpp ^
+third_party\imgui\imgui.cpp third_party\imgui\imgui_draw.cpp third_party\imgui\imgui_tables.cpp third_party\imgui\imgui_widgets.cpp ^
+third_party\imgui\imgui_impl_dx11.cpp third_party\imgui\imgui_impl_dx12.cpp third_party\imgui\imgui_impl_win32.cpp ^
+build\Zydis.obj /Fo:build\ /Fe:build\WorldDiff.dll ^
+/link d3d11.lib d3d12.lib dxgi.lib dinput8.lib dxguid.lib user32.lib gdi32.lib imm32.lib dwmapi.lib
 if errorlevel 1 exit /b 1
-copy /y build\WorldDiff.dll "发布\WorldDiff.dll" >nul
+if not exist "发布\nativePC\plugins" mkdir "发布\nativePC\plugins"
+copy /y build\WorldDiff.dll "发布\nativePC\plugins\WorldDiff.dll" >nul
 if errorlevel 1 exit /b 1
-:ui
-if not exist src\Manager.cpp exit /b 0
-cl /nologo /std:c++17 /utf-8 /O2 /MT /W4 /EHsc src\Manager.cpp src\ModelCatalog.cpp /Fo:build\ /Fe:build\WorldDiffManager.exe /link /SUBSYSTEM:WINDOWS comctl32.lib comdlg32.lib shell32.lib user32.lib gdi32.lib advapi32.lib
-if errorlevel 1 exit /b 1
-copy /y build\WorldDiffManager.exe "发布\WorldDiffManager.exe" >nul
-if errorlevel 1 exit /b 1
-echo Build successful.
+echo [success] WorldDiff 1.0.3 in-game plugin built.
