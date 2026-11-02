@@ -6,6 +6,7 @@
 #include <mutex>
 #include <set>
 #include <tuple>
+#include <iosfwd>
 namespace worlddiff::app {
 struct Target {
  std::string model; uint32_t value=0; bool mesh=false;
@@ -20,13 +21,18 @@ struct Group {
  uint64_t selected=0,defaultPreset=0;
 };
 struct Document {
- bool enabled=true,autoDefault=true,autoOpen=false;int menuKey=VK_F9;float scale=1.0f;
+ bool enabled=true,autoDefault=true,autoOpen=false,autoFind=true;int menuKey=VK_F9;float scale=1.0f;
  uint64_t nextId=1;std::vector<Group> groups;
+ std::map<std::string,std::string> bindings;
 };
 struct State {
  std::recursive_mutex mutex;Document data;std::vector<Model> models;
  std::map<std::string,DWORD> lastSeen;std::filesystem::path directory,gameRoot,configPath;
  SharedState* live=nullptr;bool dirty=false,loaded=false;DWORD dirtyAt=0;std::string notice;
+ std::map<std::string,DWORD> profileAttempts;
+ std::map<std::string,std::string> loadedFingerprints;
+ std::map<std::string,std::string> profileSnapshots;
+ bool migrating=false;
 };
 State& Get();
 void Initialize(SharedState*,const std::filesystem::path& pluginDir,const std::filesystem::path& gameRoot);
@@ -52,4 +58,19 @@ bool DeletePreset(Group&,uint64_t);
 bool SetDefault(Group&,uint64_t);
 void Restore(Group&);void RestoreAll();
 void Import102(const std::filesystem::path&);
+struct ProfileCandidate {
+ std::string file,name;size_t hits=0,total=0,parts=0;bool filenameMatch=false,backup=false;
+};
+std::vector<ProfileCandidate> FindProfiles(const std::string& scope);
+bool AutoFindProfile(const std::string& scope,bool automatic=false);
+bool ApplyProfile(const std::string& scope,const std::string& file);
+bool ExportProfile(const std::string& scope,const std::string& name={});
+void TickProfiles();
+void SaveProfiles();
+void InitializeProfiles();
+std::string ProfilePart(const std::string& model);
+std::string Utf8(const std::wstring&);
+std::filesystem::path PathUtf8(const std::string&);
+void WriteDocument(std::ostream&,const Document&);
+bool ReadDocument(std::istream&,Document&);
 }

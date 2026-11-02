@@ -5,8 +5,8 @@
 #include <windows.h>
 #include <cstdint>
 namespace worlddiff {
-constexpr uint32_t kMagic=0x33304457,kVersion=103,kMaxRows=8192;
-constexpr wchar_t kMappingPrefix[]=L"Local\\WorldDiff103_";
+constexpr uint32_t kMagic=0x34304457,kVersion=104,kMaxRows=8192;
+constexpr wchar_t kMappingPrefix[]=L"Local\\WorldDiff104_";
 struct alignas(8) LiveRow {
  volatile LONG ready;
  char modelPath[256];

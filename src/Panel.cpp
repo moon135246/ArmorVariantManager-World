@@ -1,5 +1,6 @@
 #include "Overlay.h"
 #include "State.h"
+#include "NativeInput.h"
 #include "imgui.h"
 #include <algorithm>
 #include <cmath>
@@ -9,6 +10,7 @@ namespace {
 using namespace app;
 std::string outfit;uint64_t groupId=0;int tab=0,part=-1;bool meshMode=false,creating=false,globalGroup=false;
 char groupName[192]{},presetName[192]{},search[192]{},rename[192]{};std::set<Target> staged;
+char profileName[192]{};std::vector<ProfileCandidate> profileFiles;
 uint64_t editingMembers=0,confirmGroup=0,confirmPreset=0,renameGroup=0;
 ImVec4 accent{0.33f,0.72f,0.78f,1},muted{0.6f,0.66f,0.72f,1},danger{0.91f,0.51f,0.51f,1};
 float S(float x){return x*Get().data.scale;}
@@ -38,18 +40,18 @@ void GroupsPane(float width,float height){
   if(Button("删除分组")){confirmGroup=g->id;ImGui::OpenPopup("删除分组？");}ImGui::EndDisabled();
   ImGui::TextColored(muted,"普通组独占成员\n全局组可重叠并叠加隐藏\n拖动列表可以调整顺序");
  }else{
-  ImGui::TextColored(accent,editingMembers?"编辑分组成员":"选择材质并创建分组");ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##组名","分组名称",groupName,sizeof(groupName));
+  ImGui::TextColored(accent,editingMembers?"编辑分组成员":"选择材质并创建分组");ImGui::SetNextItemWidth(-1);TextField("##组名","分组名称",groupName,sizeof(groupName));
   ImGui::BeginDisabled(editingMembers!=0);ImGui::Checkbox("全局分组（叠加隐藏）",&globalGroup);ImGui::EndDisabled();
   ImGui::Text("已选择 %zu 个材质",staged.size());
   ImGui::BeginDisabled(staged.empty()||!groupName[0]);if(Button("确认")){
    uint64_t id=0;bool ok=false;
-   if(editingMembers){auto* edit=Find(editingMembers);if(edit){bool valid=true;for(auto& t:staged){auto* owner=Owner(t.model,t.value);if(!edit->global&&owner&&owner->id!=edit->id)valid=false;}if(valid){edit->members=staged;RenameGroup(edit->id,groupName);Changed("分组成员已更新");id=edit->id;ok=true;}}}
+   if(editingMembers){auto* edit=Find(editingMembers);if(edit){bool valid=true;for(auto& t:staged){auto* owner=Owner(t.model,t.value);if(!edit->global&&owner&&owner->id!=edit->id)valid=false;}if(valid&&RenameGroup(edit->id,groupName)){edit->members=staged;Changed("分组成员已更新");id=edit->id;ok=true;}}}
    else ok=CreateGroup(groupName,outfit,globalGroup,staged,id);
    if(ok){groupId=id;creating=false;staged.clear();}else s.notice="创建失败：检查重名、选择范围或普通组归属";
   }ImGui::EndDisabled();ImGui::SameLine();if(Button("取消")){creating=false;editingMembers=0;staged.clear();}
  }
  if(ImGui::BeginPopupModal("删除分组？",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){ImGui::TextUnformatted("分组内的预设将一起删除，材质控制权归还主列表。");if(Button("删除")){DeleteGroup(confirmGroup);groupId=Main(outfit).id;ImGui::CloseCurrentPopup();}ImGui::SameLine();if(Button("取消##删除组"))ImGui::CloseCurrentPopup();ImGui::EndPopup();}
- if(ImGui::BeginPopupModal("重命名分组",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){ImGui::InputText("名称",rename,sizeof(rename));if(Button("保存")){if(RenameGroup(renameGroup,rename))ImGui::CloseCurrentPopup();else s.notice="分组名称为空或重复";}ImGui::SameLine();if(Button("取消##改组名"))ImGui::CloseCurrentPopup();ImGui::EndPopup();}
+ if(ImGui::BeginPopupModal("重命名分组",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){TextField("名称","分组名称",rename,sizeof(rename));if(Button("保存")){if(RenameGroup(renameGroup,rename))ImGui::CloseCurrentPopup();else s.notice="分组名称为空或重复";}ImGui::SameLine();if(Button("取消##改组名"))ImGui::CloseCurrentPopup();ImGui::EndPopup();}
  ImGui::EndChild();
 }
 void PresetsPane(float width,float height){
@@ -61,7 +63,7 @@ void PresetsPane(float width,float height){
   if(ImGui::BeginDragDropTarget()){if(auto* payload=ImGui::AcceptDragDropPayload("WD_PRESET")){auto id=*(const uint64_t*)payload->Data;auto it=std::find_if(g->presets.begin(),g->presets.end(),[&](auto& a){return a.id==id;});if(it!=g->presets.end()){std::iter_swap(it,g->presets.begin()+i);Changed();}}ImGui::EndDragDropTarget();}ImGui::PopID();
  }
  if(g&&g->presets.empty())ImGui::TextColored(muted,"尚无预设\n先调整右侧显隐，再保存");ImGui::EndChild();ImGui::Separator();
- ImGui::TextColored(muted,"保存当前分组的状态");ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##预设名称","新预设名称",presetName,sizeof(presetName));ImGui::BeginDisabled(!g||!presetName[0]);
+ ImGui::TextColored(muted,"保存当前分组的状态");ImGui::SetNextItemWidth(-1);TextField("##预设名称","新预设名称",presetName,sizeof(presetName));ImGui::BeginDisabled(!g||!presetName[0]);
  if(Button("保存新预设")){if(SavePreset(*g,presetName)){presetName[0]=0;}else s.notice="预设名为空或已存在，请使用覆盖";}ImGui::EndDisabled();
  Preset* selected=nullptr;if(g)for(auto& p:g->presets)if(p.id==g->selected)selected=&p;
  bool modified=selected&&(selected->rules.hidden!=g->working.hidden||selected->rules.shown!=g->working.shown);
@@ -77,12 +79,12 @@ void TargetsPanel(){
  auto& s=Get();auto* g=Find(groupId);if(!g){ImGui::TextDisabled("等待装备加载…");return;}
  if(creating)ImGui::TextColored(accent,"分组选择模式：勾选要交给该组管理的材质");
  else{ImGui::BeginDisabled(creating);if(ImGui::RadioButton("按材质",!meshMode))meshMode=false;ImGui::SameLine();if(ImGui::RadioButton("按子网格",meshMode))meshMode=true;ImGui::EndDisabled();}
- ImGui::SetNextItemWidth(-1);ImGui::InputTextWithHint("##搜索材质","搜索材质或模型名称",search,sizeof(search));
+ ImGui::SetNextItemWidth(-1);TextField("##搜索材质","搜索材质或模型名称",search,sizeof(search));
  const char* parts[]={"全部","头部","身体","手臂","腰部","腿部"};for(int p=-1;p<5;p++){if(p!=-1)ImGui::SameLine();bool on=part==p;if(on)ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(.13f,.3f,.35f,1));if(Button(parts[p+1]))part=p;if(on)ImGui::PopStyleColor();}
  ImGui::Separator();
  ImGui::BeginChild("材质滚动区",ImVec2(0,-S(28)));
  std::string filter=Lower(search);DWORD now=GetTickCount();bool any=false;
- for(int slot=0;slot<6;slot++)for(auto& model:s.models){if(model.equip!=outfit||PartIndex(model.part)!=slot||(part!=-1&&part!=slot))continue;auto path=Normalize(model.relativePath);bool active=s.lastSeen.count(path)&&(DWORD)(now-s.lastSeen[path])<4000;std::string head=std::string(PartName(slot))+"  ·  "+model.display+(active?"  [已加载]":"  [待加载]");ImGui::PushID(path.c_str());
+ for(int slot=0;slot<6;slot++)for(auto& model:s.models){if(model.equip!=outfit||PartIndex(model.part)!=slot||(part!=-1&&part!=slot))continue;auto path=Normalize(model.relativePath);bool active=s.lastSeen.count(path)&&(DWORD)(now-s.lastSeen[path])<1800;std::string head=std::string(PartName(slot))+"  ·  "+model.display+(active?"  [已加载]":"  [待加载]");ImGui::PushID(path.c_str());
   if(ImGui::CollapsingHeader(head.c_str(),ImGuiTreeNodeFlags_DefaultOpen)){
    std::map<uint32_t,std::vector<const Mesh*>> targets;for(auto& m:model.meshes){if(m.materialId>=model.materials.size())continue;targets[meshMode&&!creating?m.index:model.materials[m.materialId].hash].push_back(&m);}
    struct Item {Target target;const Material* mat;std::vector<const Mesh*> meshes;bool allowed,member;Group* owner;};std::vector<Item> items;
@@ -109,29 +111,43 @@ void SettingsPanel(){
  auto& s=Get();ImGui::TextColored(accent,"启动与输入");if(ImGui::Checkbox("启用差分控制",&s.data.enabled))Changed();if(ImGui::Checkbox("进入游戏后自动打开面板",&s.data.autoOpen))Changed();
  const char* keys[]={"F5","F6","F7","F8","F9","F10","F11","F12"};int key=std::clamp(s.data.menuKey-VK_F5,0,7);ImGui::SetNextItemWidth(S(180));if(ImGui::Combo("开关面板快捷键",&key,keys,8)){s.data.menuKey=VK_F5+key;Changed();}
  ImGui::SetNextItemWidth(S(220));if(ImGui::SliderFloat("界面缩放",&s.data.scale,.7f,1.5f,"%.2f"))Changed();
- ImGui::Separator();ImGui::TextColored(accent,"配置与恢复");if(Button("立即保存配置")){Save();s.notice="配置已保存";}ImGui::SameLine();if(Button("恢复当前组")){if(auto* g=Find(groupId))Restore(*g);}
+ ImGui::Separator();ImGui::TextColored(accent,"配置与恢复");if(Button("立即保存配置")){if(Save())s.notice="配置已保存";else s.notice="配置保存失败，请检查目录是否可写";}ImGui::SameLine();if(Button("恢复当前组")){if(auto* g=Find(groupId))Restore(*g);}
  if(Button("暂停全部并恢复游戏显隐"))RestoreAll();Tip("不会删除任何已保存预设；重新启用控制后，可选择预设恢复方案。");
  if(Button("导入 1.0.2 配置"))Import102(s.directory/L"WorldDiff102.ini");
- ImGui::TextWrapped("配置随插件保存在 nativePC/plugins/WorldDiff/WorldDiff103.cfg。需要导入旧版时，将 WorldDiff102.ini 放入同一配置目录。");
+ ImGui::TextWrapped("配置：nativePC/plugins/WorldDiff/WorldDiff104.cfg。可分享的分组与预设文件在 WorldDiff/Presets/*.wdp，可改名或复制后用手动/自动查找载入。");
+ if(ImGui::Checkbox("换装后自动识别预设文件",&s.data.autoFind))Changed();
  ImGui::Separator();ImGui::TextColored(accent,"操作说明");ImGui::TextWrapped("普通分组独占成员，主列表不再管理已分组材质。全局分组可以与其他分组重叠，只叠加隐藏。每个分组保存独立预设和默认预设。列表支持拖动排序。");
  ImGui::TextWrapped("关闭面板后规则仍然生效。Ctrl+F9 可暂停全部控制；Esc 关闭面板。插件随 Stracker's Loader 加载，不需要连接或外置程序。");
- ImGui::TextWrapped("按材质保存的规则随材质名称匹配。子网格规则按模型中的序号保存，MOD 更新并重排网格后请重新核对。当前控制相同模型路径的本机绘制实例。");
+ ImGui::TextWrapped("查找会比较全部部位的材质，包含分组成员与所有预设，同分时优先装备同名文件。载入时重新绑定材质和子网格，因此同款 MOD 可跨装备编号复用。无法确定的网格会跳过并提示。");
+ ImGui::TextWrapped("名称输入使用原生 Unicode/IME 文本框，支持中文、日文和粘贴。回车完成输入，Esc 取消本次编辑。关闭面板后恢复游戏的鼠标与键盘输入。");
  ImGui::TextColored(muted,"渲染：%s",BackendStatus());if(s.live)ImGui::TextColored(muted,"运行时记录 %ld / %u · %s",s.live->rowCount,kMaxRows,s.live->overflow?"已满，请重启游戏":"正常");
 }
 }
 void DrawPanel(){
  auto& s=app::Get();std::lock_guard lock(s.mutex);if(!s.loaded)return;
- std::set<std::string> scopes,active;DWORD now=GetTickCount();for(auto& m:s.models){scopes.insert(m.equip);if(s.lastSeen.count(m.relativePath)&&(DWORD)(now-s.lastSeen[m.relativePath])<4000)active.insert(m.equip);}
+ std::set<std::string> scopes,active;DWORD now=GetTickCount();for(auto& m:s.models){scopes.insert(m.equip);if(s.lastSeen.count(m.relativePath)&&(DWORD)(now-s.lastSeen[m.relativePath])<1800)active.insert(m.equip);}
  if(outfit.empty()||(!active.empty()&&!active.count(outfit))){if(!active.empty())outfit=*active.begin();else if(!scopes.empty())outfit=*scopes.begin();}
- if(outfit.empty()){if(ImGui::Begin("差分管理器 · 世界版 1.0.3###WorldDiffInternal")){ImGui::TextUnformatted("插件已随游戏加载，正在等待角色装备进入绘制流程。");if(Button("关闭面板"))SetVisible(false);}ImGui::End();return;}
+ if(outfit.empty()){if(ImGui::Begin("差分管理器 · 世界版 1.0.4###WorldDiffInternal")){ImGui::TextUnformatted("插件已随游戏加载，正在等待角色装备进入绘制流程。");if(Button("关闭面板"))SetVisible(false);}ImGui::End();return;}
  if(!Find(groupId)||Find(groupId)->scope!=outfit){groupId=Main(outfit).id;creating=false;staged.clear();}
  auto& io=ImGui::GetIO();float scale=s.data.scale;ImGui::SetNextWindowSize(ImVec2(std::min(io.DisplaySize.x-S(60),S(1460)),std::min(io.DisplaySize.y-S(80),S(850))),ImGuiCond_FirstUseEver);ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x*.5f,io.DisplaySize.y*.5f),ImGuiCond_FirstUseEver,ImVec2(.5f,.5f));ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(S(1050),io.DisplaySize.x-30),std::min(S(620),io.DisplaySize.y-30)),ImVec2(io.DisplaySize.x,io.DisplaySize.y));
  ImGui::PushFont(nullptr,22*scale);bool open=true;ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(S(18),S(14)));
- if(ImGui::Begin("差分管理器 · 世界版 1.0.3###WorldDiffInternal",&open,ImGuiWindowFlags_NoCollapse)){
-  ImGui::TextColored(accent,"差分管理器");ImGui::SameLine();ImGui::TextDisabled("世界版  1.0.3");ImGui::SameLine();ImGui::TextDisabled("| 游戏内置");
+ if(ImGui::Begin("差分管理器 · 世界版 1.0.4###WorldDiffInternal",&open,ImGuiWindowFlags_NoCollapse)){
+  ImGui::TextColored(accent,"差分管理器");ImGui::SameLine();ImGui::TextDisabled("世界版  1.0.4");ImGui::SameLine();ImGui::TextDisabled("| 游戏内置");
   ImGui::SameLine(ImGui::GetWindowWidth()-S(350));if(ImGui::Checkbox("启用",&s.data.enabled))Changed();ImGui::SameLine();if(Button("暂停并恢复"))RestoreAll();
   ImGui::SetNextItemWidth(S(225));if(ImGui::BeginCombo("装备",outfit.empty()?"等待装备加载":outfit.c_str())){for(auto& scope:scopes){auto label=scope+(active.count(scope)?" · 已加载":"");if(ImGui::Selectable(label.c_str(),outfit==scope)){outfit=scope;groupId=Main(outfit).id;creating=false;staged.clear();}}ImGui::EndCombo();}
   ImGui::SameLine();ImGui::TextColored(muted,"%s",s.data.enabled?"显隐控制运行中":"已暂停 · 全部跟随游戏");ImGui::Separator();
+  if(Button("手动查找")){profileFiles=FindProfiles(outfit);ImGui::OpenPopup("手动查找预设文件");}ImGui::SameLine();if(Button("自动查找")){if(AutoFindProfile(outfit)){groupId=Main(outfit).id;creating=false;staged.clear();}}
+  ImGui::SameLine();if(Button("另存预设文件")){profileName[0]=0;ImGui::OpenPopup("另存预设文件");}ImGui::SameLine();if(ImGui::Checkbox("换装自动识别",&s.data.autoFind))Changed();
+  auto bound=s.data.bindings.find(outfit);ImGui::TextColored(muted,"预设文件：%s",bound==s.data.bindings.end()?"尚未关联，编辑后自动创建":bound->second.c_str());
+  if(ImGui::BeginPopupModal("手动查找预设文件",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
+   ImGui::Text("当前装备：%s · 找到 %zu 份预设文件",outfit.c_str(),profileFiles.size());
+   ImGui::TextWrapped("载入整个文件的分组、预设与默认项，按当前材质重新绑定。已有设置会先自动备份。");
+   ImGui::BeginChild("预设文件列表",ImVec2(S(680),S(340)),ImGuiChildFlags_Borders);
+   for(auto& f:profileFiles){ImGui::PushID(f.file.c_str());std::string label=f.file+"  · 材质 "+std::to_string(f.hits)+"/"+std::to_string(f.total)+(f.filenameMatch?"  [装备同名]":"");if(ImGui::Selectable(label.c_str())){if(ApplyProfile(outfit,f.file)){groupId=Main(outfit).id;creating=false;staged.clear();ImGui::CloseCurrentPopup();}}ImGui::PopID();}
+   if(profileFiles.empty())ImGui::TextWrapped("尚无预设文件。保存分组/预设后会自动生成，也可把 .wdp 文件放入 WorldDiff/Presets。");ImGui::EndChild();if(Button("刷新列表"))profileFiles=FindProfiles(outfit);ImGui::SameLine();if(Button("取消##查找"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
+  }
+  if(ImGui::BeginPopupModal("另存预设文件",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){ImGui::TextUnformatted("保存当前装备的全部分组与预设，可供同款 MOD 的其他装备识别。");ImGui::SetNextItemWidth(S(400));TextField("##预设文件名","如：黎明巫女 或 pl105_0000",profileName,sizeof(profileName));if(Button("保存文件")){if(ExportProfile(outfit,profileName)){Changed("预设文件已另存，换装可通过材质识别复用");ImGui::CloseCurrentPopup();}}ImGui::SameLine();if(Button("取消##另存"))ImGui::CloseCurrentPopup();ImGui::EndPopup();}
+  ImGui::Separator();
   float height=ImGui::GetContentRegionAvail().y-S(43);float available=ImGui::GetContentRegionAvail().x;float left=std::max(S(215),available*.21f),middle=std::max(S(240),available*.23f);
   GroupsPane(left,height);ImGui::SameLine();PresetsPane(middle,height);ImGui::SameLine();
   ImGui::BeginChild("右侧面板",ImVec2(0,height),ImGuiChildFlags_Borders);

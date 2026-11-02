@@ -4,6 +4,7 @@
 #define DIRECTINPUT_VERSION 0x0800
 #include "Overlay.h"
 #include "State.h"
+#include "NativeInput.h"
 #include "Dx12Backend.h"
 #include "imgui.h"
 #include "imgui_impl_dx11.h"
@@ -35,22 +36,30 @@ using ExecuteFn=void(STDMETHODCALLTYPE*)(ID3D12CommandQueue*,UINT,ID3D12CommandL
 PresentFn originalPresent=nullptr;ResizeFn originalResize=nullptr;ExecuteFn originalExecute=nullptr;
 using AsyncFn=SHORT(WINAPI*)(int);using KeyboardFn=BOOL(WINAPI*)(PBYTE);using RawFn=UINT(WINAPI*)(HRAWINPUT,UINT,LPVOID,PUINT,UINT);
 AsyncFn originalAsync=nullptr;KeyboardFn originalKeyboard=nullptr;RawFn originalRaw=nullptr;
+using CursorPosFn=BOOL(WINAPI*)(int,int);using ClipFn=BOOL(WINAPI*)(const RECT*);
+CursorPosFn originalCursorPos=nullptr,originalPhysicalCursor=nullptr;ClipFn originalClip=nullptr;
+std::mutex clipMutex;RECT lastGameClip{};bool hasGameClip=false;std::atomic<uint64_t> blockedWarps{0};
+bool OwnInput(){return ownInput||NativeInputThread();}
+BOOL WINAPI CursorFilter(int x,int y){if(open&&!OwnInput()){blockedWarps++;return TRUE;}return originalCursorPos(x,y);}
+BOOL WINAPI PhysicalCursorFilter(int x,int y){if(open&&!OwnInput()){blockedWarps++;return TRUE;}return originalPhysicalCursor(x,y);}
+BOOL WINAPI ClipFilter(const RECT* rect){if(!OwnInput()){std::lock_guard lock(clipMutex);hasGameClip=rect!=nullptr;if(rect)lastGameClip=*rect;}if(open&&!OwnInput()){if(GetForegroundWindow()==window||NativeInputOwnWindow(GetForegroundWindow()))return originalClip(nullptr);return TRUE;}return originalClip(rect);}
 using DeviceStateFn=HRESULT(STDMETHODCALLTYPE*)(IDirectInputDevice8W*,DWORD,LPVOID);
 using DeviceDataFn=HRESULT(STDMETHODCALLTYPE*)(IDirectInputDevice8W*,DWORD,LPDIDEVICEOBJECTDATA,LPDWORD,DWORD);
 DeviceStateFn originalDeviceState=nullptr;DeviceDataFn originalDeviceData=nullptr;
 template<class F> bool Hook(void* address,void* detour,F& original){auto made=safetyhook::InlineHook::create(address,detour,safetyhook::InlineHook::StartDisabled);if(!made)return false;auto* hook=new safetyhook::InlineHook(std::move(*made));original=hook->original<F>();if(!hook->enable()){delete hook;original=nullptr;return false;}return true;}
-SHORT WINAPI KeyFilter(int key){SHORT v=originalAsync?originalAsync(key):0;return open&&!ownInput?0:v;}
-BOOL WINAPI KeyboardFilter(PBYTE keys){BOOL v=originalKeyboard?originalKeyboard(keys):FALSE;if(v&&keys&&open&&!ownInput)memset(keys,0,256);return v;}
-UINT WINAPI RawFilter(HRAWINPUT h,UINT command,LPVOID data,PUINT size,UINT header){UINT n=originalRaw?originalRaw(h,command,data,size,header):(UINT)-1;if(open&&!ownInput&&command==RID_INPUT&&data&&n!=(UINT)-1&&n>=sizeof(RAWINPUTHEADER)){auto* input=(RAWINPUT*)data;if(input->header.dwType==RIM_TYPEMOUSE&&n>=sizeof(RAWINPUTHEADER)+sizeof(RAWMOUSE))memset(&input->data.mouse,0,sizeof(RAWMOUSE));else if(input->header.dwType==RIM_TYPEKEYBOARD&&n>=sizeof(RAWINPUTHEADER)+sizeof(RAWKEYBOARD))memset(&input->data.keyboard,0,sizeof(RAWKEYBOARD));}return n;}
-HRESULT STDMETHODCALLTYPE DeviceStateFilter(IDirectInputDevice8W* self,DWORD bytes,LPVOID data){HRESULT hr=originalDeviceState(self,bytes,data);if(SUCCEEDED(hr)&&open&&!ownInput&&data)memset(data,0,bytes);return hr;}
-HRESULT STDMETHODCALLTYPE DeviceDataFilter(IDirectInputDevice8W* self,DWORD stride,LPDIDEVICEOBJECTDATA data,LPDWORD count,DWORD flags){HRESULT hr=originalDeviceData(self,stride,data,count,flags);if(SUCCEEDED(hr)&&open&&!ownInput&&count)*count=0;return hr;}
-bool Key(int key){ownInput=true;SHORT v=originalAsync?originalAsync(key):GetAsyncKeyState(key);ownInput=false;return (v&0x8000)!=0;}
+SHORT WINAPI KeyFilter(int key){SHORT v=originalAsync?originalAsync(key):0;return open&&!OwnInput()?0:v;}
+BOOL WINAPI KeyboardFilter(PBYTE keys){BOOL v=originalKeyboard?originalKeyboard(keys):FALSE;if(v&&keys&&open&&!OwnInput())memset(keys,0,256);return v;}
+UINT WINAPI RawFilter(HRAWINPUT h,UINT command,LPVOID data,PUINT size,UINT header){UINT n=originalRaw?originalRaw(h,command,data,size,header):(UINT)-1;if(open&&!OwnInput()&&command==RID_INPUT&&data&&n!=(UINT)-1&&n>=sizeof(RAWINPUTHEADER)){auto* input=(RAWINPUT*)data;if(input->header.dwType==RIM_TYPEMOUSE&&n>=sizeof(RAWINPUTHEADER)+sizeof(RAWMOUSE))memset(&input->data.mouse,0,sizeof(RAWMOUSE));else if(input->header.dwType==RIM_TYPEKEYBOARD&&n>=sizeof(RAWINPUTHEADER)+sizeof(RAWKEYBOARD))memset(&input->data.keyboard,0,sizeof(RAWKEYBOARD));}return n;}
+HRESULT STDMETHODCALLTYPE DeviceStateFilter(IDirectInputDevice8W* self,DWORD bytes,LPVOID data){HRESULT hr=originalDeviceState(self,bytes,data);if(SUCCEEDED(hr)&&open&&!OwnInput()&&data)memset(data,0,bytes);return hr;}
+HRESULT STDMETHODCALLTYPE DeviceDataFilter(IDirectInputDevice8W* self,DWORD stride,LPDIDEVICEOBJECTDATA data,LPDWORD count,DWORD flags){HRESULT hr=originalDeviceData(self,stride,data,count,flags);if(SUCCEEDED(hr)&&open&&!OwnInput()&&count)*count=0;return hr;}
+bool Key(int key){bool before=ownInput;ownInput=true;SHORT v=originalAsync?originalAsync(key):GetAsyncKeyState(key);ownInput=before;return (v&0x8000)!=0;}
 void InstallInput(){
  if(inputInstalled.exchange(true))return;
  HMODULE user=GetModuleHandleW(L"user32.dll");bool a=Hook((void*)GetProcAddress(user,"GetAsyncKeyState"),(void*)KeyFilter,originalAsync);bool b=Hook((void*)GetProcAddress(user,"GetKeyboardState"),(void*)KeyboardFilter,originalKeyboard);bool c=Hook((void*)GetProcAddress(user,"GetRawInputData"),(void*)RawFilter,originalRaw);
+ auto cursor=(void*)GetProcAddress(user,"SetCursorPos");bool warp=Hook(cursor,(void*)CursorFilter,originalCursorPos);auto physical=(void*)GetProcAddress(user,"SetPhysicalCursorPos");if(physical&&physical!=cursor)Hook(physical,(void*)PhysicalCursorFilter,originalPhysicalCursor);bool clip=Hook((void*)GetProcAddress(user,"ClipCursor"),(void*)ClipFilter,originalClip);
  bool d=false,e=false;IDirectInput8W* di=nullptr;IDirectInputDevice8W* keyboard=nullptr;
  if(SUCCEEDED(DirectInput8Create(GetModuleHandleW(nullptr),DIRECTINPUT_VERSION,IID_IDirectInput8W,(void**)&di,nullptr))&&di){if(SUCCEEDED(di->CreateDevice(GUID_SysKeyboard,&keyboard,nullptr))&&keyboard){auto** vt=*(void***)keyboard;d=Hook(vt[9],(void*)DeviceStateFilter,originalDeviceState);e=Hook(vt[10],(void*)DeviceDataFilter,originalDeviceData);keyboard->Release();}di->Release();}
- RuntimeLog("Input capture installed: async=%d keyboard=%d raw=%d direct-state=%d direct-buffer=%d",a,b,c,d,e);
+ RuntimeLog("Input capture installed: async=%d keyboard=%d raw=%d direct-state=%d direct-buffer=%d cursor-warp=%d clip=%d",a,b,c,d,e,warp,clip);
 }
 LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
  std::lock_guard lock(renderMutex);
@@ -88,7 +97,7 @@ bool Initialize(IDXGISwapChain* swap){
  window=desc.OutputWindow;if(!Common(window))return false;
  if(is12){if(!dx12::Init(swap))return false;}else{if(FAILED(swap->GetDevice(IID_PPV_ARGS(&device11))))return false;device11->GetImmediateContext(&context11);if(!ImGui_ImplDX11_Init(device11,context11))return false;CreateRtv(swap);}
  if(!originalWnd)originalWnd=(WNDPROC)SetWindowLongPtrW(window,GWLP_WNDPROC,(LONG_PTR)WndProc);
- ready=true;bound=swap;firstTick=GetTickCount();RuntimeLog("In-game UI ready: %s hwnd=%p",is12?"DX12":"DX11",window);
+ ready=true;bound=swap;firstTick=GetTickCount();NativeInputInitialize(window);RuntimeLog("In-game UI ready: %s hwnd=%p",is12?"DX12":"DX11",window);
  return true;
 }
 HRESULT WINAPI Present(IDXGISwapChain* swap,UINT sync,UINT flags){
@@ -102,10 +111,10 @@ HRESULT WINAPI Present(IDXGISwapChain* swap,UINT sync,UINT flags){
     int key;{std::lock_guard stateLock(app::Get().mutex);key=app::Get().data.menuKey;}
     static bool previous=false,panicPrevious=false;bool down=Key(key)&&!Key(VK_CONTROL);if(down&&!previous&&GetForegroundWindow()==window&&(DWORD)(GetTickCount()-messageToggleAt.load())>250){SetVisible(!open);messageToggleAt=GetTickCount();}previous=down;
     if(!autoOpened&&RuntimeState()&&RuntimeState()->rowCount>0){std::lock_guard stateLock(app::Get().mutex);autoOpened=true;if(app::Get().data.autoOpen)SetVisible(true);}
-    bool panic=Key(VK_CONTROL)&&Key(VK_F9);if(panic&&!panicPrevious){std::lock_guard stateLock(app::Get().mutex);app::RestoreAll();}panicPrevious=panic;
+    bool panic=Key(VK_CONTROL)&&Key(VK_F9)&&(GetForegroundWindow()==window||NativeInputOwnWindow(GetForegroundWindow()));if(panic&&!panicPrevious){std::lock_guard stateLock(app::Get().mutex);app::RestoreAll();}panicPrevious=panic;
     ownInput=true;if(is12)dx12::NewFrame();else ImGui_ImplDX11_NewFrame();ImGui_ImplWin32_NewFrame();ownInput=false;
     auto& io=ImGui::GetIO();io.MouseDrawCursor=open;ImGui::NewFrame();
-    if(open)DrawPanel();else if((DWORD)(GetTickCount()-firstTick)<9000){ImGui::SetNextWindowPos({26,28});ImGui::SetNextWindowBgAlpha(.84f);ImGui::Begin("##WorldDiffToast",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoSavedSettings);ImGui::TextColored({.33f,.72f,.78f,1},"世界版差分管理器 1.0.3 已加载");ImGui::Text("F%d 打开面板  |  Ctrl+F9 暂停控制",key-VK_F1+1);ImGui::End();}
+    NativeInputBeginFrame();if(open)DrawPanel();else if((DWORD)(GetTickCount()-firstTick)<9000){ImGui::SetNextWindowPos({26,28});ImGui::SetNextWindowBgAlpha(.84f);ImGui::Begin("##WorldDiffToast",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoSavedSettings);ImGui::TextColored({.33f,.72f,.78f,1},"世界版差分管理器 1.0.4 已加载");ImGui::Text("F%d 打开面板  |  Ctrl+F9 暂停控制",key-VK_F1+1);ImGui::End();}NativeInputEndFrame();
     ImGui::Render();if(ImGui::GetDrawData()->CmdListsCount){if(is12)dx12::Render(ImGui::GetDrawData());else if(context11&&rtv){ID3D11RenderTargetView* before=nullptr;ID3D11DepthStencilView* depth=nullptr;context11->OMGetRenderTargets(1,&before,&depth);context11->OMSetRenderTargets(1,&rtv,nullptr);ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());context11->OMSetRenderTargets(1,&before,depth);if(before)before->Release();if(depth)depth->Release();}}
    }
   }
@@ -119,7 +128,7 @@ void STDMETHODCALLTYPE Execute(ID3D12CommandQueue* q,UINT n,ID3D12CommandList*co
 }
 }
 bool Visible(){return open.load();}
-void SetVisible(bool show){bool old=open.exchange(show);if(show)inputRequested=true;if(old!=show){if(show)ClipCursor(nullptr);RuntimeLog("Panel %s",show?"opened":"closed");}}
+void SetVisible(bool show){bool old=open.exchange(show);if(show)inputRequested=true;if(old!=show){if(show){ownInput=true;if(originalClip)originalClip(nullptr);else ClipCursor(nullptr);ownInput=false;}else{NativeInputClose();std::lock_guard lock(clipMutex);if(originalClip)originalClip(hasGameClip&&GetForegroundWindow()==window?&lastGameClip:nullptr);}RuntimeLog("Panel %s (blocked cursor warps=%llu)",show?"opened":"closed",blockedWarps.load());}}
 const char* BackendStatus(){return ready?(is12?"DirectX 12 · 游戏命令队列":"DirectX 11"):deviceLost?"设备已重置，面板停止":"等待游戏渲染";}
 void WorkerTick(){
  if(inputRequested&&!inputInstalled)InstallInput();
@@ -127,7 +136,7 @@ void WorkerTick(){
  if(command.rfind("open",0)==0)SetVisible(true);else if(command.rfind("close",0)==0)SetVisible(false);else if(command.rfind("reload",0)==0){std::lock_guard lock(app::Get().mutex);app::Load();}else if(command.rfind("save",0)==0){std::lock_guard lock(app::Get().mutex);app::Save();}
 }
 bool Install(){
- WNDCLASSW wc{};wc.lpfnWndProc=DefWindowProcW;wc.hInstance=GetModuleHandleW(nullptr);wc.lpszClassName=L"WorldDiff103Dummy";RegisterClassW(&wc);HWND dummy=CreateWindowW(wc.lpszClassName,L"",WS_OVERLAPPED,0,0,8,8,nullptr,nullptr,wc.hInstance,nullptr);if(!dummy)return false;
+ WNDCLASSW wc{};wc.lpfnWndProc=DefWindowProcW;wc.hInstance=GetModuleHandleW(nullptr);wc.lpszClassName=L"WorldDiff104Dummy";RegisterClassW(&wc);HWND dummy=CreateWindowW(wc.lpszClassName,L"",WS_OVERLAPPED,0,0,8,8,nullptr,nullptr,wc.hInstance,nullptr);if(!dummy)return false;
  DXGI_SWAP_CHAIN_DESC desc{};desc.BufferCount=2;desc.BufferDesc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;desc.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;desc.OutputWindow=dummy;desc.SampleDesc.Count=1;desc.Windowed=TRUE;desc.SwapEffect=DXGI_SWAP_EFFECT_DISCARD;
  ID3D11Device* dev=nullptr;ID3D11DeviceContext* ctx=nullptr;IDXGISwapChain* swap=nullptr;D3D_FEATURE_LEVEL level{};
  HRESULT hr=D3D11CreateDeviceAndSwapChain(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&desc,&swap,&dev,&level,&ctx);if(FAILED(hr))hr=D3D11CreateDeviceAndSwapChain(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&desc,&swap,&dev,&level,&ctx);

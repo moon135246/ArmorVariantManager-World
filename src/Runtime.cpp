@@ -115,11 +115,11 @@ bool __fastcall Detour(uintptr_t ctx,uintptr_t b,uintptr_t q,uintptr_t d){
 void Log(const char* msg){FILE* f=nullptr;_wfopen_s(&f,logPath.c_str(),L"ab");if(f){fprintf(f,"[%llu] %s\n",GetTickCount64(),msg);fclose(f);}}
 void SetMessage(const char* s,LONG error=0){strcpy_s(shared->message,s);InterlockedExchange(&shared->lastError,error);Log(s);}
 DWORD WINAPI Start(void* arg){
- wchar_t full[32768];GetModuleFileNameW((HMODULE)arg,full,32768);std::wstring folder=full;folder.resize(folder.find_last_of(L"\\/")+1);pluginDirectory=folder;logPath=folder+L"WorldDiff103.log";
+ wchar_t full[32768];GetModuleFileNameW((HMODULE)arg,full,32768);std::wstring folder=full;folder.resize(folder.find_last_of(L"\\/")+1);pluginDirectory=folder;logPath=folder+L"WorldDiff104.log";
  std::wstring name=std::wstring(kMappingPrefix)+std::to_wstring(GetCurrentProcessId());
  mapping=CreateFileMappingW(INVALID_HANDLE_VALUE,nullptr,PAGE_READWRITE,0,sizeof(SharedState),name.c_str());
  if(!mapping){Log("CreateFileMapping failed");return 0;}
- if(GetLastError()==ERROR_ALREADY_EXISTS){Log("Another WorldDiff103 instance is already active; duplicate DLL remains inert.");CloseHandle(mapping);return 0;}
+ if(GetLastError()==ERROR_ALREADY_EXISTS){Log("Another WorldDiff104 instance is already active; duplicate DLL remains inert.");CloseHandle(mapping);return 0;}
  shared=(SharedState*)MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(SharedState));if(!shared){Log("MapViewOfFile failed");CloseHandle(mapping);return 0;}
  memset(shared,0,sizeof(SharedState));shared->magic=kMagic;shared->version=kVersion;shared->pid=GetCurrentProcessId();shared->rowCapacity=kMaxRows;shared->enabled=1;
  uintptr_t target=(uintptr_t)GetModuleHandleW(nullptr)+0x222FC90;
@@ -132,7 +132,7 @@ DWORD WINAPI Start(void* arg){
  if(!visibilityHook->enable()){SetMessage("Visibility hook activation failed.",3);return 0;}
  wchar_t gameExe[32768];GetModuleFileNameW(nullptr,gameExe,32768);
  app::Initialize(shared,pluginDirectory,std::filesystem::path(gameExe).parent_path());
- SetMessage("WorldDiff 1.0.3 internal ready; F9 toggles the in-game panel.");InterlockedExchange(&shared->ready,1);
+ SetMessage("WorldDiff 1.0.4 internal ready; F9 toggles the in-game panel.");InterlockedExchange(&shared->ready,1);
  if(!overlay::Install())RuntimeLog("Overlay initialization failed; visibility controls remain available to diagnostics.");
  for(;;){app::Tick();overlay::WorkerTick();Sleep(100);}
 }
