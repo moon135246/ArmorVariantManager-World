@@ -2,6 +2,7 @@
 #include "State.h"
 #include "ArmorNames.h"
 #include "NativeInput.h"
+#include "UpdateNotes.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include <algorithm>
@@ -263,13 +264,48 @@ void TargetsPanel(){
  if(meshMode&&!creating)ImGui::TextColored(muted,"拖动网格名称调整顺序；右键编辑备注");MeshNotePopup();
 }
 #include "TransformPanel.inl"
+notes::Cache updateNotes;
+bool updateTabVisible=false;
+std::string updateNotice;
+void PageTabs(bool waiting=false){
+ const char* pages[]={"部位与材质","变身与条件","设置与说明","关于与更新"};float width=ImGui::GetContentRegionAvail().x,used=0;
+ for(int i=waiting?2:0;i<4;i++){float itemWidth=ImGui::CalcTextSize(pages[i]).x+S(20);if(used&&used+S(8)+itemWidth<=width){ImGui::SameLine(0,S(8));used+=S(8);}else used=0;if(PartButton(pages[i],tab==i||(waiting&&tab<2&&i==2),itemWidth))tab=i;used+=itemWidth;}
+ ImGui::Separator();
+}
+void AboutPanel(){
+ auto path=Get().directory/L"更新日志.md";
+ if(!updateTabVisible||!updateNotes.loaded||updateNotes.path!=path){updateNotes.Load(path);updateNotice.clear();}updateTabVisible=true;
+ ImGui::TextColored(accent,"差分管理器 · 世界版 1.2.1");ImGui::TextUnformatted("插件作者：moon");ImGui::Separator();
+ if(Button("编辑更新日志")){
+  wchar_t folder[MAX_PATH]{};STARTUPINFOW start{sizeof(start)};PROCESS_INFORMATION process{};
+  if(GetWindowsDirectoryW(folder,MAX_PATH)){
+   auto editor=std::filesystem::path(folder)/L"notepad.exe";std::wstring command=L"\""+editor.wstring()+L"\" \""+path.wstring()+L"\"";
+   if(CreateProcessW(editor.c_str(),command.data(),nullptr,nullptr,FALSE,0,nullptr,nullptr,&start,&process)){CloseHandle(process.hThread);CloseHandle(process.hProcess);updateNotice="保存文件后，点击“重新读取”查看。";}else updateNotice="未能打开记事本，请手动编辑 WorldDiff/更新日志.md。";
+  }else updateNotice="未能打开记事本，请手动编辑 WorldDiff/更新日志.md。";
+ }
+ float buttonWidth=ImGui::CalcTextSize("重新读取").x+ImGui::GetStyle().FramePadding.x*2;
+ if(ImGui::GetItemRectMax().x+buttonWidth+ImGui::GetStyle().ItemSpacing.x<=ImGui::GetCursorScreenPos().x+ImGui::GetContentRegionAvail().x)ImGui::SameLine();
+ if(Button("重新读取")){updateNotes.Load(path);updateNotice=updateNotes.document.error.empty()?"更新日志已刷新。":"";}
+ ImGui::PushTextWrapPos();ImGui::TextColored(muted,"WorldDiff/更新日志.md · UTF-8 文本，可自行修改");if(!updateNotice.empty())ImGui::TextUnformatted(updateNotice.c_str());ImGui::PopTextWrapPos();
+ ImGui::Separator();ImGui::BeginChild("更新日志正文",ImVec2(0,0));ImGui::PushTextWrapPos();
+ auto& document=updateNotes.document;
+ if(!document.error.empty())ImGui::TextUnformatted(document.error.c_str());
+ else if(document.lines.empty())ImGui::TextColored(muted,"尚无更新日志。可点击“编辑更新日志”添加内容。");
+ for(auto& line:document.lines){
+  if(line.kind==notes::Kind::Heading){ImGui::Spacing();ImGui::TextColored(accent,"%s",line.text.c_str());}
+  else if(line.kind==notes::Kind::Item){ImGui::Bullet();ImGui::SameLine();ImGui::TextUnformatted(line.text.c_str());}
+  else ImGui::TextUnformatted(line.text.c_str());
+ }
+ ImGui::PopTextWrapPos();ImGui::EndChild();
+}
 void SettingsPanel(){
  auto& s=Get();ImGui::TextColored(accent,"启动与输入");if(ImGui::Checkbox("启用差分控制",&s.data.enabled))Changed();if(ImGui::Checkbox("进入游戏后自动打开面板",&s.data.autoOpen))Changed();
+ if(ImGui::Checkbox("显示启动提示",&s.data.showStartupNotice)){Changed();Save();}Tip("启动时在左上角显示版本与快捷键，约 9 秒后自动消失。");
  const char* keys[]={"F5","F6","F7","F8","F9","F10","F11","F12"};int key=std::clamp(s.data.menuKey-VK_F5,0,7);ImGui::SetNextItemWidth(S(180));if(ImGui::Combo("开关面板快捷键",&key,keys,8)){s.data.menuKey=VK_F5+key;Changed();}
  ImGui::SetNextItemWidth(S(220));if(ImGui::SliderFloat("界面缩放",&s.data.scale,.7f,1.5f,"%.2f"))Changed();
- ImGui::Separator();ImGui::TextColored(accent,"配置与恢复");if(Button("立即保存配置")){if(Save())s.notice="配置已保存";else s.notice="配置保存失败，请检查目录是否可写";}ImGui::SameLine();if(Button("恢复当前组")){if(auto* g=Find(groupId))Restore(*g);}
+ ImGui::Separator();ImGui::TextColored(accent,"配置与恢复");if(Button("立即保存配置")){if(Save())s.notice="配置已保存";else s.notice="配置保存失败，请检查目录是否可写";}ImGui::SameLine();ImGui::BeginDisabled(!CanEditScope(outfit)||outfit.empty());if(Button("恢复当前组")){if(auto* g=Find(groupId))Restore(*g);}ImGui::EndDisabled();
  if(Button("暂停全部并恢复游戏显隐"))RestoreAll();Tip("不会删除任何已保存预设；重新启用控制后，可选择预设恢复方案。");
- if(Button("重新读取当前装备文件")){if(ReloadEquipmentProfile(outfit)){groupId=Main(outfit).id;s.notice="已重新读取当前装备文件";}}
+ ImGui::BeginDisabled(!CanEditScope(outfit)||outfit.empty());if(Button("重新读取当前装备文件")){if(ReloadEquipmentProfile(outfit)){groupId=Main(outfit).id;s.notice="已重新读取当前装备文件";}}ImGui::EndDisabled();
  ImGui::TextWrapped("Settings.cfg 只保存插件设置；当前装备的分组、预设、变身、网格顺序与备注保存在 Presets/装备编号.wdp。Templates 中的模板用于查找与分享，日常编辑不会写回模板。");
  if(ImGui::Checkbox("换装后自动识别预设文件",&s.data.autoFind))Changed();
  ImGui::Separator();ImGui::TextColored(accent,"操作说明");ImGui::TextWrapped("普通分组独占成员，主列表不再管理已分组材质。全局分组可以与其他分组重叠，只叠加隐藏。每个分组保存独立预设和默认预设。列表支持拖动排序。");
@@ -278,7 +314,7 @@ void SettingsPanel(){
  ImGui::TextColored(accent,"联机队友：%zu 人，已匹配预设：%zu 人",s.peerCount,s.matchedPeers);
  ImGui::TextWrapped("面板始终编辑本地主角。队友按自身装备只读匹配本机预设；同装备复用当前基础选择，变身按每个角色独立计算。未匹配时保留游戏显隐，不生成队友配置。效果只影响本机画面。");
  ImGui::TextWrapped("远端动作缺失或为无效值时不触发动作条件。武器强化等条件取决于游戏同步的数据，各武器仍需实机核对。");
- if(Button("恢复预设备份")){backupFiles=ProfileBackups(outfit);ImGui::OpenPopup("恢复当前装备备份");}
+ ImGui::BeginDisabled(!CanEditScope(outfit)||outfit.empty());if(Button("恢复预设备份")){backupFiles=ProfileBackups(outfit);ImGui::OpenPopup("恢复当前装备备份");}ImGui::EndDisabled();
  if(ImGui::BeginPopupModal("恢复当前装备备份",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
   ImGui::TextUnformatted("每份装备文件保留最近五份不同内容的备份。文件名中的时间为 UTC。");
   for(auto& name:backupFiles)if(ImGui::Selectable(name.c_str())){if(RestoreProfileBackup(outfit,name)){groupId=Main(outfit).id;ImGui::CloseCurrentPopup();}}
@@ -290,17 +326,22 @@ void SettingsPanel(){
 }
 void DrawPanel(){
  auto& s=app::Get();std::lock_guard lock(s.mutex);if(!s.loaded)return;
+ if(tab!=3)updateTabVisible=false;
  std::set<std::string> scopes,active;DWORD now=GetTickCount();for(auto& m:s.models)if(IsCurrentModel(m.relativePath)){scopes.insert(m.equip);if(s.trackingPlayer||s.lastSeen.count(m.relativePath)&&(DWORD)(now-s.lastSeen[m.relativePath])<1800)active.insert(m.equip);}
  std::string identity=outfit;if(s.trackingPlayer){identity=std::to_string(s.outfit.entity)+(s.outfit.savePreview?"/save":"/play");for(size_t i=0;i<5;i++)identity+=s.outfit.paths[i]+std::to_string(s.outfit.resources[i]);}
  if(displayedOutfit!=identity){displayedOutfit=identity;creating=false;staged.clear();editingMembers=0;openMeshNote=false;confirmGroup=confirmPreset=renameGroup=0;reorderDrag.cancelled=true;if(ImGui::GetCurrentContext()->OpenPopupStack.Size)ImGui::ClosePopupToLevel(0,true);if(s.trackingPlayer)NativeInputClose();}
  if(s.trackingPlayer&&(!s.outfit.ready||s.outfitChanging||!s.storageReady))scopes.clear();
  if(outfit.empty()||(!active.empty()&&!active.count(outfit))){if(!active.empty())outfit=*active.begin();else if(!scopes.empty())outfit=*scopes.begin();}
- if(scopes.empty()||outfit.empty()){if(ImGui::Begin("差分管理器 · 世界版 1.2.0###WorldDiffInternal")){ImGui::TextUnformatted(s.storageReady?"正在等待主角外观部位稳定加载…":s.notice.c_str());if(Button("关闭面板"))SetVisible(false);}ImGui::End();return;}
+ if(scopes.empty()||outfit.empty()){
+  auto& io=ImGui::GetIO();ImGui::SetNextWindowSize(ImVec2(std::min(S(750),io.DisplaySize.x-30),std::min(S(650),io.DisplaySize.y-30)),ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(S(420),io.DisplaySize.x-30),std::min(S(360),io.DisplaySize.y-30)),ImVec2(io.DisplaySize.x,io.DisplaySize.y));
+  ImGui::PushFont(nullptr,22*s.data.scale);bool open=true;if(ImGui::Begin("差分管理器 · 世界版 1.2.1###WorldDiffInternal",&open,ImGuiWindowFlags_NoCollapse)){ImGui::TextWrapped("%s",s.storageReady?"正在等待主角外观部位稳定加载…":s.notice.c_str());PageTabs(true);if(tab==3)AboutPanel();else SettingsPanel();}ImGui::End();ImGui::PopFont();if(!open)SetVisible(false);return;
+ }
  if(!scopes.count(outfit))outfit=*scopes.begin();
  if(!Find(groupId)||Find(groupId)->scope!=outfit){groupId=Main(outfit).id;creating=false;staged.clear();}
  auto& io=ImGui::GetIO();float scale=s.data.scale;ImGui::SetNextWindowSize(ImVec2(std::min(io.DisplaySize.x-S(60),S(1460)),std::min(io.DisplaySize.y-S(80),S(850))),ImGuiCond_FirstUseEver);ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x*.5f,io.DisplaySize.y*.5f),ImGuiCond_FirstUseEver,ImVec2(.5f,.5f));ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(S(1050),io.DisplaySize.x-30),std::min(S(620),io.DisplaySize.y-30)),ImVec2(io.DisplaySize.x,io.DisplaySize.y));
  ImGui::PushFont(nullptr,22*scale);bool open=true;ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(S(18),S(14)));
- if(ImGui::Begin("差分管理器 · 世界版 1.2.0###WorldDiffInternal",&open,ImGuiWindowFlags_NoCollapse)){
+ if(ImGui::Begin("差分管理器 · 世界版 1.2.1###WorldDiffInternal",&open,ImGuiWindowFlags_NoCollapse)){
   if(ImGui::BeginTable("装备与控制",2,ImGuiTableFlags_SizingStretchProp|ImGuiTableFlags_NoPadOuterX)){
   float controlsWidth=ImGui::GetFrameHeight()+ImGui::GetStyle().ItemInnerSpacing.x+ImGui::CalcTextSize("启用").x+ImGui::GetStyle().ItemSpacing.x+ImGui::CalcTextSize("暂停并恢复").x+ImGui::GetStyle().FramePadding.x*2;
   ImGui::TableSetupColumn("装备状态",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("控制",ImGuiTableColumnFlags_WidthFixed,controlsWidth);ImGui::TableNextColumn();
@@ -329,9 +370,7 @@ void DrawPanel(){
   float height=ImGui::GetContentRegionAvail().y-S(43);float available=ImGui::GetContentRegionAvail().x;float left=std::max(S(240),available*.22f),middle=std::max(S(310),available*.25f);
   ImGui::BeginDisabled(!CanEditScope(outfit));GroupsPane(left,height);ImGui::SameLine();PresetsPane(middle,height);ImGui::EndDisabled();ImGui::SameLine();
   ImGui::BeginChild("右侧面板",ImVec2(0,height),ImGuiChildFlags_Borders);
-  const char* pages[]={"部位与材质","变身与条件","设置与说明"};float pageWidth=ImGui::GetContentRegionAvail().x,used=0;
-  for(int i=0;i<3;i++){float width=ImGui::CalcTextSize(pages[i]).x+S(20);if(used&&used+S(8)+width<=pageWidth){ImGui::SameLine(0,S(8));used+=S(8);}else used=0;if(PartButton(pages[i],tab==i,width))tab=i;used+=width;}
-  ImGui::Separator();if(tab==2)SettingsPanel();else if(!CanEditScope(outfit)){ImGui::TextWrapped("当前预设与模型不匹配。可重新匹配当前文件，或使用上方查找按钮导入模板。原文件会先备份。");if(Button("重新匹配当前文件"))if(RebindEquipmentProfile(outfit))groupId=Main(outfit).id;}else if(tab==0)TargetsPanel();else TransformPanel();ImGui::EndChild();
+  PageTabs();if(tab==3)AboutPanel();else if(tab==2)SettingsPanel();else if(!CanEditScope(outfit)){ImGui::TextWrapped("当前预设与模型不匹配。可重新匹配当前文件，或使用上方查找按钮导入模板。原文件会先备份。");if(Button("重新匹配当前文件"))if(RebindEquipmentProfile(outfit))groupId=Main(outfit).id;}else if(tab==0)TargetsPanel();else TransformPanel();ImGui::EndChild();
   ImGui::Separator();ImGui::TextColored(muted,"%s",s.notice.empty()?"配置自动保存 · F9 开关面板 · Ctrl+F9 紧急恢复":s.notice.c_str());
  }
  ImGui::End();ImGui::PopStyleVar();ImGui::PopFont();if(!open)SetVisible(false);

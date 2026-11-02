@@ -3,15 +3,15 @@ bool IsCurrentModel(const std::string& path){auto& s=Get();return !s.trackingPla
 bool CanEditScope(const std::string& scope){auto& s=Get();if(!s.storageReady||s.blockedScopes.count(scope)||s.outfitChanging)return false;if(!s.trackingPlayer)return true;return s.outfit.ready&&std::any_of(s.outfit.paths.begin(),s.outfit.paths.end(),[&](auto& p){return !p.empty()&&Equip(p)==scope;});}
 bool SaveSettings(){
  auto& s=Get();if(!s.storageReady)return false;auto& d=s.data;std::ostringstream text;
- text<<"WorldDiffSettings 117\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.hideDragHint<<' '<<d.transformsEnabled<<' '<<d.autoFind<<'\n';
+ text<<"WorldDiffSettings 121\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.hideDragHint<<' '<<d.transformsEnabled<<' '<<d.autoFind<<' '<<d.showStartupNotice<<'\n';
  std::string before;if(!ReadText(s.configPath,before)||(!before.empty()&&before==text.str()))return before==text.str();
  if(!AtomicText(s.configPath,text.str())){s.notice="设置保存失败，尚未保存的编辑仍在内存中";return false;}return true;
 }
 bool LoadSettings(){
  auto& s=Get();std::ifstream in(s.configPath,std::ios::binary);std::string magic,tag;unsigned version=0;Document d;
- if(!(in>>magic>>version)||magic!="WorldDiffSettings"||version!=117||!(in>>tag)||tag!="SET"||!(in>>d.enabled>>d.autoDefault>>d.autoOpen>>d.menuKey>>d.scale>>d.hideDragHint>>d.transformsEnabled>>d.autoFind)||d.menuKey<0x70||d.menuKey>0x87||d.scale<.65f||d.scale>1.7f){s.notice="Settings.cfg 无效，原文件保留";return false;}
+ if(!(in>>magic>>version)||magic!="WorldDiffSettings"||(version!=117&&version!=121)||!(in>>tag)||tag!="SET"||!(in>>d.enabled>>d.autoDefault>>d.autoOpen>>d.menuKey>>d.scale>>d.hideDragHint>>d.transformsEnabled>>d.autoFind)||(version==121&&!(in>>d.showStartupNotice))||d.menuKey<0x70||d.menuKey>0x87||d.scale<.65f||d.scale>1.7f){s.notice="Settings.cfg 无效，原文件保留";return false;}
  in>>std::ws;if(!in.eof()){s.notice="设置文件含有未知内容，已停止读取";return false;}
- auto& to=s.data;to.enabled=d.enabled;to.autoDefault=d.autoDefault;to.autoOpen=d.autoOpen;to.menuKey=d.menuKey;to.scale=d.scale;to.hideDragHint=d.hideDragHint;to.transformsEnabled=d.transformsEnabled;to.autoFind=d.autoFind;return true;
+ auto& to=s.data;to.enabled=d.enabled;to.autoDefault=d.autoDefault;to.autoOpen=d.autoOpen;to.menuKey=d.menuKey;to.scale=d.scale;to.hideDragHint=d.hideDragHint;to.transformsEnabled=d.transformsEnabled;to.autoFind=d.autoFind;to.showStartupNotice=d.showStartupNotice;return true;
 }
 namespace {
 bool CompleteMapping(const std::string& scope,const File& file){

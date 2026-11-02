@@ -25,7 +25,7 @@ struct Group {
  uint64_t selected=0,defaultPreset=0;
 };
 struct Document {
- bool enabled=true,autoDefault=true,autoOpen=false,autoFind=true,hideDragHint=false,transformsEnabled=true;int menuKey=VK_F9;float scale=1.0f;
+ bool enabled=true,autoDefault=true,autoOpen=false,autoFind=true,hideDragHint=false,transformsEnabled=true,showStartupNotice=true;int menuKey=VK_F9;float scale=1.0f;
  uint64_t nextId=1;std::vector<Group> groups;
  std::map<std::string,std::string> bindings;
  std::vector<TransformRule> transforms;

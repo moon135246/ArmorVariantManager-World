@@ -5,6 +5,7 @@
 #include "Overlay.h"
 #include "State.h"
 #include "NativeInput.h"
+#include "UpdateNotes.h"
 #include "Dx12Backend.h"
 #include "imgui.h"
 #include "imgui_impl_dx11.h"
@@ -108,13 +109,13 @@ HRESULT WINAPI Present(IDXGISwapChain* swap,UINT sync,UINT flags){
    if(ready&&swap!=bound){DXGI_SWAP_CHAIN_DESC d{};if(SUCCEEDED(swap->GetDesc(&d))&&d.OutputWindow==window)Teardown();}
    if(!ready)Initialize(swap);
    if(ready&&swap==bound){
-    int key;{std::lock_guard stateLock(app::Get().mutex);key=app::Get().data.menuKey;}
+    int key;bool startupNotice;{std::lock_guard stateLock(app::Get().mutex);key=app::Get().data.menuKey;startupNotice=app::Get().loaded&&app::Get().data.showStartupNotice;}
     static bool previous=false,panicPrevious=false;bool down=Key(key)&&!Key(VK_CONTROL);if(down&&!previous&&GetForegroundWindow()==window&&(DWORD)(GetTickCount()-messageToggleAt.load())>250){SetVisible(!open);messageToggleAt=GetTickCount();}previous=down;
     if(!autoOpened&&RuntimeState()&&RuntimeState()->rowCount>0){std::lock_guard stateLock(app::Get().mutex);autoOpened=true;if(app::Get().data.autoOpen)SetVisible(true);}
     bool panic=Key(VK_CONTROL)&&Key(VK_F9)&&(GetForegroundWindow()==window||NativeInputOwnWindow(GetForegroundWindow()));if(panic&&!panicPrevious){std::lock_guard stateLock(app::Get().mutex);app::RestoreAll();}panicPrevious=panic;
     ownInput=true;if(is12)dx12::NewFrame();else ImGui_ImplDX11_NewFrame();ImGui_ImplWin32_NewFrame();ownInput=false;
     auto& io=ImGui::GetIO();io.MouseDrawCursor=open;ImGui::NewFrame();
-    NativeInputBeginFrame();if(open)DrawPanel();else if((DWORD)(GetTickCount()-firstTick)<9000){ImGui::SetNextWindowPos({26,28});ImGui::SetNextWindowBgAlpha(.84f);ImGui::Begin("##WorldDiffToast",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoSavedSettings);ImGui::TextColored({.33f,.72f,.78f,1},"世界版差分管理器 1.2.0 已加载");ImGui::Text("F%d 打开面板  |  Ctrl+F9 暂停控制",key-VK_F1+1);ImGui::End();}NativeInputEndFrame();
+    NativeInputBeginFrame();if(open)DrawPanel();else if(notes::ShowStartupNotice(startupNotice,false,(DWORD)(GetTickCount()-firstTick))){ImGui::SetNextWindowPos({26,28});ImGui::SetNextWindowBgAlpha(.84f);ImGui::Begin("##WorldDiffToast",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoSavedSettings);ImGui::TextColored({.33f,.72f,.78f,1},"世界版差分管理器 1.2.1 已加载");ImGui::Text("F%d 打开面板  |  Ctrl+F9 暂停控制",key-VK_F1+1);ImGui::End();}NativeInputEndFrame();
     ImGui::Render();if(ImGui::GetDrawData()->CmdListsCount){if(is12)dx12::Render(ImGui::GetDrawData());else if(context11&&rtv){ID3D11RenderTargetView* before=nullptr;ID3D11DepthStencilView* depth=nullptr;context11->OMGetRenderTargets(1,&before,&depth);context11->OMSetRenderTargets(1,&rtv,nullptr);ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());context11->OMSetRenderTargets(1,&before,depth);if(before)before->Release();if(depth)depth->Release();}}
    }
   }
