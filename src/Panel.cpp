@@ -181,10 +181,23 @@ void PresetsPane(float width,float height){
  EndActions();
  ImGui::EndChild();
 }
-void MeshNameRow(const Model& model,const Target& target,const std::string& label,bool allowed,ReorderList* order){
+void MeshNameRow(const Model& model,const Target& target,const std::string& label,bool allowed,ReorderList* order,float trailingWidth=0){
  if(!allowed)ImGui::PushStyleColor(ImGuiCol_Text,muted);
- float width=std::min(ImGui::GetContentRegionAvail().x,ImGui::CalcTextSize(label.c_str()).x+S(10));
- ImGui::Selectable(label.c_str(),false,0,ImVec2(width,ImGui::GetFrameHeight()));
+ // Keep the real selectable for keyboard, context menus and reordering, but
+ // give its full name area the same rounded hover treatment as group rows.
+ float width=std::max(1.f,ImGui::GetContentRegionAvail().x-trailingWidth);auto ink=ImGui::GetColorU32(ImGuiCol_Text);
+ auto* window=ImGui::GetCurrentWindow();float baseline=window->DC.CurrLineTextBaseOffset;window->DC.CurrLineTextBaseOffset=0;
+ for(auto color:{ImGuiCol_Header,ImGuiCol_HeaderHovered,ImGuiCol_HeaderActive,ImGuiCol_NavCursor,ImGuiCol_Text})ImGui::PushStyleColor(color,ImVec4(0,0,0,0));
+ ImGui::Selectable(label.c_str(),false,ImGuiSelectableFlags_NoPadWithHalfSpacing,ImVec2(width,ImGui::GetFrameHeight()));
+ window->DC.PrevLineTextBaseOffset=std::max(window->DC.PrevLineTextBaseOffset,baseline);
+ ImGui::PopStyleColor(5);
+ if(ImGui::IsItemVisible()){
+  auto min=ImGui::GetItemRectMin(),max=ImGui::GetItemRectMax();auto* draw=ImGui::GetWindowDrawList();
+  if(ImGui::IsItemHovered()||ImGui::IsItemActive())draw->AddRectFilled(min,max,ImGui::IsItemActive()?IM_COL32(28,65,76,220):IM_COL32(38,64,76,160),S(8));
+  if(ImGui::IsItemFocused())draw->AddRect(min,max,IM_COL32(133,235,242,200),S(8),S(1));
+  ImVec2 textMin(min.x+S(8),min.y),textMax(max.x-S(8),max.y);draw->PushClipRect(textMin,textMax,true);
+  draw->AddText(ImVec2(textMin.x,min.y+(max.y-min.y-ImGui::GetFontSize())*.5f),ink,label.c_str());draw->PopClipRect();
+ }
  if(!allowed)ImGui::PopStyleColor();
  if(order)order->Source(label);
  if((!order||!order->Dragging())&&ImGui::BeginPopupContextItem("网格操作")){
@@ -226,7 +239,11 @@ void TargetsPanel(){
    std::optional<ReorderList> order;if(meshMode&&!creating){std::vector<uint64_t> keys;for(auto& item:items)keys.push_back(item.target.value);order.emplace("meshes/"+path+"/"+std::to_string(model.signature),std::move(keys),ImGui::GetFrameHeight(),ImGui::GetStyle().ItemSpacing.y);}
    for(auto& item:items){if(order)order->BeginRow(item.target.value);ImGui::PushID((int)item.target.value);bool shown=true;size_t hidden=0;bool locked=false;for(auto* mesh:item.meshes){if(RuleHidden(EffectiveRules(*g),path,mesh->index,item.mat->hash))hidden++;if(!g->global&&GlobalHidden(path,mesh->index,item.mat->hash))locked=true;}shown=hidden==0;if(creating)shown=staged.count(item.target)!=0;if(locked&&!creating)shown=false;
     ImGui::BeginDisabled(!item.allowed||(!creating&&(locked||ActivePreset(*g))));if(ImGui::Checkbox("##可见",&shown)){if(creating){if(shown)staged.insert(item.target);else staged.erase(item.target);}else SetVisible(*g,item.target,shown);}ImGui::EndDisabled();
-    ImGui::SameLine();if(item.target.mesh)MeshNameRow(model,item.target,item.label,item.allowed,order?&*order:nullptr);else if(!item.allowed)ImGui::TextDisabled("%s",item.label.c_str());else ImGui::TextUnformatted(item.label.c_str());
+    float trailingWidth=0;
+    if(locked&&!creating)trailingWidth=ImGui::CalcTextSize("全局隐藏").x+ImGui::GetStyle().ItemSpacing.x;
+    else if(!item.allowed&&item.owner){auto tag="["+item.owner->name+"]";trailingWidth=ImGui::CalcTextSize(tag.c_str()).x+ImGui::GetStyle().ItemSpacing.x;}
+    else if(!creating&&hidden&&hidden<item.meshes.size())trailingWidth=ImGui::CalcTextSize("部分隐藏").x+ImGui::GetStyle().ItemSpacing.x;
+    ImGui::SameLine();if(item.target.mesh)MeshNameRow(model,item.target,item.label,item.allowed,order?&*order:nullptr,trailingWidth);else if(!item.allowed)ImGui::TextDisabled("%s",item.label.c_str());else ImGui::TextUnformatted(item.label.c_str());
     if(locked&&!creating){ImGui::SameLine();ImGui::TextColored(danger,"全局隐藏");}
     else if(!item.allowed&&item.owner){ImGui::SameLine();ImGui::TextColored(accent,"[%s]",item.owner->name.c_str());}
     else if(!creating&&hidden&&hidden<item.meshes.size()){ImGui::SameLine();ImGui::TextColored(muted,"部分隐藏");}
@@ -278,12 +295,12 @@ void DrawPanel(){
  if(displayedOutfit!=identity){displayedOutfit=identity;creating=false;staged.clear();editingMembers=0;openMeshNote=false;confirmGroup=confirmPreset=renameGroup=0;reorderDrag.cancelled=true;if(ImGui::GetCurrentContext()->OpenPopupStack.Size)ImGui::ClosePopupToLevel(0,true);if(s.trackingPlayer)NativeInputClose();}
  if(s.trackingPlayer&&(!s.outfit.ready||s.outfitChanging||!s.storageReady))scopes.clear();
  if(outfit.empty()||(!active.empty()&&!active.count(outfit))){if(!active.empty())outfit=*active.begin();else if(!scopes.empty())outfit=*scopes.begin();}
- if(scopes.empty()||outfit.empty()){if(ImGui::Begin("差分管理器 · 世界版 1.1.9###WorldDiffInternal")){ImGui::TextUnformatted(s.storageReady?"正在等待主角外观部位稳定加载…":s.notice.c_str());if(Button("关闭面板"))SetVisible(false);}ImGui::End();return;}
+ if(scopes.empty()||outfit.empty()){if(ImGui::Begin("差分管理器 · 世界版 1.2.0###WorldDiffInternal")){ImGui::TextUnformatted(s.storageReady?"正在等待主角外观部位稳定加载…":s.notice.c_str());if(Button("关闭面板"))SetVisible(false);}ImGui::End();return;}
  if(!scopes.count(outfit))outfit=*scopes.begin();
  if(!Find(groupId)||Find(groupId)->scope!=outfit){groupId=Main(outfit).id;creating=false;staged.clear();}
  auto& io=ImGui::GetIO();float scale=s.data.scale;ImGui::SetNextWindowSize(ImVec2(std::min(io.DisplaySize.x-S(60),S(1460)),std::min(io.DisplaySize.y-S(80),S(850))),ImGuiCond_FirstUseEver);ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x*.5f,io.DisplaySize.y*.5f),ImGuiCond_FirstUseEver,ImVec2(.5f,.5f));ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(S(1050),io.DisplaySize.x-30),std::min(S(620),io.DisplaySize.y-30)),ImVec2(io.DisplaySize.x,io.DisplaySize.y));
  ImGui::PushFont(nullptr,22*scale);bool open=true;ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(S(18),S(14)));
- if(ImGui::Begin("差分管理器 · 世界版 1.1.9###WorldDiffInternal",&open,ImGuiWindowFlags_NoCollapse)){
+ if(ImGui::Begin("差分管理器 · 世界版 1.2.0###WorldDiffInternal",&open,ImGuiWindowFlags_NoCollapse)){
   if(ImGui::BeginTable("装备与控制",2,ImGuiTableFlags_SizingStretchProp|ImGuiTableFlags_NoPadOuterX)){
   float controlsWidth=ImGui::GetFrameHeight()+ImGui::GetStyle().ItemInnerSpacing.x+ImGui::CalcTextSize("启用").x+ImGui::GetStyle().ItemSpacing.x+ImGui::CalcTextSize("暂停并恢复").x+ImGui::GetStyle().FramePadding.x*2;
   ImGui::TableSetupColumn("装备状态",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("控制",ImGuiTableColumnFlags_WidthFixed,controlsWidth);ImGui::TableNextColumn();
