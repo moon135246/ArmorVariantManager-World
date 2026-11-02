@@ -56,3 +56,7 @@ Copyright 2024 Eigeen.
 Licensed under the Apache License, Version 2.0. The complete license and upstream copyright
 notice are preserved in `licenses/MHW_TOOLKIT_LICENSE.txt`. See also the retained reference
 notices for WeaponSoundEnhance's MIT attribution and upstream source revisions.
+# 装备中文名称索引
+
+简体中文防具系列名称读取自用户运行的 Monster Hunter: World（build 421810）。模型编号清单由用户提供；模型与系列 ID 的关系参照本机“怪物猎人世界数据表15.10.00简中_by冰块&Jodo.xlsx”的防具表，并与当前游戏系列文本对应。Monster Hunter 与装备名称属于各自权利人。
+

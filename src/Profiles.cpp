@@ -1,4 +1,5 @@
 #include "State.h"
+#include "ArmorNames.h"
 #include <algorithm>
 #include <fstream>
 #include <iomanip>
@@ -92,10 +93,10 @@ bool ApplyProfile(const std::string& scope,const std::string& name){
  for(auto& original:file.document.transforms){TransformRule r=original;r.id=next++;r.scope=scope;r.targets.clear();for(auto& t:original.targets){auto g=groupIds.find(t.group);auto p=allPresets.find({t.group,t.preset});if(g!=groupIds.end()&&(!t.preset||p!=allPresets.end()))r.targets.push_back({g->second,t.preset?p->second:0});else skipped++;}if(original.targets.empty()||!r.targets.empty())transforms.push_back(std::move(r));}
  s.data.transformModes.erase(scope);if(auto mode=file.document.transformModes.find(file.source);mode!=file.document.transformModes.end())s.data.transformModes[scope]=mode->second;std::erase_if(s.data.transforms,[&](auto& r){return r.scope==scope;});s.data.transforms.insert(s.data.transforms.end(),transforms.begin(),transforms.end());ResetTransforms();
  auto& all=s.data.groups;all.erase(std::remove_if(all.begin(),all.end(),[&](auto& g){return g.scope==scope;}),all.end());all.insert(all.end(),groups.begin(),groups.end());s.data.nextId=next;s.data.bindings[scope]=name;s.loadedFingerprints[scope]=file.fingerprint;Main(scope);s.profileSnapshots[scope]=Fingerprint(ProfileText(scope));
- Changed("已载入 "+name+" → "+scope+"，分组和默认预设已重绑定"+(skipped?"；有 "+std::to_string(skipped)+" 条无法匹配的规则已跳过":""));return true;
+ Changed("已载入 "+name+" → "+EquipmentLabel(scope)+"，分组和默认预设已重绑定"+(skipped?"；有 "+std::to_string(skipped)+" 条无法匹配的规则已跳过":""));return true;
 }
 bool AutoFindProfile(const std::string& scope,bool automatic){
- auto& s=Get();auto candidates=FindProfiles(scope);auto materials=CurrentMaterials(scope);for(auto& c:candidates){if((c.hits&&c.total&&(double)c.hits/c.total>=.03)||(materials.empty()&&c.filenameMatch)){if(ApplyProfile(scope,c.file)){s.notice="已匹配 "+c.file+"：材质 "+std::to_string(c.hits)+"/"+std::to_string(c.total)+"，覆盖 "+std::to_string(c.parts)+" 部位";return true;}return false;}}
+ auto& s=Get();auto candidates=FindProfiles(scope);auto materials=CurrentMaterials(scope);for(auto& c:candidates){if((c.hits&&c.total&&(double)c.hits/c.total>=.03)||(materials.empty()&&c.filenameMatch)){if(ApplyProfile(scope,c.file)){s.notice="已匹配 "+c.file+" → "+EquipmentLabel(scope)+"：材质 "+std::to_string(c.hits)+"/"+std::to_string(c.total)+"，覆盖 "+std::to_string(c.parts)+" 部位";return true;}return false;}}
  if(!automatic)s.notice="未找到匹配预设：扫描 "+std::to_string(candidates.size())+" 份，当前材质 "+std::to_string(materials.size())+" 个";return false;
 }
 void InitializeProfiles(){auto& s=Get();std::error_code ec;std::filesystem::create_directories(Folder(),ec);std::set<std::string> scopes;for(auto& g:s.data.groups)scopes.insert(g.scope);for(auto& scope:scopes){if(HasConfiguration(scope)&&!s.data.bindings.count(scope))ExportProfile(scope);else if(s.data.bindings.count(scope))s.profileSnapshots[scope]=Fingerprint(ProfileText(scope));}if(s.migrating)Changed("旧版分组、预设和默认项已迁移到 1.1.0，原配置保留");}
