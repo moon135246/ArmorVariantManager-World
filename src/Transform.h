@@ -25,6 +25,7 @@ struct PlayerSnapshot {
  float health=-1,maxHealth=-1,healthPercent=-1;
  int extracts=-1;std::array<float,3> extractTimers{{-1,-1,-1}};
  int bowCharge=-1,hammerCharge=-1,chargeBladeMode=-1,switchAxeMode=-1;
+ int chargeBladeBuffs=-1,switchAxePowered=-1,switchAxeAmped=-1;
 };
 struct TransformMode {
  bool enabled=false,parallel=false;int selected=0;
@@ -55,6 +56,12 @@ TransformMode& EnsureTransformMode(Document&,const std::string&);
 void InferTransformModes(Document&);
 int ExtractMask(const std::array<float,3>&);
 int ExtractCount(int);
+int TimerState(float seconds);
+const char* BowChargeName(int legacyLevel);
+int ChargeBladeState(const PlayerSnapshot&);
+int SwitchAxeState(const PlayerSnapshot&);
+uint64_t AddHealthNode(const std::string& scope);
+bool DeleteHealthNode(uint64_t id,const std::string& scope);
 void UpgradeTransformDocument(Document&,unsigned version);
 PlayerSnapshot ReadPlayerSnapshot();
 void EvaluateTransforms(const Document&,TransformRuntime&,const PlayerSnapshot&);

@@ -11,6 +11,7 @@ template<class T> bool Read(uintptr_t address,T& value){
 uintptr_t Pointer(uintptr_t address){uintptr_t value=0;return Read(address,value)&&value>=0x10000?value:0;}
 int Integer(uintptr_t address,int minimum,int maximum){int value=-1;return Read(address,value)&&value>=minimum&&value<=maximum?value:-1;}
 int Flag(uintptr_t address){uint8_t value=0;return Read(address,value)&&value<=1?value:-1;}
+int TimerFlag(uintptr_t address){float seconds=0;return Read(address,seconds)?TimerState(seconds):-1;}
 }
 PlayerSnapshot ReadPlayerSnapshot(){
  PlayerSnapshot p;const auto base=reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
@@ -27,11 +28,19 @@ PlayerSnapshot ReadPlayerSnapshot(){
  if(state&&p.weapon==10){bool read=Read(state+0x2368,p.extractTimers[0])&&Read(state+0x236C,p.extractTimers[1])&&Read(state+0x2370,p.extractTimers[2]);if(read)p.extracts=ExtractMask(p.extractTimers);}
  // Verified against read-only 50 Hz captures of charging, release, morphing,
  // red shield/sword/axe and amped sword. 0x23A0 retains the last bow attack's
- // charge; use the live 0-based charge at 0x23B4 instead (idle = first level).
+ // charge; use 0x23B4 instead. Preserve the 109 storage values 1..4, displayed
+ // as uncharged / first / second / third charge in the panel.
  if(state&&p.weapon==11){int level=Integer(state+0x23B4,0,3);if(level>=0)p.bowCharge=level+1;}
  if(state&&p.weapon==4)p.hammerCharge=Integer(state+0x235C,0,3);
  if(state&&p.weapon==9)p.chargeBladeMode=Flag(state+0x20E2);
  if(state&&p.weapon==8)p.switchAxeMode=Flag(state+0x20E2);
+ if(state&&p.weapon==9){int shield=TimerFlag(state+0x2378),sword=TimerFlag(state+0x237C),axe=TimerFlag(state+0x2470);if(shield>=0&&sword>=0&&axe>=0)p.chargeBladeBuffs=shield|(sword<<1)|(axe<<2);}
+ if(state&&p.weapon==8){
+  p.switchAxeAmped=TimerFlag(state+0x2364);
+  // The power-axe buff lives on the abnormality object, not mechanics. Its
+  // timer can retain a stale positive value when the active flag is false.
+  auto abnormal=Pointer(p.entity+0x7D20);if(abnormal){int active=Flag(abnormal+0x6E5);if(active==0)p.switchAxePowered=0;else if(active==1)p.switchAxePowered=TimerFlag(abnormal+0x6E8);}
+ }
  auto action=Pointer(p.entity+0x468);if(action)p.lmt=Integer(action+0xE9C4,0,0x7fffffff);
  auto vitality=Pointer(p.entity+0x7630);float health=-1,max=-1;
  if(vitality&&Read(vitality+0x64,health)&&Read(vitality+0x60,max)&&std::isfinite(health)&&std::isfinite(max)&&health>=0&&max>0&&max<100000){

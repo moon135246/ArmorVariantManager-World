@@ -47,9 +47,16 @@ void DrawTransformBindings(uint64_t& id,const TransformSlot& slot){
  }
 }
 void DrawTransformState(const TransformSlot& slot,uint64_t id,int key,bool editableHealth=false){
- ImGui::PushID(key);auto& s=Get();bool current=Matches(slot.condition,s.transform.player);auto* rule=TransformById(id);bool applied=rule&&s.transform.activeRules.count(id);auto label=slot.name+(applied?"  [生效]":current?"  [当前]":"");
+ ImGui::PushID(key);auto& s=Get();bool current=Matches(slot.condition,s.transform.player);if(slot.condition.kind==ConditionKind::ChargeBlade)current=ChargeBladeState(s.transform.player)==slot.condition.state;else if(slot.condition.kind==ConditionKind::SwitchAxe)current=SwitchAxeState(s.transform.player)==slot.condition.state;auto* rule=TransformById(id);bool applied=rule&&s.transform.activeRules.count(id);auto label=slot.name+(applied?"  [生效]":current?"  [当前]":"");
  if(current)ImGui::PushStyleColor(ImGuiCol_Header,ImVec4(.1f,.36f,.43f,1));
- bool expanded=ImGui::CollapsingHeader(label.c_str(),ImGuiTreeNodeFlags_DefaultOpen);if(current)ImGui::PopStyleColor();
+ bool expanded=false,removed=false;
+ if(editableHealth&&rule){
+  if(ImGui::BeginTable("血量节点标题",2,ImGuiTableFlags_SizingStretchProp|ImGuiTableFlags_NoPadOuterX)){
+   ImGui::TableSetupColumn("节点",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("操作",ImGuiTableColumnFlags_WidthFixed,S(64));ImGui::TableNextColumn();expanded=ImGui::CollapsingHeader(label.c_str(),ImGuiTreeNodeFlags_DefaultOpen);ImGui::TableNextColumn();
+   if(ImGui::Button("删除##血量节点",ImVec2(-1,ImGui::GetFrameHeight())))removed=DeleteHealthNode(id,outfit);ImGui::EndTable();
+  }
+ }else expanded=ImGui::CollapsingHeader(label.c_str(),ImGuiTreeNodeFlags_DefaultOpen);
+ if(current)ImGui::PopStyleColor();if(removed){ImGui::PopID();return;}
  if(expanded){
   if(editableHealth&&rule){
    auto c=rule->condition;bool change=false;ImGui::SetNextItemWidth(S(115));change|=ImGui::InputFloat("下限 %",&c.healthMin,1,5,"%.0f");ImGui::SetNextItemWidth(S(115));change|=ImGui::InputFloat("上限 %",&c.healthMax,1,5,"%.0f");change|=ImGui::Checkbox("不包含下限",&c.lowerOpen);change|=ImGui::Checkbox("触发后保持",&c.latch);
@@ -64,29 +71,34 @@ std::string CurrentTransformState(int category){
  if(category==1){if(p.weapon!=3)return "当前未装备太刀";const char* n[]={"无刃","白刃","黄刃","红刃"};return p.spirit>=0&&p.spirit<=3?n[p.spirit]:"读取中";}
  if(category==2){if(p.weapon!=2)return "当前未装备双刀";if(p.demon==1)return "鬼人化";if(p.demon==0&&p.archdemon==1)return "鬼人强化";if(p.demon==0&&p.archdemon==0)return "普通";return "读取中";}
  if(category==3){if(p.weapon!=10)return "当前未装备操虫棍";const char* n[]={"无精华","一灯","二灯","三灯齐全"};int count=ExtractCount(p.extracts);return count>=0?n[count]:"读取中";}
- if(category==5){if(p.weapon!=11)return "当前未装备弓";return p.bowCharge>=1&&p.bowCharge<=4?std::to_string(p.bowCharge)+" 段蓄力":"读取中";}
+ if(category==5){if(p.weapon!=11)return "当前未装备弓";return BowChargeName(p.bowCharge);}
  if(category==6){if(p.weapon!=4)return "当前未装备大锤";return p.hammerCharge>=0&&p.hammerCharge<=3?(p.hammerCharge?std::to_string(p.hammerCharge)+" 段蓄力":"未蓄力"):"读取中";}
- if(category==7){if(p.weapon!=9)return "当前未装备盾斧";return p.chargeBladeMode==0?"剑形态":p.chargeBladeMode==1?"斧形态":"读取中";}
- if(category==8){if(p.weapon!=8)return "当前未装备斩斧";return p.switchAxeMode==0?"斧形态":p.switchAxeMode==1?"剑形态":"读取中";}
+ if(category==7){if(p.weapon!=9)return "当前未装备盾斧";int state=ChargeBladeState(p);return state>=0?TransformSlots(7)[state].name:"读取中";}
+ if(category==8){if(p.weapon!=8)return "当前未装备斩斧";int state=SwitchAxeState(p);return state>=0?TransformSlots(8)[state].name:"读取中";}
  if(p.healthPercent<0)return "读取中";char value[96];sprintf_s(value,"%.0f / %.0f（%.1f%%）",p.health,p.maxHealth,p.healthPercent);return value;
 }
 void DrawTransformCategory(int category){
  auto slots=TransformSlots(category);auto title=std::string(TransformCategoryName(category))+" · "+CurrentTransformState(category);ImGui::TextWrapped("%s",title.c_str());
  if(category==2)ImGui::TextColored(muted,"鬼人化时使用鬼人化项；退出后按强化状态切换。");
  if(category==3)ImGui::TextColored(muted,"按已点亮的精华数量匹配，颜色不影响一灯与二灯状态。");
- if(category==4)ImGui::TextWrapped("按当前血量区间切换，区间包含上限。");
+ if(category==4){
+  if(Button("添加血量节点"))AddHealthNode(outfit);
+  std::vector<uint64_t> nodes;for(auto& r:Get().data.transforms)if(r.scope==outfit&&r.condition.kind==ConditionKind::Health)nodes.push_back(r.id);
+  for(auto id:nodes)if(auto* r=TransformById(id)){TransformSlot slot{DescribeCondition(r->condition),r->condition};DrawTransformState(slot,id,(int)id+100,true);}
+  return;
+ }
+ if(category==7||category==8)ImGui::TextWrapped("强化项优先于同优先级的基础形态；未绑定的分组继续使用基础形态。");
+ if(category==7)ImGui::TextWrapped("盾、剑、斧强化同时存在时，两种形态都使用三红项。");
  std::set<uint64_t> shown;int key=0;
  for(auto& slot:slots){auto id=FindTransformSlot(slot);if(id)shown.insert(id);DrawTransformState(slot,id,key++);}
  std::vector<uint64_t> extra;for(auto& r:Get().data.transforms)if(r.scope==outfit&&TransformCategory(r.condition.kind)==category&&!shown.count(r.id))extra.push_back(r.id);
  if(!extra.empty()){ImGui::Separator();ImGui::TextColored(muted,"其他已保存的状态");}
  for(auto id:extra)if(auto* rule=TransformById(id)){TransformSlot slot{DescribeCondition(rule->condition),rule->condition};DrawTransformState(slot,id,(int)id+100,category==4);}
- if(category==4&&Button("添加血量节点")){TransformSlot slot{"自定义血量",{}};slot.condition.kind=ConditionKind::Health;CreateTransformSlot(slot);TransformChanged();}
 }
 void TransformPanel(){
  auto& s=Get();auto& mode=EnsureTransformMode(s.data,outfit);bool enabled=mode.enabled&&s.data.transformsEnabled;
  if(ImGui::Checkbox("启用变身",&enabled)){mode.enabled=enabled;if(enabled)s.data.transformsEnabled=true;TransformChanged(enabled?"当前装备的变身已启用":"当前装备的变身已暂停");}
  ImGui::SameLine();if(Button("复位保持状态")){ResetTransforms();s.notice="保持状态已复位；条件仍满足时会再次触发";}
- ImGui::TextColored(muted,"各状态已预先设定，直接选择分组和预设即可。");
  if(ImGui::RadioButton("选择模式",!mode.parallel)){mode.parallel=false;TransformChanged();}ImGui::SameLine();if(ImGui::RadioButton("并行模式",mode.parallel)){mode.parallel=true;TransformChanged();}
  if(!mode.parallel){
   ImGui::SetNextItemWidth(-1);if(ImGui::BeginCombo("##变身条件类型",TransformCategoryName(mode.selected))){for(int i=0;i<kTransformCategories;i++)if(ImGui::Selectable(TransformCategoryName(i),mode.selected==i)){mode.selected=i;TransformChanged();}ImGui::EndCombo();}

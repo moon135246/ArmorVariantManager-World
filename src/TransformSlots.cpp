@@ -6,6 +6,20 @@ int TransformCategory(ConditionKind kind){switch(kind){case ConditionKind::Weapo
 const char* TransformCategoryName(int category){const char* names[]={"收刀与拔刀","太刀气刃等级","双刀状态","操虫棍灯数","猎人血量","弓蓄力等级","大锤蓄力等级","盾斧形态","斩斧形态"};return category>=0&&category<kTransformCategories?names[category]:"";}
 int ExtractMask(const std::array<float,3>& timers){int mask=0;for(int i=0;i<3;i++){if(!std::isfinite(timers[i])||timers[i]<-3600||timers[i]>3600)return -1;if(timers[i]>0)mask|=1<<i;}return mask;}
 int ExtractCount(int mask){if(mask<0||mask>7)return -1;return (mask&1)+((mask>>1)&1)+((mask>>2)&1);}
+int TimerState(float seconds){return !std::isfinite(seconds)||seconds<-3600||seconds>3600?-1:seconds>0?1:0;}
+const char* BowChargeName(int level){const char* names[]={"未蓄力","一蓄","二蓄","三蓄"};return level>=1&&level<=4?names[level-1]:"读取中";}
+int ChargeBladeState(const PlayerSnapshot& p){
+ if(p.weapon!=9||p.chargeBladeMode<0||p.chargeBladeMode>1||p.chargeBladeBuffs<0||p.chargeBladeBuffs>7)return -1;
+ if(p.chargeBladeBuffs==7)return 6;
+ if(p.chargeBladeMode==1)return (p.chargeBladeBuffs&4)?5:1;
+ int sword=p.chargeBladeBuffs&3;return sword==3?4:sword==1?2:sword==2?3:0;
+}
+int SwitchAxeState(const PlayerSnapshot& p){
+ if(p.weapon!=8)return -1;
+ if(p.switchAxeMode==0&&p.switchAxePowered>=0&&p.switchAxePowered<=1)return p.switchAxePowered?2:0;
+ if(p.switchAxeMode==1&&p.switchAxeAmped>=0&&p.switchAxeAmped<=1)return p.switchAxeAmped?3:1;
+ return -1;
+}
 bool SameCondition(const Condition& a,const Condition& b){
  if(a.kind!=b.kind||a.weapon!=b.weapon||a.latch!=b.latch)return false;
  if(a.kind==ConditionKind::Health)return a.healthMin==b.healthMin&&a.healthMax==b.healthMax&&a.lowerOpen==b.lowerOpen;
@@ -19,14 +33,10 @@ std::vector<TransformSlot> TransformSlots(int category){
  else if(category==1){const char* names[]={"无刃","白刃","黄刃","红刃"};for(int i=0;i<4;i++)add(names[i],ConditionKind::LongSword,i);}
  else if(category==2){add("普通",ConditionKind::DualBlades,0);add("鬼人化",ConditionKind::DualBlades,1);add("鬼人强化",ConditionKind::DualBlades,2);}
  else if(category==3){const char* names[]={"无精华","一灯","二灯","三灯齐全"};for(int state=0;state<4;state++)add(names[state],ConditionKind::InsectGlaive,state);}
- else if(category==4){
-  auto hp=[&](const char* name,float min,float max,bool open,bool latch=false){Condition c;c.kind=ConditionKind::Health;c.healthMin=min;c.healthMax=max;c.lowerOpen=open;c.latch=latch;result.push_back({name,c});};
-  hp("血量归零",0,0,false);hp("0% < 血量 ≤ 25%",0,25,true);hp("25% < 血量 ≤ 50%",25,50,true);hp("50% < 血量 ≤ 75%",50,75,true);hp("75% < 血量 ≤ 100%",75,100,true);
- }
- else if(category==5){const char* names[]={"一段蓄力","二段蓄力","三段蓄力","四段蓄力"};for(int level=1;level<=4;level++)add(names[level-1],ConditionKind::BowCharge,level);}
+ else if(category==5){for(int level=1;level<=4;level++)add(BowChargeName(level),ConditionKind::BowCharge,level);}
  else if(category==6){const char* names[]={"未蓄力","一段蓄力","二段蓄力","三段蓄力"};for(int level=0;level<=3;level++)add(names[level],ConditionKind::HammerCharge,level);}
- else if(category==7){add("剑形态",ConditionKind::ChargeBlade,0);add("斧形态",ConditionKind::ChargeBlade,1);}
- else if(category==8){add("斧形态",ConditionKind::SwitchAxe,0);add("剑形态",ConditionKind::SwitchAxe,1);}
+ else if(category==7){const char* names[]={"剑形态（基础）","斧形态（基础）","剑形态 · 红盾","剑形态 · 红剑","剑形态 · 红盾＋红剑","斧形态 · 红斧","三红齐全（盾＋剑＋斧）"};for(int state=0;state<7;state++)add(names[state],ConditionKind::ChargeBlade,state);}
+ else if(category==8){const char* names[]={"斧形态（基础）","剑形态（基础）","斧形态 · 强化斧","剑形态 · 高出力"};for(int state=0;state<4;state++)add(names[state],ConditionKind::SwitchAxe,state);}
  return result;
 }
 TransformMode& EnsureTransformMode(Document& d,const std::string& scope){

@@ -17,7 +17,9 @@ bool ValidCondition(const Condition& c){
  if((int)c.kind<0||c.kind>=ConditionKind::Count||c.weapon < -1||c.weapon>13)return false;
  if(c.latch&&c.kind!=ConditionKind::Health)return false;
  switch(c.kind){
- case ConditionKind::WeaponState:case ConditionKind::Enhanced:case ConditionKind::ChargeBlade:case ConditionKind::SwitchAxe:return c.state>=0&&c.state<=1;
+ case ConditionKind::WeaponState:case ConditionKind::Enhanced:return c.state>=0&&c.state<=1;
+ case ConditionKind::ChargeBlade:return c.state>=0&&c.state<=6;
+ case ConditionKind::SwitchAxe:return c.state>=0&&c.state<=3;
  case ConditionKind::LongSword:return c.state>=0&&c.state<=5;
  case ConditionKind::DualBlades:return c.state>=0&&c.state<=2;
  case ConditionKind::InsectGlaive:case ConditionKind::HammerCharge:return c.state>=0&&c.state<=3;
@@ -43,8 +45,10 @@ bool Matches(const Condition& c,const PlayerSnapshot& p){
  case ConditionKind::InsectGlaive:return p.weapon==10&&ExtractCount(p.extracts)==c.state;
  case ConditionKind::BowCharge:return p.weapon==11&&p.bowCharge==c.state;
  case ConditionKind::HammerCharge:return p.weapon==4&&p.hammerCharge==c.state;
- case ConditionKind::ChargeBlade:return p.weapon==9&&p.chargeBladeMode==c.state;
- case ConditionKind::SwitchAxe:return p.weapon==8&&p.switchAxeMode==c.state;
+ // Base form bindings remain a per-group fallback for 1.1.0 presets. A
+ // configured enhanced state is sorted before the base at equal priority.
+ case ConditionKind::ChargeBlade:return p.weapon==9&&(c.state<2?p.chargeBladeMode==c.state:ChargeBladeState(p)==c.state);
+ case ConditionKind::SwitchAxe:return p.weapon==8&&(c.state<2?p.switchAxeMode==c.state:SwitchAxeState(p)==c.state);
  case ConditionKind::Enhanced:{
   if(p.weapon==3&&p.spirit>=0&&p.spirit<=3)return (p.spirit==3)==(c.state==1);
   if(p.weapon==2&&p.archdemon>=0&&p.archdemon<=1)return (p.archdemon==1)==(c.state==1);
@@ -63,9 +67,9 @@ std::string DescribeCondition(const Condition& c){
  case ConditionKind::LongSword:{const char* n[]={"无刃","白刃","黄刃","红刃","白刃及以上","黄刃及以上"};s<<n[std::clamp(c.state,0,5)];break;}
  case ConditionKind::DualBlades:{const char* n[]={"普通（无鬼人化/强化）","鬼人化","鬼人强化"};s<<n[std::clamp(c.state,0,2)];break;}
  case ConditionKind::InsectGlaive:{const char* names[]={"无精华","一灯","二灯","三灯齐全"};s<<names[std::clamp(c.state,0,3)];break;}
- case ConditionKind::BowCharge:case ConditionKind::HammerCharge:s<<c.state<<" 段";break;
- case ConditionKind::ChargeBlade:s<<(c.state?"斧形态":"剑形态");break;
- case ConditionKind::SwitchAxe:s<<(c.state?"剑形态":"斧形态");break;
+ case ConditionKind::BowCharge:s<<BowChargeName(c.state);break;
+ case ConditionKind::HammerCharge:s<<c.state<<" 段";break;
+ case ConditionKind::ChargeBlade:case ConditionKind::SwitchAxe:{auto slots=TransformSlots(TransformCategory(c.kind));s<<slots[std::clamp(c.state,0,(int)slots.size()-1)].name;break;}
  case ConditionKind::Enhanced:s<<(c.state?"强化中":"未强化");break;
  case ConditionKind::Health:s<<(c.lowerOpen?"(":"[")<<c.healthMin<<"%, "<<c.healthMax<<"%]"<<(c.latch?" · 触发后保持":"");break;
  case ConditionKind::WeaponType:s<<WeaponName(c.weapon);break;
@@ -112,7 +116,7 @@ void EvaluateTransforms(const Document& d,TransformRuntime& rt,const PlayerSnaps
   if(!allowed||!r.enabled||!ValidateTransform(r,d)){rt.latched.erase(r.id);continue;}ordered.push_back(&r);
  }
  std::erase_if(rt.latched,[&](auto id){return !ids.count(id);});std::erase_if(rt.signatures,[&](auto& item){return !ids.count(item.first);});
- auto priority=[&](const TransformRule& r){auto it=d.transformModes.find(r.scope);int category=TransformCategory(r.condition.kind);return it!=d.transformModes.end()&&category>=0?it->second.priorities[category]*100+r.priority:r.priority;};
+ auto priority=[&](const TransformRule& r){auto it=d.transformModes.find(r.scope);int category=TransformCategory(r.condition.kind);int value=it!=d.transformModes.end()&&category>=0?it->second.priorities[category]*100+r.priority:r.priority;bool base=(r.condition.kind==ConditionKind::ChargeBlade||r.condition.kind==ConditionKind::SwitchAxe)&&r.condition.state<2;return value*2+(base?1:0);};
  std::stable_sort(ordered.begin(),ordered.end(),[&](auto* a,auto* b){
   int ap=priority(*a),bp=priority(*b);if(ap!=bp)return ap<bp;
   if(a->condition.kind==ConditionKind::Health&&b->condition.kind==ConditionKind::Health){if(a->condition.healthMax!=b->condition.healthMax)return a->condition.healthMax<b->condition.healthMax;if(a->condition.healthMin!=b->condition.healthMin)return a->condition.healthMin>b->condition.healthMin;}
@@ -129,6 +133,14 @@ void EvaluateTransforms(const Document& d,TransformRuntime& rt,const PlayerSnaps
 }
 void UpdateTransforms(){auto& s=Get();EvaluateTransforms(s.data,s.transform,ReadPlayerSnapshot());}
 void ResetTransforms(){Get().transform={};}
+uint64_t AddHealthNode(const std::string& scope){
+ auto& s=Get();if(scope.empty()||scope.size()>128||s.data.transforms.size()>=2048)return 0;
+ TransformRule r;r.id=s.data.nextId++;r.name="自定义血量";r.scope=scope;r.condition.kind=ConditionKind::Health;auto id=r.id;s.data.transforms.push_back(std::move(r));ResetTransforms();Changed("血量节点已添加");return id;
+}
+bool DeleteHealthNode(uint64_t id,const std::string& scope){
+ auto& s=Get();auto it=std::find_if(s.data.transforms.begin(),s.data.transforms.end(),[&](auto& r){return r.id==id&&r.scope==scope&&r.condition.kind==ConditionKind::Health;});
+ if(it==s.data.transforms.end())return false;s.data.transforms.erase(it);ResetTransforms();Changed("血量节点已删除");return true;
+}
 uint64_t ActivePreset(const Group& g){auto& s=Get();if(!s.data.enabled||!s.data.transformsEnabled)return 0;auto at=s.transform.activePresets.find(g.id);return at==s.transform.activePresets.end()?0:at->second;}
 const Rules& EffectiveRules(const Group& g){uint64_t id=ActivePreset(g);if(id)for(auto& p:g.presets)if(p.id==id)return p.rules;return g.working;}
 }

@@ -9,15 +9,22 @@ https://github.com/HunterPie/HunterPie/blob/main/HunterPie.Integrations/Datasour
 WorldDiff uses its own guarded reader and light-count evaluator. No
 HunterPie source implementation or binary is included.
 
-The independent Charge Blade and Switch Axe buff timers used when comparing
+The independent Charge Blade and Switch Axe buff timers used for enhanced-state detection and comparison of
 live form samples were also checked against HunterPie's definitions:
 
 - https://github.com/HunterPie/HunterPie/blob/main/HunterPie.Integrations/Datasources/MonsterHunterWorld/Definitions/MHWChargeBladeStructure.cs
 - https://github.com/HunterPie/HunterPie/blob/main/HunterPie.Integrations/Datasources/MonsterHunterWorld/Definitions/MHWSwitchAxeStructure.cs
+- https://github.com/HunterPie/HunterPie/blob/main/HunterPie.Integrations/Datasources/MonsterHunterWorld/Definitions/MHWSwitchAxeSlamStructure.cs
+- https://github.com/HunterPie/HunterPie/blob/main/HunterPie/Address/MonsterHunterWorld.421810.map
 
 Bow current charge (0x23B4), Hammer charge (0x235C), and the sword/axe form byte
 (0x20E2) were established with our own read-only live captures for Steam build
 421810. The buff timers above are not used as a substitute for the form flag.
+
+Power-axe activity is read from the separate abnormality object. The independent
+active flag is checked because its timer can retain a positive value while inactive.
+All enhanced-state reads use our own guarded reader and were checked against user-
+performed live actions; no HunterPie implementation is distributed.
 
 This plugin includes Dear ImGui, SafetyHook, and the Zydis/Zycore disassembler distribution used by SafetyHook.
 
