@@ -6,8 +6,18 @@ The three MHW extract timer offsets were independently checked against HunterPie
 `MHWInsectGlaiveStructure` definition:
 https://github.com/HunterPie/HunterPie/blob/main/HunterPie.Integrations/Datasources/MonsterHunterWorld/Definitions/MHWInsectGlaiveStructure.cs
 
-WorldDiff uses its own guarded reader and exact color-combination evaluator. No
+WorldDiff uses its own guarded reader and light-count evaluator. No
 HunterPie source implementation or binary is included.
+
+The independent Charge Blade and Switch Axe buff timers used when comparing
+live form samples were also checked against HunterPie's definitions:
+
+- https://github.com/HunterPie/HunterPie/blob/main/HunterPie.Integrations/Datasources/MonsterHunterWorld/Definitions/MHWChargeBladeStructure.cs
+- https://github.com/HunterPie/HunterPie/blob/main/HunterPie.Integrations/Datasources/MonsterHunterWorld/Definitions/MHWSwitchAxeStructure.cs
+
+Bow current charge (0x23B4), Hammer charge (0x235C), and the sword/axe form byte
+(0x20E2) were established with our own read-only live captures for Steam build
+421810. The buff timers above are not used as a substitute for the form flag.
 
 This plugin includes Dear ImGui, SafetyHook, and the Zydis/Zycore disassembler distribution used by SafetyHook.
 

@@ -6,7 +6,8 @@
 #include <vector>
 #include <array>
 namespace worlddiff::app {
-enum class ConditionKind : int { WeaponState, LongSword, DualBlades, InsectGlaive, Enhanced, Health, WeaponType, ActionLmt, Count };
+enum class ConditionKind : int { WeaponState, LongSword, DualBlades, InsectGlaive, Enhanced, Health, WeaponType, ActionLmt, BowCharge, HammerCharge, ChargeBlade, SwitchAxe, Count };
+inline constexpr int kTransformCategories=9;
 struct Condition {
  ConditionKind kind=ConditionKind::WeaponState;
  int state=0,weapon=-1,minimum=0,maximum=65535;
@@ -23,11 +24,12 @@ struct PlayerSnapshot {
  int weapon=-1,lmt=-1,spirit=-1,demon=-1,archdemon=-1,map=-1;
  float health=-1,maxHealth=-1,healthPercent=-1;
  int extracts=-1;std::array<float,3> extractTimers{{-1,-1,-1}};
+ int bowCharge=-1,hammerCharge=-1,chargeBladeMode=-1,switchAxeMode=-1;
 };
 struct TransformMode {
- bool enabled=false,parallel=false,legacy=false;int selected=0;
- std::array<bool,5> categories{{true,false,false,false,false}};
- std::array<int,5> priorities{{1,2,3,4,5}};
+ bool enabled=false,parallel=false;int selected=0;
+ std::array<bool,kTransformCategories> categories{{true}};
+ std::array<int,kTransformCategories> priorities{{1,2,3,4,5,6,7,8,9}};
 };
 struct TransformSlot {std::string name;Condition condition;};
 struct TransformRuntime {
@@ -52,6 +54,8 @@ bool SameCondition(const Condition&,const Condition&);
 TransformMode& EnsureTransformMode(Document&,const std::string&);
 void InferTransformModes(Document&);
 int ExtractMask(const std::array<float,3>&);
+int ExtractCount(int);
+void UpgradeTransformDocument(Document&,unsigned version);
 PlayerSnapshot ReadPlayerSnapshot();
 void EvaluateTransforms(const Document&,TransformRuntime&,const PlayerSnapshot&);
 void UpdateTransforms();

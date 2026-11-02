@@ -5,7 +5,7 @@
 #include <sstream>
 namespace worlddiff::app {
 const char* ConditionName(ConditionKind kind){
- const char* names[]={"收刀与拔刀","太刀练气","双刀状态","操虫棍灯级","强化状态","猎人血量","武器种类","动作 LMT"};
+ const char* names[]={"收刀与拔刀","太刀练气","双刀状态","操虫棍灯数","强化状态","猎人血量","武器种类","动作 LMT","弓蓄力等级","大锤蓄力等级","盾斧形态","斩斧形态"};
  int n=(int)kind;return n>=0&&n<(int)ConditionKind::Count?names[n]:"未知条件";
 }
 const char* WeaponName(int weapon){
@@ -17,10 +17,11 @@ bool ValidCondition(const Condition& c){
  if((int)c.kind<0||c.kind>=ConditionKind::Count||c.weapon < -1||c.weapon>13)return false;
  if(c.latch&&c.kind!=ConditionKind::Health)return false;
  switch(c.kind){
- case ConditionKind::WeaponState:case ConditionKind::Enhanced:return c.state>=0&&c.state<=1;
+ case ConditionKind::WeaponState:case ConditionKind::Enhanced:case ConditionKind::ChargeBlade:case ConditionKind::SwitchAxe:return c.state>=0&&c.state<=1;
  case ConditionKind::LongSword:return c.state>=0&&c.state<=5;
  case ConditionKind::DualBlades:return c.state>=0&&c.state<=2;
- case ConditionKind::InsectGlaive:return c.state>=0&&c.state<=7;
+ case ConditionKind::InsectGlaive:case ConditionKind::HammerCharge:return c.state>=0&&c.state<=3;
+ case ConditionKind::BowCharge:return c.state>=1&&c.state<=4;
  case ConditionKind::Health:return std::isfinite(c.healthMin)&&std::isfinite(c.healthMax)&&c.healthMin>=0&&c.healthMax<=100&&c.healthMin<=c.healthMax&&(!c.lowerOpen||c.healthMin<c.healthMax);
  case ConditionKind::WeaponType:return c.weapon>=0;
  case ConditionKind::ActionLmt:return c.minimum>=0&&c.maximum>=c.minimum&&c.maximum<=0x7fffffff;
@@ -39,7 +40,11 @@ bool Matches(const Condition& c,const PlayerSnapshot& p){
   if(c.state==1)return p.demon==1;
   if(c.state==2)return p.demon==0&&p.archdemon==1;
   return p.demon==0&&p.archdemon==0;
- case ConditionKind::InsectGlaive:return p.weapon==10&&p.extracts>=0&&p.extracts<=7&&p.extracts==c.state;
+ case ConditionKind::InsectGlaive:return p.weapon==10&&ExtractCount(p.extracts)==c.state;
+ case ConditionKind::BowCharge:return p.weapon==11&&p.bowCharge==c.state;
+ case ConditionKind::HammerCharge:return p.weapon==4&&p.hammerCharge==c.state;
+ case ConditionKind::ChargeBlade:return p.weapon==9&&p.chargeBladeMode==c.state;
+ case ConditionKind::SwitchAxe:return p.weapon==8&&p.switchAxeMode==c.state;
  case ConditionKind::Enhanced:{
   if(p.weapon==3&&p.spirit>=0&&p.spirit<=3)return (p.spirit==3)==(c.state==1);
   if(p.weapon==2&&p.archdemon>=0&&p.archdemon<=1)return (p.archdemon==1)==(c.state==1);
@@ -57,7 +62,10 @@ std::string DescribeCondition(const Condition& c){
  case ConditionKind::WeaponState:s<<(c.state?"拔刀":"收刀");break;
  case ConditionKind::LongSword:{const char* n[]={"无刃","白刃","黄刃","红刃","白刃及以上","黄刃及以上"};s<<n[std::clamp(c.state,0,5)];break;}
  case ConditionKind::DualBlades:{const char* n[]={"普通（无鬼人化/强化）","鬼人化","鬼人强化"};s<<n[std::clamp(c.state,0,2)];break;}
- case ConditionKind::InsectGlaive:{const char* names[]={"无精华","红灯","白灯","红＋白","橙灯","红＋橙","白＋橙","三灯齐全"};s<<names[std::clamp(c.state,0,7)];break;}
+ case ConditionKind::InsectGlaive:{const char* names[]={"无精华","一灯","二灯","三灯齐全"};s<<names[std::clamp(c.state,0,3)];break;}
+ case ConditionKind::BowCharge:case ConditionKind::HammerCharge:s<<c.state<<" 段";break;
+ case ConditionKind::ChargeBlade:s<<(c.state?"斧形态":"剑形态");break;
+ case ConditionKind::SwitchAxe:s<<(c.state?"剑形态":"斧形态");break;
  case ConditionKind::Enhanced:s<<(c.state?"强化中":"未强化");break;
  case ConditionKind::Health:s<<(c.lowerOpen?"(":"[")<<c.healthMin<<"%, "<<c.healthMax<<"%]"<<(c.latch?" · 触发后保持":"");break;
  case ConditionKind::WeaponType:s<<WeaponName(c.weapon);break;
@@ -97,9 +105,10 @@ void EvaluateTransforms(const Document& d,TransformRuntime& rt,const PlayerSnaps
  if(!d.enabled||!d.transformsEnabled||!p.entity){rt.latched.clear();rt.signatures.clear();return;}
  std::vector<const TransformRule*> ordered;std::set<uint64_t> ids;
  for(auto& r:d.transforms){
+  if(TransformCategory(r.condition.kind)<0)continue;
   ids.insert(r.id);uint64_t sig=Signature(r);auto it=rt.signatures.find(r.id);if(it==rt.signatures.end()||it->second!=sig)rt.latched.erase(r.id);rt.signatures[r.id]=sig;
   auto mode=d.transformModes.find(r.scope);bool allowed=true;
-  if(mode!=d.transformModes.end()){int category=TransformCategory(r.condition.kind);auto& setting=mode->second;allowed=setting.enabled&&(category<0?setting.legacy:setting.parallel?setting.categories[category]:setting.selected==category);}
+  if(mode!=d.transformModes.end()){int category=TransformCategory(r.condition.kind);auto& setting=mode->second;allowed=setting.enabled&&(setting.parallel?setting.categories[category]:setting.selected==category);}
   if(!allowed||!r.enabled||!ValidateTransform(r,d)){rt.latched.erase(r.id);continue;}ordered.push_back(&r);
  }
  std::erase_if(rt.latched,[&](auto id){return !ids.count(id);});std::erase_if(rt.signatures,[&](auto& item){return !ids.count(item.first);});

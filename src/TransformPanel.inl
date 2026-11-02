@@ -63,14 +63,18 @@ std::string CurrentTransformState(int category){
  if(category==0)return p.lmt<0?"读取中":p.lmt<0x8000?"收刀":"拔刀";
  if(category==1){if(p.weapon!=3)return "当前未装备太刀";const char* n[]={"无刃","白刃","黄刃","红刃"};return p.spirit>=0&&p.spirit<=3?n[p.spirit]:"读取中";}
  if(category==2){if(p.weapon!=2)return "当前未装备双刀";if(p.demon==1)return "鬼人化";if(p.demon==0&&p.archdemon==1)return "鬼人强化";if(p.demon==0&&p.archdemon==0)return "普通";return "读取中";}
- if(category==3){if(p.weapon!=10)return "当前未装备操虫棍";const char* n[]={"无精华","红灯","白灯","红＋白","橙灯","红＋橙","白＋橙","三灯齐全"};return p.extracts>=0&&p.extracts<8?n[p.extracts]:"读取中";}
+ if(category==3){if(p.weapon!=10)return "当前未装备操虫棍";const char* n[]={"无精华","一灯","二灯","三灯齐全"};int count=ExtractCount(p.extracts);return count>=0?n[count]:"读取中";}
+ if(category==5){if(p.weapon!=11)return "当前未装备弓";return p.bowCharge>=1&&p.bowCharge<=4?std::to_string(p.bowCharge)+" 段蓄力":"读取中";}
+ if(category==6){if(p.weapon!=4)return "当前未装备大锤";return p.hammerCharge>=0&&p.hammerCharge<=3?(p.hammerCharge?std::to_string(p.hammerCharge)+" 段蓄力":"未蓄力"):"读取中";}
+ if(category==7){if(p.weapon!=9)return "当前未装备盾斧";return p.chargeBladeMode==0?"剑形态":p.chargeBladeMode==1?"斧形态":"读取中";}
+ if(category==8){if(p.weapon!=8)return "当前未装备斩斧";return p.switchAxeMode==0?"斧形态":p.switchAxeMode==1?"剑形态":"读取中";}
  if(p.healthPercent<0)return "读取中";char value[96];sprintf_s(value,"%.0f / %.0f（%.1f%%）",p.health,p.maxHealth,p.healthPercent);return value;
 }
 void DrawTransformCategory(int category){
  auto slots=TransformSlots(category);auto title=std::string(TransformCategoryName(category))+" · "+CurrentTransformState(category);ImGui::TextWrapped("%s",title.c_str());
  if(category==2)ImGui::TextColored(muted,"鬼人化时使用鬼人化项；退出后按强化状态切换。");
- if(category==3)ImGui::TextColored(muted,"按实际精华组合匹配，三灯齐全时使用三灯预设。");
- if(category==4)ImGui::TextWrapped("区间包含上限；保持类触发后，回血仍保持，力尽或切图复位。");
+ if(category==3)ImGui::TextColored(muted,"按已点亮的精华数量匹配，颜色不影响一灯与二灯状态。");
+ if(category==4)ImGui::TextWrapped("按当前血量区间切换，区间包含上限。");
  std::set<uint64_t> shown;int key=0;
  for(auto& slot:slots){auto id=FindTransformSlot(slot);if(id)shown.insert(id);DrawTransformState(slot,id,key++);}
  std::vector<uint64_t> extra;for(auto& r:Get().data.transforms)if(r.scope==outfit&&TransformCategory(r.condition.kind)==category&&!shown.count(r.id))extra.push_back(r.id);
@@ -85,20 +89,16 @@ void TransformPanel(){
  ImGui::TextColored(muted,"各状态已预先设定，直接选择分组和预设即可。");
  if(ImGui::RadioButton("选择模式",!mode.parallel)){mode.parallel=false;TransformChanged();}ImGui::SameLine();if(ImGui::RadioButton("并行模式",mode.parallel)){mode.parallel=true;TransformChanged();}
  if(!mode.parallel){
-  ImGui::SetNextItemWidth(-1);if(ImGui::BeginCombo("##变身条件类型",TransformCategoryName(mode.selected))){for(int i=0;i<5;i++)if(ImGui::Selectable(TransformCategoryName(i),mode.selected==i)){mode.selected=i;TransformChanged();}ImGui::EndCombo();}
+  ImGui::SetNextItemWidth(-1);if(ImGui::BeginCombo("##变身条件类型",TransformCategoryName(mode.selected))){for(int i=0;i<kTransformCategories;i++)if(ImGui::Selectable(TransformCategoryName(i),mode.selected==i)){mode.selected=i;TransformChanged();}ImGui::EndCombo();}
  }else{
   ImGui::TextColored(muted,"勾选同时使用的条件；优先级数字越小越优先。");
+  ImGui::BeginChild("并行条件选择",ImVec2(0,std::min(S(175),ImGui::GetContentRegionAvail().y*.4f)));
   if(ImGui::BeginTable("并行条件",2,ImGuiTableFlags_SizingStretchProp)){
    ImGui::TableSetupColumn("条件",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("优先级",ImGuiTableColumnFlags_WidthFixed,S(105));
-   for(int i=0;i<5;i++){ImGui::PushID(i);ImGui::TableNextRow();ImGui::TableNextColumn();if(ImGui::Checkbox(TransformCategoryName(i),&mode.categories[i]))TransformChanged();ImGui::TableNextColumn();int priority=mode.priorities[i];ImGui::SetNextItemWidth(-1);if(ImGui::InputInt("##优先级",&priority)&&priority>=1&&priority<=99){mode.priorities[i]=priority;TransformChanged();}ImGui::PopID();}ImGui::EndTable();
-  }
+   for(int i=0;i<kTransformCategories;i++){ImGui::PushID(i);ImGui::TableNextRow();ImGui::TableNextColumn();if(ImGui::Checkbox(TransformCategoryName(i),&mode.categories[i]))TransformChanged();ImGui::TableNextColumn();int priority=mode.priorities[i];ImGui::SetNextItemWidth(-1);if(ImGui::InputInt("##优先级",&priority)&&priority>=1&&priority<=99){mode.priorities[i]=priority;TransformChanged();}ImGui::PopID();}ImGui::EndTable();
+  }ImGui::EndChild();
  }
  ImGui::Separator();ImGui::BeginChild("变身状态列表",ImVec2(0,0));
- if(!mode.parallel)DrawTransformCategory(mode.selected);else{bool any=false;for(int i=0;i<5;i++)if(mode.categories[i]){any=true;ImGui::PushID(i);DrawTransformCategory(i);ImGui::Separator();ImGui::PopID();}if(!any)ImGui::TextWrapped("先勾选要同时使用的条件。");}
- bool hasLegacy=std::any_of(s.data.transforms.begin(),s.data.transforms.end(),[](auto& r){return r.scope==outfit&&TransformCategory(r.condition.kind)<0;});
- if(hasLegacy&&ImGui::CollapsingHeader("以前版本的其他条件")){
-  if(ImGui::Checkbox("启用其他条件",&mode.legacy))TransformChanged();ImGui::TextWrapped("已保留以前的配置。需要时可继续使用这些分组与预设绑定。");std::vector<uint64_t> ids;for(auto& r:s.data.transforms)if(r.scope==outfit&&TransformCategory(r.condition.kind)<0)ids.push_back(r.id);
-  for(auto id:ids)if(auto* r=TransformById(id)){TransformSlot slot{DescribeCondition(r->condition),r->condition};DrawTransformState(slot,id,(int)id+10000);}
- }
+ if(!mode.parallel)DrawTransformCategory(mode.selected);else{bool any=false;for(int i=0;i<kTransformCategories;i++)if(mode.categories[i]){any=true;ImGui::PushID(i);DrawTransformCategory(i);ImGui::Separator();ImGui::PopID();}if(!any)ImGui::TextWrapped("先勾选要同时使用的条件。");}
  ImGui::TextWrapped("不切换 = 保持基础状态；条件退出后恢复基础预设，默认项不会被变身改写。");ImGui::EndChild();
 }

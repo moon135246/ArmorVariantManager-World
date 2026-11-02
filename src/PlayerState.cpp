@@ -25,6 +25,13 @@ PlayerSnapshot ReadPlayerSnapshot(){
  auto state=Pointer(p.entity+0x76B0);
  if(state){if(p.weapon==3)p.spirit=Integer(state+0x2370,0,3);if(p.weapon==2){p.demon=Flag(state+0x2368);p.archdemon=Flag(state+0x2369);}}
  if(state&&p.weapon==10){bool read=Read(state+0x2368,p.extractTimers[0])&&Read(state+0x236C,p.extractTimers[1])&&Read(state+0x2370,p.extractTimers[2]);if(read)p.extracts=ExtractMask(p.extractTimers);}
+ // Verified against read-only 50 Hz captures of charging, release, morphing,
+ // red shield/sword/axe and amped sword. 0x23A0 retains the last bow attack's
+ // charge; use the live 0-based charge at 0x23B4 instead (idle = first level).
+ if(state&&p.weapon==11){int level=Integer(state+0x23B4,0,3);if(level>=0)p.bowCharge=level+1;}
+ if(state&&p.weapon==4)p.hammerCharge=Integer(state+0x235C,0,3);
+ if(state&&p.weapon==9)p.chargeBladeMode=Flag(state+0x20E2);
+ if(state&&p.weapon==8)p.switchAxeMode=Flag(state+0x20E2);
  auto action=Pointer(p.entity+0x468);if(action)p.lmt=Integer(action+0xE9C4,0,0x7fffffff);
  auto vitality=Pointer(p.entity+0x7630);float health=-1,max=-1;
  if(vitality&&Read(vitality+0x64,health)&&Read(vitality+0x60,max)&&std::isfinite(health)&&std::isfinite(max)&&health>=0&&max>0&&max<100000){
