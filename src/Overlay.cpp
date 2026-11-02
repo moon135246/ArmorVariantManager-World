@@ -64,10 +64,12 @@ void InstallInput(){
 }
 LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
  std::lock_guard lock(renderMutex);
+ if(msg==WM_KILLFOCUS||(msg==WM_ACTIVATEAPP&&!w)){std::lock_guard stateLock(app::Get().mutex);app::Get().keysAllowed=false;app::Get().keysPrimed=false;}
  int menuKey=VK_F9;{std::lock_guard stateLock(app::Get().mutex);menuKey=app::Get().data.menuKey;}
  if(msg==WM_KEYDOWN&&w==(WPARAM)menuKey&&!(l&(1LL<<30))&&!Key(VK_CONTROL)){
   DWORD now=GetTickCount();if((DWORD)(now-messageToggleAt.load())>250){SetVisible(!open);messageToggleAt=now;}return 0;
  }
+ if(open&&msg==WM_KEYDOWN&&w==VK_ESCAPE){std::lock_guard stateLock(app::Get().mutex);if(app::Get().captureHotkey){app::Get().captureHotkey=0;app::Get().notice="已取消快捷键录制";return 0;}}
  if(commonReady&&open){
   ownInput=true;LRESULT handled=ImGui_ImplWin32_WndProcHandler(hwnd,msg,w,l);ownInput=false;
   if(msg==WM_KEYDOWN&&w==VK_ESCAPE&&!ImGui::GetIO().WantTextInput){SetVisible(false);return 0;}
@@ -115,7 +117,12 @@ HRESULT WINAPI Present(IDXGISwapChain* swap,UINT sync,UINT flags){
     bool panic=Key(VK_CONTROL)&&Key(VK_F9)&&(GetForegroundWindow()==window||NativeInputOwnWindow(GetForegroundWindow()));if(panic&&!panicPrevious){std::lock_guard stateLock(app::Get().mutex);app::RestoreAll();}panicPrevious=panic;
     ownInput=true;if(is12)dx12::NewFrame();else ImGui_ImplDX11_NewFrame();ImGui_ImplWin32_NewFrame();ownInput=false;
     auto& io=ImGui::GetIO();io.MouseDrawCursor=open;ImGui::NewFrame();
-    NativeInputBeginFrame();if(open)DrawPanel();else if(notes::ShowStartupNotice(startupNotice,false,(DWORD)(GetTickCount()-firstTick))){ImGui::SetNextWindowPos({26,28});ImGui::SetNextWindowBgAlpha(.84f);ImGui::Begin("##WorldDiffToast",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoSavedSettings);ImGui::TextColored({.33f,.72f,.78f,1},"世界版差分管理器 1.2.1 已加载");ImGui::Text("F%d 打开面板  |  Ctrl+F9 暂停控制",key-VK_F1+1);ImGui::End();}NativeInputEndFrame();
+    {std::lock_guard stateLock(app::Get().mutex);auto& state=app::Get();std::array<bool,256> keys{};
+     if(state.data.hotkeysEnabled||state.captureHotkey)for(int i=1;i<256;i++)keys[i]=Key(i);
+     bool focus=GetForegroundWindow()==window;bool input=NativeInputActive()||io.WantTextInput;
+     app::ProcessPresetKeys(keys,focus&&!open&&!input,focus&&open&&!input,app::GameTextInputActive);
+    }
+    NativeInputBeginFrame();if(open)DrawPanel();else if(notes::ShowStartupNotice(startupNotice,false,(DWORD)(GetTickCount()-firstTick))){ImGui::SetNextWindowPos({26,28});ImGui::SetNextWindowBgAlpha(.84f);ImGui::Begin("##WorldDiffToast",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoSavedSettings);ImGui::TextColored({.33f,.72f,.78f,1},"世界版差分管理器 1.2.2 已加载");ImGui::Text("F%d 打开面板  |  Ctrl+F9 暂停控制",key-VK_F1+1);ImGui::End();}NativeInputEndFrame();
     ImGui::Render();if(ImGui::GetDrawData()->CmdListsCount){if(is12)dx12::Render(ImGui::GetDrawData());else if(context11&&rtv){ID3D11RenderTargetView* before=nullptr;ID3D11DepthStencilView* depth=nullptr;context11->OMGetRenderTargets(1,&before,&depth);context11->OMSetRenderTargets(1,&rtv,nullptr);ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());context11->OMSetRenderTargets(1,&before,depth);if(before)before->Release();if(depth)depth->Release();}}
    }
   }
@@ -129,7 +136,7 @@ void STDMETHODCALLTYPE Execute(ID3D12CommandQueue* q,UINT n,ID3D12CommandList*co
 }
 }
 bool Visible(){return open.load();}
-void SetVisible(bool show){bool old=open.exchange(show);if(show)inputRequested=true;if(old!=show){if(show){ownInput=true;if(originalClip)originalClip(nullptr);else ClipCursor(nullptr);ownInput=false;}else{NativeInputClose();std::lock_guard lock(clipMutex);if(originalClip)originalClip(hasGameClip&&GetForegroundWindow()==window?&lastGameClip:nullptr);}RuntimeLog("Panel %s (blocked cursor warps=%llu)",show?"opened":"closed",blockedWarps.load());}}
+void SetVisible(bool show){bool old=open.exchange(show);if(!show){std::lock_guard stateLock(app::Get().mutex);app::Get().captureHotkey=0;app::Get().keysAllowed=false;}if(show)inputRequested=true;if(old!=show){if(show){ownInput=true;if(originalClip)originalClip(nullptr);else ClipCursor(nullptr);ownInput=false;}else{NativeInputClose();std::lock_guard lock(clipMutex);if(originalClip)originalClip(hasGameClip&&GetForegroundWindow()==window?&lastGameClip:nullptr);}RuntimeLog("Panel %s (blocked cursor warps=%llu)",show?"opened":"closed",blockedWarps.load());}}
 const char* BackendStatus(){return ready?(is12?"DirectX 12 · 游戏命令队列":"DirectX 11"):deviceLost?"设备已重置，面板停止":"等待游戏渲染";}
 void WorkerTick(){
  if(inputRequested&&!inputInstalled)InstallInput();

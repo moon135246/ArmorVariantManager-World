@@ -71,7 +71,7 @@ bool CreateGroup(const std::string& name,const std::string& scope,bool global,co
  }
  s.data.groups.push_back(std::move(g));Changed("分组已创建");return true;
 }
-static void RemoveTransformTargets(uint64_t group,uint64_t preset=0){auto& s=Get();for(auto& r:s.data.transforms)std::erase_if(r.targets,[&](auto& t){return t.group==group&&(!preset||t.preset==preset);});std::erase_if(s.data.transforms,[](auto& r){return r.targets.empty()&&r.condition.kind!=ConditionKind::Health;});ResetTransforms();}
+static void RemoveTransformTargets(uint64_t group,uint64_t preset=0){auto& s=Get();for(auto& r:s.data.transforms)std::erase_if(r.targets,[&](auto& t){return t.group==group&&(!preset||t.preset==preset);});for(auto& h:s.data.hotkeys){auto size=h.targets.size();std::erase_if(h.targets,[&](auto& t){return t.group==group&&(!preset||t.preset==preset);});if(size!=h.targets.size())h.enabled=false;}std::erase_if(s.data.transforms,[](auto& r){return r.targets.empty()&&r.condition.kind!=ConditionKind::Health;});ResetTransforms();}
 bool DeleteGroup(uint64_t id){auto& s=Get();auto it=std::find_if(s.data.groups.begin(),s.data.groups.end(),[&](auto& g){return g.id==id;});if(it==s.data.groups.end()||it->main||!CanEditScope(it->scope))return false;s.data.groups.erase(it);RemoveTransformTargets(id);Changed("分组已删除，材质控制权已归还主列表");return true;}
 bool RenameGroup(uint64_t id,const std::string& name){auto* g=Find(id);if(!g||g->main||!GoodName(name)||!CanEditScope(g->scope))return false;for(auto& x:Get().data.groups)if(x.id!=id&&x.scope==g->scope&&x.name==name)return false;g->name=name;Changed("分组已重命名");return true;}
 template<class T,class Predicate>static bool InsertById(std::vector<T>& all,uint64_t source,uint64_t before,Predicate allowed){
@@ -99,13 +99,16 @@ bool SetDefault(Group& g,uint64_t id){if(!CanEditScope(g.scope))return false;if(
 void Restore(Group& g){if(!CanEditScope(g.scope))return;g.working={};g.selected=0;Changed("当前分组已恢复游戏显隐");}
 void RestoreAll(){auto& s=Get();for(auto& g:s.data.groups){g.working={};g.selected=0;}s.data.enabled=false;ResetTransforms();Changed("已暂停全部控制，游戏显隐已恢复；预设仍然保留");}
 static void WriteRules(std::ostream& f,const Rules& r,uint64_t gid,uint64_t pid){for(auto& t:r.hidden)f<<"RULE "<<gid<<' '<<pid<<" 0 "<<t.mesh<<' '<<std::quoted(t.model)<<' '<<t.value<<'\n';for(auto& t:r.shown)f<<"RULE "<<gid<<' '<<pid<<" 1 "<<t.mesh<<' '<<std::quoted(t.model)<<' '<<t.value<<'\n';}
+#include "Hotkeys.inl"
 void WriteDocument(std::ostream& f,const Document& d,bool equipment){
- if(equipment)f<<"WorldDiffEquipment 117\nNEXTID "<<d.nextId<<'\n';
- else{f<<"WorldDiffInternal 117\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.nextId<<' '<<d.hideDragHint<<'\n';
+ if(equipment)f<<"WorldDiffEquipment 122\nNEXTID "<<d.nextId<<'\n';
+ else{f<<"WorldDiffInternal 122\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.nextId<<' '<<d.hideDragHint<<'\n';
  f<<"AUTOFIND "<<d.autoFind<<'\n';for(const auto& [scope,file]:d.bindings)f<<"BINDING "<<std::quoted(scope)<<' '<<std::quoted(file)<<'\n';}
  for(const auto& g:d.groups){f<<"GROUP "<<g.id<<' '<<std::quoted(g.name)<<' '<<std::quoted(g.scope)<<' '<<g.main<<' '<<g.global<<' '<<g.selected<<' '<<g.defaultPreset<<'\n';for(const auto& t:g.members)f<<"MEMBER "<<g.id<<' '<<std::quoted(t.model)<<' '<<t.value<<'\n';WriteRules(f,g.working,g.id,0);for(const auto& p:g.presets){f<<"PRESET "<<g.id<<' '<<p.id<<' '<<std::quoted(p.name)<<'\n';WriteRules(f,p.rules,g.id,p.id);}}
  for(auto& [t,v]:d.meshDisplay)f<<"MESHVIEW "<<std::quoted(t.model)<<' '<<t.value<<' '<<v.signature<<' '<<v.material<<' '<<v.order<<' '<<std::quoted(v.note)<<'\n';
  if(!equipment)f<<"TRANSFORMS "<<d.transformsEnabled<<'\n';
+ if(!equipment&&d.hotkeysEnabled)f<<"HOTKEYS 1\n";
+ for(auto& h:d.hotkeys){f<<"HOTKEY "<<h.id<<' '<<std::quoted(h.name)<<' '<<std::quoted(h.scope)<<' '<<h.enabled<<' '<<h.key<<' '<<h.modifiers<<'\n';for(auto& t:h.targets)f<<"HKTARGET "<<h.id<<' '<<t.group<<' '<<t.preset<<'\n';}
  for(auto& [scope,m]:d.transformModes){f<<"TRMODE "<<std::quoted(scope)<<' '<<m.enabled<<' '<<m.parallel<<' '<<m.selected;for(int i=0;i<kTransformCategories;i++)f<<' '<<m.categories[i]<<' '<<m.priorities[i];f<<'\n';}
  for(auto& r:d.transforms){auto& c=r.condition;f<<"TRANSFORM "<<r.id<<' '<<std::quoted(r.name)<<' '<<std::quoted(r.scope)<<' '<<r.enabled<<' '<<r.priority<<' '<<(int)c.kind<<' '<<c.state<<' '<<c.weapon<<' '<<c.minimum<<' '<<c.maximum<<' '<<c.healthMin<<' '<<c.healthMax<<' '<<c.lowerOpen<<' '<<c.latch<<'\n';for(auto& t:r.targets)f<<"TRTARGET "<<r.id<<' '<<t.group<<' '<<t.preset<<'\n';}
 }
@@ -115,14 +118,17 @@ bool Save(){
 }
 bool ReadDocument(std::istream& f,Document& result){
  std::string magic;unsigned version=0;f>>magic>>version;bool equipment=magic=="WorldDiffEquipment";
- if((magic!="WorldDiffInternal"&&!equipment)||(version!=103&&version!=104&&version!=107&&version!=108&&version!=109&&version!=110&&version!=115&&version!=117)||(equipment&&version!=117))return false;
+ if((magic!="WorldDiffInternal"&&!equipment)||(version!=103&&version!=104&&version!=107&&version!=108&&version!=109&&version!=110&&version!=115&&version!=117&&version!=122)||(equipment&&version!=117&&version!=122))return false;
  Document d;std::string line;std::getline(f,line);bool valid=true;size_t records=0;
  while(std::getline(f,line)&&valid){if(++records>200000){valid=false;break;}std::istringstream in(line);std::string tag;in>>tag;if(tag.empty())continue;
-  if(equipment&&(tag=="SET"||tag=="AUTOFIND"||tag=="TRANSFORMS"||tag=="BINDING")){valid=false;break;}
+  if(equipment&&(tag=="SET"||tag=="AUTOFIND"||tag=="TRANSFORMS"||tag=="HOTKEYS"||tag=="BINDING")){valid=false;break;}
   if(tag=="NEXTID"&&equipment)in>>d.nextId;
   else if(tag=="SET"){in>>d.enabled>>d.autoDefault>>d.autoOpen>>d.menuKey>>d.scale>>d.nextId;if(in&&!in.eof()){in>>std::ws;if(!in.eof())in>>d.hideDragHint;}}
   else if(tag=="AUTOFIND"){in>>d.autoFind;}
   else if(tag=="TRANSFORMS"){in>>d.transformsEnabled;}
+  else if(tag=="HOTKEYS"&&version>=122){in>>d.hotkeysEnabled;}
+  else if(tag=="HOTKEY"&&version>=122){PresetHotkey h;in>>h.id>>std::quoted(h.name)>>std::quoted(h.scope)>>h.enabled>>h.key>>h.modifiers;if(d.hotkeys.size()>=512)valid=false;for(auto& old:d.hotkeys)if(old.id==h.id||(old.scope==h.scope&&(old.name==h.name||(h.key&&old.key==h.key&&old.modifiers==h.modifiers))))valid=false;d.hotkeys.push_back(std::move(h));}
+  else if(tag=="HKTARGET"&&version>=122){uint64_t id=0;TransformTarget t;in>>id>>t.group>>t.preset;auto h=std::find_if(d.hotkeys.begin(),d.hotkeys.end(),[&](auto& row){return row.id==id;});if(h==d.hotkeys.end()||h->targets.size()>=64)valid=false;else h->targets.push_back(t);}
   else if(tag=="TRMODE"){std::string scope;TransformMode m;in>>std::quoted(scope)>>m.enabled>>m.parallel>>m.selected;if(version<109){bool removedLegacy=false;in>>removedLegacy;}int count=version<109?5:kTransformCategories;for(int i=0;i<count;i++){in>>m.categories[i]>>m.priorities[i];if(m.priorities[i]<1||m.priorities[i]>99)valid=false;}if(scope.empty()||scope.size()>128||m.selected<0||m.selected>=count||d.transformModes.count(scope))valid=false;d.transformModes[scope]=m;}
   else if(tag=="TRANSFORM"){
    TransformRule r;int kind=-1;auto& c=r.condition;in>>r.id>>std::quoted(r.name)>>std::quoted(r.scope)>>r.enabled>>r.priority>>kind>>c.state>>c.weapon>>c.minimum>>c.maximum>>c.healthMin>>c.healthMax>>c.lowerOpen>>c.latch;c.kind=(ConditionKind)kind;
@@ -152,6 +158,8 @@ bool ReadDocument(std::istream& f,Document& result){
  if(!valid||d.menuKey<0x70||d.menuKey>0x87||d.scale<0.65f||d.scale>1.7f)return false;
  uint64_t highest=0;for(auto& g:d.groups){highest=std::max(highest,g.id);for(auto& p:g.presets)highest=std::max(highest,p.id);if(g.defaultPreset)for(auto& p:g.presets)if(p.id==g.defaultPreset){g.working=p.rules;g.selected=p.id;}}
  for(auto& r:d.transforms)highest=std::max(highest,r.id);
+ for(auto& h:d.hotkeys){if(!ValidateHotkey(h,d))return false;for(auto& g:d.groups){if(g.id==h.id)return false;for(auto& p:g.presets)if(p.id==h.id)return false;}for(auto& r:d.transforms)if(r.id==h.id)return false;highest=std::max(highest,h.id);}
+ if(!equipment&&d.hotkeysEnabled&&d.transformsEnabled)return false;
  UpgradeTransformDocument(d,version);
  for(auto& r:d.transforms)if(!ValidateTransform(r,d))return false;
  if(highest>1000000000||d.nextId>1000000001)return false;d.nextId=std::max(d.nextId,highest+1);if(version<108)InferTransformModes(d);result=std::move(d);return true;
@@ -183,7 +191,7 @@ void Tick(){
   InterlockedExchange(&r.hide,s.storageReady&&IsCurrentModel(path)&&!s.blockedScopes.count(model.equip)&&Hidden(path,r.meshIndex,r.materialHash)?1:0);
  }
  InterlockedExchange(&s.live->enabled,s.data.enabled?1:0);InterlockedExchange(&s.live->heartbeat,(LONG)now);
- if(s.trackingPlayer)sprintf_s(s.live->message,"WorldDiff 1.2.1 local=%llx preview=%d ready=%d peers=%zu matched=%zu modelInstances=%zu",(unsigned long long)s.outfit.entity,s.outfit.savePreview?1:0,s.outfit.ready&&!s.outfitChanging?1:0,s.peerCount,s.matchedPeers,policies?policies->models.size():0);
+ if(s.trackingPlayer)sprintf_s(s.live->message,"WorldDiff 1.2.2 local=%llx preview=%d ready=%d peers=%zu matched=%zu modelInstances=%zu",(unsigned long long)s.outfit.entity,s.outfit.savePreview?1:0,s.outfit.ready&&!s.outfitChanging?1:0,s.peerCount,s.matchedPeers,policies?policies->models.size():0);
  if(s.dirty&&(DWORD)(now-s.dirtyAt)>450)Save();
 }
 }

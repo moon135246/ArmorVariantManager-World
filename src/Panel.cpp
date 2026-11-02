@@ -263,19 +263,20 @@ void TargetsPanel(){
  ImGui::EndChild();ImGui::TextColored(muted,creating?"勾选 = 加入分组；普通组不能重复占用成员":"勾选 = 显示；取消 = 隐藏；恢复时保留游戏自身显隐");
  if(meshMode&&!creating)ImGui::TextColored(muted,"拖动网格名称调整顺序；右键编辑备注");MeshNotePopup();
 }
+#include "HotkeyPanel.inl"
 #include "TransformPanel.inl"
 notes::Cache updateNotes;
 bool updateTabVisible=false;
 std::string updateNotice;
 void PageTabs(bool waiting=false){
- const char* pages[]={"部位与材质","变身与条件","设置与说明","关于与更新"};float width=ImGui::GetContentRegionAvail().x,used=0;
- for(int i=waiting?2:0;i<4;i++){float itemWidth=ImGui::CalcTextSize(pages[i]).x+S(20);if(used&&used+S(8)+itemWidth<=width){ImGui::SameLine(0,S(8));used+=S(8);}else used=0;if(PartButton(pages[i],tab==i||(waiting&&tab<2&&i==2),itemWidth))tab=i;used+=itemWidth;}
+ const char* pages[]={"部位与材质","变身与条件","预设快捷键","设置","关于"};float width=ImGui::GetContentRegionAvail().x,used=0;
+ for(int i=waiting?3:0;i<5;i++){float itemWidth=ImGui::CalcTextSize(pages[i]).x+S(20);if(used&&used+S(8)+itemWidth<=width){ImGui::SameLine(0,S(8));used+=S(8);}else used=0;if(PartButton(pages[i],tab==i||(waiting&&tab<3&&i==3),itemWidth)){tab=i;if(tab!=2)Get().captureHotkey=0;}used+=itemWidth;}
  ImGui::Separator();
 }
 void AboutPanel(){
  auto path=Get().directory/L"更新日志.md";
  if(!updateTabVisible||!updateNotes.loaded||updateNotes.path!=path){updateNotes.Load(path);updateNotice.clear();}updateTabVisible=true;
- ImGui::TextColored(accent,"差分管理器 · 世界版 1.2.1");ImGui::TextUnformatted("插件作者：moon");ImGui::Separator();
+ ImGui::TextColored(accent,"差分管理器 · 世界版 1.2.2");ImGui::TextUnformatted("插件作者：明月别枝(moon)");ImGui::Separator();
  if(Button("编辑更新日志")){
   wchar_t folder[MAX_PATH]{};STARTUPINFOW start{sizeof(start)};PROCESS_INFORMATION process{};
   if(GetWindowsDirectoryW(folder,MAX_PATH)){
@@ -326,7 +327,7 @@ void SettingsPanel(){
 }
 void DrawPanel(){
  auto& s=app::Get();std::lock_guard lock(s.mutex);if(!s.loaded)return;
- if(tab!=3)updateTabVisible=false;
+ if(tab!=4)updateTabVisible=false;if(tab!=2)s.captureHotkey=0;
  std::set<std::string> scopes,active;DWORD now=GetTickCount();for(auto& m:s.models)if(IsCurrentModel(m.relativePath)){scopes.insert(m.equip);if(s.trackingPlayer||s.lastSeen.count(m.relativePath)&&(DWORD)(now-s.lastSeen[m.relativePath])<1800)active.insert(m.equip);}
  std::string identity=outfit;if(s.trackingPlayer){identity=std::to_string(s.outfit.entity)+(s.outfit.savePreview?"/save":"/play");for(size_t i=0;i<5;i++)identity+=s.outfit.paths[i]+std::to_string(s.outfit.resources[i]);}
  if(displayedOutfit!=identity){displayedOutfit=identity;creating=false;staged.clear();editingMembers=0;openMeshNote=false;confirmGroup=confirmPreset=renameGroup=0;reorderDrag.cancelled=true;if(ImGui::GetCurrentContext()->OpenPopupStack.Size)ImGui::ClosePopupToLevel(0,true);if(s.trackingPlayer)NativeInputClose();}
@@ -335,13 +336,13 @@ void DrawPanel(){
  if(scopes.empty()||outfit.empty()){
   auto& io=ImGui::GetIO();ImGui::SetNextWindowSize(ImVec2(std::min(S(750),io.DisplaySize.x-30),std::min(S(650),io.DisplaySize.y-30)),ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(S(420),io.DisplaySize.x-30),std::min(S(360),io.DisplaySize.y-30)),ImVec2(io.DisplaySize.x,io.DisplaySize.y));
-  ImGui::PushFont(nullptr,22*s.data.scale);bool open=true;if(ImGui::Begin("差分管理器 · 世界版 1.2.1###WorldDiffInternal",&open,ImGuiWindowFlags_NoCollapse)){ImGui::TextWrapped("%s",s.storageReady?"正在等待主角外观部位稳定加载…":s.notice.c_str());PageTabs(true);if(tab==3)AboutPanel();else SettingsPanel();}ImGui::End();ImGui::PopFont();if(!open)SetVisible(false);return;
+  ImGui::PushFont(nullptr,22*s.data.scale);bool open=true;if(ImGui::Begin("差分管理器 · 世界版 1.2.2###WorldDiffInternal",&open,ImGuiWindowFlags_NoCollapse)){ImGui::TextWrapped("%s",s.storageReady?"正在等待主角外观部位稳定加载…":s.notice.c_str());PageTabs(true);if(tab==4)AboutPanel();else SettingsPanel();AutomationConflictPopup();}ImGui::End();ImGui::PopFont();if(!open)SetVisible(false);return;
  }
  if(!scopes.count(outfit))outfit=*scopes.begin();
  if(!Find(groupId)||Find(groupId)->scope!=outfit){groupId=Main(outfit).id;creating=false;staged.clear();}
  auto& io=ImGui::GetIO();float scale=s.data.scale;ImGui::SetNextWindowSize(ImVec2(std::min(io.DisplaySize.x-S(60),S(1460)),std::min(io.DisplaySize.y-S(80),S(850))),ImGuiCond_FirstUseEver);ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x*.5f,io.DisplaySize.y*.5f),ImGuiCond_FirstUseEver,ImVec2(.5f,.5f));ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(S(1050),io.DisplaySize.x-30),std::min(S(620),io.DisplaySize.y-30)),ImVec2(io.DisplaySize.x,io.DisplaySize.y));
  ImGui::PushFont(nullptr,22*scale);bool open=true;ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(S(18),S(14)));
- if(ImGui::Begin("差分管理器 · 世界版 1.2.1###WorldDiffInternal",&open,ImGuiWindowFlags_NoCollapse)){
+ if(ImGui::Begin("差分管理器 · 世界版 1.2.2###WorldDiffInternal",&open,ImGuiWindowFlags_NoCollapse)){
   if(ImGui::BeginTable("装备与控制",2,ImGuiTableFlags_SizingStretchProp|ImGuiTableFlags_NoPadOuterX)){
   float controlsWidth=ImGui::GetFrameHeight()+ImGui::GetStyle().ItemInnerSpacing.x+ImGui::CalcTextSize("启用").x+ImGui::GetStyle().ItemSpacing.x+ImGui::CalcTextSize("暂停并恢复").x+ImGui::GetStyle().FramePadding.x*2;
   ImGui::TableSetupColumn("装备状态",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("控制",ImGuiTableColumnFlags_WidthFixed,controlsWidth);ImGui::TableNextColumn();
@@ -370,7 +371,7 @@ void DrawPanel(){
   float height=ImGui::GetContentRegionAvail().y-S(43);float available=ImGui::GetContentRegionAvail().x;float left=std::max(S(240),available*.22f),middle=std::max(S(310),available*.25f);
   ImGui::BeginDisabled(!CanEditScope(outfit));GroupsPane(left,height);ImGui::SameLine();PresetsPane(middle,height);ImGui::EndDisabled();ImGui::SameLine();
   ImGui::BeginChild("右侧面板",ImVec2(0,height),ImGuiChildFlags_Borders);
-  PageTabs();if(tab==3)AboutPanel();else if(tab==2)SettingsPanel();else if(!CanEditScope(outfit)){ImGui::TextWrapped("当前预设与模型不匹配。可重新匹配当前文件，或使用上方查找按钮导入模板。原文件会先备份。");if(Button("重新匹配当前文件"))if(RebindEquipmentProfile(outfit))groupId=Main(outfit).id;}else if(tab==0)TargetsPanel();else TransformPanel();ImGui::EndChild();
+  PageTabs();if(tab==4)AboutPanel();else if(tab==3)SettingsPanel();else if(!CanEditScope(outfit)){ImGui::TextWrapped("当前预设与模型不匹配。可重新匹配当前文件，或使用上方查找按钮导入模板。原文件会先备份。");if(Button("重新匹配当前文件"))if(RebindEquipmentProfile(outfit))groupId=Main(outfit).id;}else if(tab==0)TargetsPanel();else if(tab==2)HotkeyPanel();else TransformPanel();ImGui::EndChild();AutomationConflictPopup();
   ImGui::Separator();ImGui::TextColored(muted,"%s",s.notice.empty()?"配置自动保存 · F9 开关面板 · Ctrl+F9 紧急恢复":s.notice.c_str());
  }
  ImGui::End();ImGui::PopStyleVar();ImGui::PopFont();if(!open)SetVisible(false);

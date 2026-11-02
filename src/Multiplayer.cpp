@@ -4,7 +4,7 @@
 namespace worlddiff::app {
 namespace {
 Document ScopeDocument(const Document& d,const std::string& scope){
- Document out;out.enabled=d.enabled;out.transformsEnabled=d.transformsEnabled;
+ Document out;out.enabled=d.enabled;out.transformsEnabled=d.transformsEnabled;out.hotkeysEnabled=d.hotkeysEnabled;
  for(auto& g:d.groups)if(g.scope==scope)out.groups.push_back(g);
  for(auto& r:d.transforms)if(r.scope==scope)out.transforms.push_back(r);
  if(auto it=d.transformModes.find(scope);it!=d.transformModes.end())out.transformModes.insert(*it);
@@ -69,7 +69,7 @@ std::shared_ptr<const RenderPolicies> PlayerPolicyController::Build(const std::v
     if(shared)documents[scope]=ScopeDocument(document,scope);
    }else if(auto it=frame.profiles.find(scope);it!=frame.profiles.end()&&it->second&&it->second->matched)documents[scope]=it->second->document;
    auto doc=documents.find(scope);if(doc==documents.end()){actor->scopes.erase(scope);continue;}
-   doc->second.enabled=document.enabled;doc->second.transformsEnabled=document.transformsEnabled;
+   doc->second.enabled=document.enabled;doc->second.transformsEnabled=document.transformsEnabled;doc->second.hotkeysEnabled=document.hotkeysEnabled;
    auto revision=Revision(doc->second);auto& runtime=actor->scopes[scope];if(runtime.revision!=revision){runtime.transform={};runtime.revision=std::move(revision);}
    EvaluateTransforms(doc->second,runtime.transform,frame.player);runtimes[scope]=&runtime.transform;
   }

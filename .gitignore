@@ -1,0 +1,34 @@
+# Build outputs
+/build/
+/.vs/
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+*.zip
+*.7z
+*.log
+*.dmp
+__pycache__/
+*.pyc
+# Personal runtime data (also applies to accidental nested copies)
+*.cfg
+*.wdp
+*.bak
+Settings.cfg
+WorldDiff*.ini
+Presets/
+Templates/
+Backups/
+Archive/
+验证记录/
+安装备份/
+# Local credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key

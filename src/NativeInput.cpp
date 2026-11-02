@@ -82,6 +82,7 @@ DWORD WINAPI Thread(void*){
 }
 void NativeInputInitialize(HWND game){owner=game;if(started.exchange(true))return;HANDLE thread=CreateThread(nullptr,0,Thread,nullptr,0,nullptr);if(thread)CloseHandle(thread);}
 bool NativeInputThread(){return GetCurrentThreadId()==threadId.load();}
+bool NativeInputActive(){return shown.load();}
 bool NativeInputOwnWindow(HWND h){return h&&(h==host||h==edit);}
 void NativeInputClose(){if(host)PostMessageW(host,kClose,0,0);}
 void NativeInputBeginFrame(){frameSawActive=false;}

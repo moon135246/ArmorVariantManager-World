@@ -96,15 +96,15 @@ void DrawTransformCategory(int category){
  for(auto id:extra)if(auto* rule=TransformById(id)){TransformSlot slot{DescribeCondition(rule->condition),rule->condition};DrawTransformState(slot,id,(int)id+100,category==4);}
 }
 void TransformPanel(){
- auto& s=Get();auto& mode=EnsureTransformMode(s.data,outfit);bool enabled=mode.enabled&&s.data.transformsEnabled;
- if(ImGui::Checkbox("启用变身",&enabled)){mode.enabled=enabled;if(enabled)s.data.transformsEnabled=true;TransformChanged(enabled?"当前装备的变身已启用":"当前装备的变身已暂停");}
- ImGui::SameLine();if(Button("复位保持状态")){ResetTransforms();s.notice="保持状态已复位；条件仍满足时会再次触发";}
+ auto& s=Get();auto& mode=EnsureTransformMode(s.data,outfit);AutomationSwitch("启用变身功能",false);ImGui::SameLine();bool enabled=mode.enabled;
+ if(ImGui::Checkbox("当前装备启用变身",&enabled)){mode.enabled=enabled;TransformChanged(enabled?"当前装备的变身已启用":"当前装备的变身已暂停");}
+ if(Button("复位保持状态")){ResetTransforms();s.notice="保持状态已复位；条件仍满足时会再次触发";}ImGui::SameLine();
  if(ImGui::RadioButton("选择模式",!mode.parallel)){mode.parallel=false;TransformChanged();}ImGui::SameLine();if(ImGui::RadioButton("并行模式",mode.parallel)){mode.parallel=true;TransformChanged();}
  if(!mode.parallel){
   ImGui::SetNextItemWidth(-1);if(ImGui::BeginCombo("##变身条件类型",TransformCategoryName(mode.selected))){for(int i=0;i<kTransformCategories;i++)if(ImGui::Selectable(TransformCategoryName(i),mode.selected==i)){mode.selected=i;TransformChanged();}ImGui::EndCombo();}
  }else{
   ImGui::TextColored(muted,"勾选同时使用的条件；优先级数字越小越优先。");
-  ImGui::BeginChild("并行条件选择",ImVec2(0,std::min(S(175),ImGui::GetContentRegionAvail().y*.4f)));
+  ImGui::BeginChild("并行条件选择",ImVec2(0,std::clamp(ImGui::GetContentRegionAvail().y-S(170),S(55),S(175))));
   if(ImGui::BeginTable("并行条件",2,ImGuiTableFlags_SizingStretchProp)){
    ImGui::TableSetupColumn("条件",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("优先级",ImGuiTableColumnFlags_WidthFixed,S(105));
    for(int i=0;i<kTransformCategories;i++){ImGui::PushID(i);ImGui::TableNextRow();ImGui::TableNextColumn();if(ImGui::Checkbox(TransformCategoryName(i),&mode.categories[i]))TransformChanged();ImGui::TableNextColumn();int priority=mode.priorities[i];ImGui::SetNextItemWidth(-1);if(ImGui::InputInt("##优先级",&priority)&&priority>=1&&priority<=99){mode.priorities[i]=priority;TransformChanged();}ImGui::PopID();}ImGui::EndTable();

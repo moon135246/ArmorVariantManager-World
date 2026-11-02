@@ -1,0 +1,22 @@
+name: 问题反馈
+description: 报告世界版差分管理器的问题
+body:
+  - type: input
+    id: version
+    attributes:
+      label: 插件与游戏版本
+      description: 同时说明图形模式及加载器版本
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 重现步骤、预期表现与实际表现
+      description: 涉及联机时说明集会或任务、是否为本地主角、实际在场人数
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 可选截图或日志片段
+      description: 请去除个人路径、玩家身份及其他不准备公开的信息，无需提交完整配置或内存转储

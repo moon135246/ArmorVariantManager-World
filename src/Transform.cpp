@@ -106,7 +106,7 @@ void EvaluateTransforms(const Document& d,TransformRuntime& rt,const PlayerSnaps
  bool reset=!p.entity||p.entity!=rt.previousEntity||(p.map>=0&&rt.previousMap>=0&&p.map!=rt.previousMap)||(p.weapon>=0&&rt.previousWeapon>=0&&p.weapon!=rt.previousWeapon)||(p.healthPercent==0&&!rt.wasZero);
  if(reset)rt.latched.clear();rt.previousEntity=p.entity;if(p.map>=0)rt.previousMap=p.map;if(p.weapon>=0)rt.previousWeapon=p.weapon;
  if(p.healthPercent>=0)rt.wasZero=p.healthPercent==0;
- if(!d.enabled||!d.transformsEnabled||!p.entity){rt.latched.clear();rt.signatures.clear();return;}
+ if(!d.enabled||!d.transformsEnabled||d.hotkeysEnabled||!p.entity){rt.latched.clear();rt.signatures.clear();return;}
  std::vector<const TransformRule*> ordered;std::set<uint64_t> ids;
  for(auto& r:d.transforms){
   if(TransformCategory(r.condition.kind)<0)continue;
@@ -141,6 +141,6 @@ bool DeleteHealthNode(uint64_t id,const std::string& scope){
  auto& s=Get();auto it=std::find_if(s.data.transforms.begin(),s.data.transforms.end(),[&](auto& r){return r.id==id&&r.scope==scope&&r.condition.kind==ConditionKind::Health;});
  if(it==s.data.transforms.end())return false;s.data.transforms.erase(it);ResetTransforms();Changed("血量节点已删除");return true;
 }
-uint64_t ActivePreset(const Group& g){auto& s=Get();if(!s.data.enabled||!s.data.transformsEnabled)return 0;auto at=s.transform.activePresets.find(g.id);return at==s.transform.activePresets.end()?0:at->second;}
+uint64_t ActivePreset(const Group& g){auto& s=Get();if(!s.data.enabled||!s.data.transformsEnabled||s.data.hotkeysEnabled)return 0;auto at=s.transform.activePresets.find(g.id);return at==s.transform.activePresets.end()?0:at->second;}
 const Rules& EffectiveRules(const Group& g){uint64_t id=ActivePreset(g);if(id)for(auto& p:g.presets)if(p.id==id)return p.rules;return g.working;}
 }

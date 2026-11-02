@@ -2,16 +2,16 @@
 bool IsCurrentModel(const std::string& path){auto& s=Get();return !s.trackingPlayer||(s.outfit.ready&&std::find(s.outfit.paths.begin(),s.outfit.paths.end(),Normalize(path))!=s.outfit.paths.end());}
 bool CanEditScope(const std::string& scope){auto& s=Get();if(!s.storageReady||s.blockedScopes.count(scope)||s.outfitChanging)return false;if(!s.trackingPlayer)return true;return s.outfit.ready&&std::any_of(s.outfit.paths.begin(),s.outfit.paths.end(),[&](auto& p){return !p.empty()&&Equip(p)==scope;});}
 bool SaveSettings(){
- auto& s=Get();if(!s.storageReady)return false;auto& d=s.data;std::ostringstream text;
- text<<"WorldDiffSettings 121\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.hideDragHint<<' '<<d.transformsEnabled<<' '<<d.autoFind<<' '<<d.showStartupNotice<<'\n';
+ auto& s=Get();if(!s.storageReady)return false;auto& d=s.data;if(d.transformsEnabled&&d.hotkeysEnabled){s.notice="变身与预设快捷键不能同时开启，未保存设置";return false;}std::ostringstream text;
+ text<<"WorldDiffSettings 122\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.hideDragHint<<' '<<d.transformsEnabled<<' '<<d.autoFind<<' '<<d.showStartupNotice<<' '<<d.hotkeysEnabled<<'\n';
  std::string before;if(!ReadText(s.configPath,before)||(!before.empty()&&before==text.str()))return before==text.str();
  if(!AtomicText(s.configPath,text.str())){s.notice="设置保存失败，尚未保存的编辑仍在内存中";return false;}return true;
 }
 bool LoadSettings(){
  auto& s=Get();std::ifstream in(s.configPath,std::ios::binary);std::string magic,tag;unsigned version=0;Document d;
- if(!(in>>magic>>version)||magic!="WorldDiffSettings"||(version!=117&&version!=121)||!(in>>tag)||tag!="SET"||!(in>>d.enabled>>d.autoDefault>>d.autoOpen>>d.menuKey>>d.scale>>d.hideDragHint>>d.transformsEnabled>>d.autoFind)||(version==121&&!(in>>d.showStartupNotice))||d.menuKey<0x70||d.menuKey>0x87||d.scale<.65f||d.scale>1.7f){s.notice="Settings.cfg 无效，原文件保留";return false;}
+ if(!(in>>magic>>version)||magic!="WorldDiffSettings"||(version!=117&&version!=121&&version!=122)||!(in>>tag)||tag!="SET"||!(in>>d.enabled>>d.autoDefault>>d.autoOpen>>d.menuKey>>d.scale>>d.hideDragHint>>d.transformsEnabled>>d.autoFind)||(version>=121&&!(in>>d.showStartupNotice))||(version>=122&&!(in>>d.hotkeysEnabled))||(d.hotkeysEnabled&&d.transformsEnabled)||d.menuKey<0x70||d.menuKey>0x87||d.scale<.65f||d.scale>1.7f){s.notice="Settings.cfg 无效，原文件保留";return false;}
  in>>std::ws;if(!in.eof()){s.notice="设置文件含有未知内容，已停止读取";return false;}
- auto& to=s.data;to.enabled=d.enabled;to.autoDefault=d.autoDefault;to.autoOpen=d.autoOpen;to.menuKey=d.menuKey;to.scale=d.scale;to.hideDragHint=d.hideDragHint;to.transformsEnabled=d.transformsEnabled;to.autoFind=d.autoFind;to.showStartupNotice=d.showStartupNotice;return true;
+ auto& to=s.data;to.enabled=d.enabled;to.autoDefault=d.autoDefault;to.autoOpen=d.autoOpen;to.menuKey=d.menuKey;to.scale=d.scale;to.hideDragHint=d.hideDragHint;to.transformsEnabled=d.transformsEnabled;to.autoFind=d.autoFind;to.showStartupNotice=d.showStartupNotice;to.hotkeysEnabled=d.hotkeysEnabled;s.captureHotkey=0;s.keysAllowed=false;return true;
 }
 namespace {
 bool CompleteMapping(const std::string& scope,const File& file){
@@ -83,7 +83,7 @@ bool MigrateStorage(){
   if(!oldBackups.empty()){std::filesystem::create_directories(archive/L"Backups",ec);for(auto& path:oldBackups)std::filesystem::rename(path,archive/L"Backups"/path.filename(),ec);}
  }
  // No historical equipment documents stay active after migration.
- s.data.groups.clear();s.data.transforms.clear();s.data.transformModes.clear();s.data.meshDisplay.clear();s.data.bindings.clear();s.profileSnapshots.clear();s.loadedFingerprints.clear();s.loadedScopes.clear();s.backedUpScopes.clear();s.dirty=false;
+ s.data.groups.clear();s.data.hotkeys.clear();s.captureHotkey=0;s.keysAllowed=false;s.data.transforms.clear();s.data.transformModes.clear();s.data.meshDisplay.clear();s.data.bindings.clear();s.profileSnapshots.clear();s.loadedFingerprints.clear();s.loadedScopes.clear();s.backedUpScopes.clear();s.dirty=false;
  s.notice=existing?"已迁移：装备预设独立保存，原配置与旧预设已归档":"当前装备尚无预设";return true;
 }
 void FollowPlayerOutfit(const OutfitSnapshot& snapshot){
@@ -91,7 +91,7 @@ void FollowPlayerOutfit(const OutfitSnapshot& snapshot){
  if(!snapshot.ready){s.outfit.ready=false;s.pendingOutfit={};s.outfitSince=0;s.outfitChanging=true;return;}
  bool same=s.outfit.ready&&s.outfit.savePreview==snapshot.savePreview&&s.outfit.entity==snapshot.entity&&s.outfit.paths==snapshot.paths&&s.outfit.resources==snapshot.resources&&s.outfit.contexts==snapshot.contexts;
  if(same){s.outfitChanging=false;for(size_t i=0;i<5;i++)localModelContexts[i].store(snapshot.contexts[i],std::memory_order_relaxed);return;}
- s.outfitChanging=true;
+ s.outfitChanging=true;s.captureHotkey=0;s.keysAllowed=false;
  if(s.pendingOutfit.savePreview!=snapshot.savePreview||s.pendingOutfit.entity!=snapshot.entity||s.pendingOutfit.paths!=snapshot.paths||s.pendingOutfit.resources!=snapshot.resources||s.pendingOutfit.contexts!=snapshot.contexts){s.pendingOutfit=snapshot;s.outfitSince=GetTickCount();return;}
  if((DWORD)(GetTickCount()-s.outfitSince)<300)return;
  // Flush the old model before replacing its metadata or allowing new edits.

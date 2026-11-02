@@ -19,18 +19,23 @@ struct MeshDisplay {
  uint64_t signature=0;uint32_t material=0;int order=-1;std::string note;
 };
 struct Preset {uint64_t id=0;std::string name;Rules rules;};
+struct PresetHotkey {
+ uint64_t id=0;std::string name,scope;bool enabled=true;int key=0,modifiers=0;
+ std::vector<TransformTarget> targets;
+};
 struct Group {
  uint64_t id=0;std::string name,scope;bool main=false,global=false;
  std::set<Target> members;Rules working;std::vector<Preset> presets;
  uint64_t selected=0,defaultPreset=0;
 };
 struct Document {
- bool enabled=true,autoDefault=true,autoOpen=false,autoFind=true,hideDragHint=false,transformsEnabled=true,showStartupNotice=true;int menuKey=VK_F9;float scale=1.0f;
+ bool enabled=true,autoDefault=true,autoOpen=false,autoFind=true,hideDragHint=false,transformsEnabled=true,showStartupNotice=true,hotkeysEnabled=false;int menuKey=VK_F9;float scale=1.0f;
  uint64_t nextId=1;std::vector<Group> groups;
  std::map<std::string,std::string> bindings;
  std::vector<TransformRule> transforms;
  std::map<std::string,TransformMode> transformModes;
  std::map<Target,MeshDisplay> meshDisplay;
+ std::vector<PresetHotkey> hotkeys;
 };
 struct OutfitSnapshot {
  uintptr_t entity=0;
@@ -51,6 +56,8 @@ std::vector<PlayerInstance> ReadPlayers(const OutfitSnapshot& local);
 PlayerSnapshot ReadActorSnapshot(uintptr_t entity,bool remote);
 OutfitSnapshot ReadPlayerOutfit();
 bool ReadRuntimeModel(uintptr_t resource,const std::string& path,Model&);
+bool InspectTextInputActive(uintptr_t moduleBase,MemoryReader);
+bool GameTextInputActive();
 uint64_t StableModelStamp(const Model&);
 bool ReadPeerProfile(const std::string& scope,const std::vector<const Model*>& models,Document&,std::string& revision);
 struct State {
@@ -68,6 +75,7 @@ struct State {
  std::map<std::string,uintptr_t> modelResources;
  TransformRuntime transform;
  uint64_t transformEpoch=0;size_t peerCount=0,matchedPeers=0;
+ uint64_t captureHotkey=0;std::array<bool,256> previousKeys{};bool keysPrimed=false,keysAllowed=false;
 };
 State& Get();
 void Initialize(SharedState*,const std::filesystem::path& pluginDir,const std::filesystem::path& gameRoot);
@@ -98,6 +106,19 @@ bool SavePreset(Group&,const std::string&,bool overwrite=false);
 bool ApplyPreset(Group&,uint64_t);
 bool DeletePreset(Group&,uint64_t);
 bool SetDefault(Group&,uint64_t);
+// Modifiers: Ctrl=1, Shift=2, Alt=4. The Win key is never a preset modifier.
+bool ValidPresetKey(int key,int modifiers);
+std::string PresetKeyName(int key,int modifiers);
+bool ValidateHotkey(const PresetHotkey&,const Document&,bool requireTargets=false);
+bool SetAutomationEnabled(bool hotkeys,bool enabled);
+PresetHotkey* FindHotkey(uint64_t);
+uint64_t CreateHotkey(const std::string& scope,const std::string& name);
+bool SetHotkeyBinding(uint64_t,int key,int modifiers);
+bool SetHotkeyTarget(uint64_t,size_t,TransformTarget);
+bool DeleteHotkey(uint64_t);
+bool RenameHotkey(uint64_t,const std::string&);
+bool ApplyHotkey(uint64_t);
+bool ProcessPresetKeys(const std::array<bool,256>& keys,bool allowRuntime,bool allowCapture,bool(*textInputActive)()=nullptr);
 void Restore(Group&);void RestoreAll();
 void Import102(const std::filesystem::path&);
 struct ProfileCandidate {

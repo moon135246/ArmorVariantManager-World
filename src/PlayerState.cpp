@@ -52,6 +52,27 @@ OutfitSnapshot InspectSceneOutfit(uintptr_t base,MemoryReader read){
  out.savePreview=true;return out;
 }
 OutfitSnapshot ReadPlayerOutfit(){return InspectSceneOutfit(reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr)),ReadBytes);}
+bool InspectTextInputActive(uintptr_t base,MemoryReader read){
+ if(!base||!read)return true;auto pointer=[&](uintptr_t a){uintptr_t v=0;return read(a,&v,8)&&v>=0x10000&&v<0x00007FFFFFFEFFFFull?v:uintptr_t{0};};
+ auto gui=pointer(base+0x51C4640),table=gui?pointer(gui+0x278):0;uint32_t count=0,capacity=0;
+ if(!table||!read(gui+0x268,&count,4)||!read(gui+0x26c,&capacity,4)||count>capacity||!count||capacity>4096)return true;
+ std::vector<uintptr_t> units(count);if(!read(table,units.data(),units.size()*8))return true;
+ for(auto unit:units){uint32_t flags=0;if(!unit||!read(unit+0x14,&flags,4)||!(flags&0x10))continue;
+  auto vt=pointer(unit),method=vt?pointer(vt+4*8):0;unsigned char code[8]{};
+  // MT Framework's getDTI virtual method returns its class descriptor.
+  if(!method||!read(method,code,8)||code[0]!=0x48||code[1]!=0x8d||code[2]!=0x05||code[7]!=0xc3)continue;
+  int32_t displacement=0;memcpy(&displacement,code+3,4);auto dti=method+7+displacement;auto text=pointer(dti+8);char name[96]{};
+  if(!text||!read(text,name,sizeof(name))||!memchr(name,0,sizeof(name)))continue;
+  std::string_view type(name);
+  if(type=="uGUIChat"){
+   // Steam 15.23.00: the root stays active even with no chat UI. Its +0x380
+   // bits also retain history; only +0x494 returned 0/1/0 in paired captures.
+   uint8_t opened=0;if(!read(unit+0x494,&opened,1)||opened)return true;
+  }else if(type.starts_with("uGUIKeyboard")||type.starts_with("uGUIKeyBoard"))return true;
+ }
+ uint32_t finalCount=0;return pointer(base+0x51C4640)!=gui||pointer(gui+0x278)!=table||!read(gui+0x268,&finalCount,4)||finalCount!=count;
+}
+bool GameTextInputActive(){return InspectTextInputActive(reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr)),ReadBytes);}
 std::vector<PlayerInstance> InspectPlayers(uintptr_t base,const OutfitSnapshot& local,MemoryReader read){
  std::vector<PlayerInstance> out;if(!base||!read||!local.ready||local.savePreview)return out;
  auto pointer=[&](uintptr_t a){uintptr_t v=0;return read(a,&v,8)&&v>=0x10000&&v<0x00007FFFFFFEFFFFull?v:uintptr_t{0};};

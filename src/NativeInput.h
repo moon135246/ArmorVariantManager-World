@@ -12,4 +12,5 @@ void NativeInputClose();
 bool TextField(const char* label,const char* hint,char* value,size_t capacity);
 bool NativeInputOwnWindow(HWND);
 bool NativeInputThread();
+bool NativeInputActive();
 }
