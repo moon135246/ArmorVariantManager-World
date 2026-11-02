@@ -30,7 +30,7 @@ void AddModel(File& file,const Model& model){
  auto ordered=model.meshes;std::sort(ordered.begin(),ordered.end(),[](auto& a,auto& b){return a.index<b.index;});
  for(auto& m:ordered){if(m.materialId>=model.materials.size())continue;auto hash=model.materials[m.materialId].hash;file.materials.insert(hash);file.meshes.push_back({Normalize(model.relativePath),m.index,hash,ordinals[hash]++,m.vertexCount,m.indexCount,m.lod});}
 }
-bool ReadFile(const std::filesystem::path& path,File& file){
+bool ReadFile(const std::filesystem::path& path,File& file,bool allowCatalogFallback=true){
  std::error_code ec;if(std::filesystem::file_size(path,ec)>8*1024*1024||ec)return false;std::ifstream input(path,std::ios::binary);if(!input)return false;std::string raw((std::istreambuf_iterator<char>(input)),{});file={};file.fingerprint=Fingerprint(raw);std::istringstream in(raw);std::string first;unsigned version=0;in>>first>>version;
  if(first=="WorldDiffProfile"&&(version==104||version==107||version==108||version==109||version==110||version==115||version==117)){std::string line;std::getline(in,line);size_t count=0;bool doc=false;while(std::getline(in,line)){if(++count>100000)return false;std::istringstream row(line);std::string tag;row>>tag;if(tag=="SOURCE")row>>std::quoted(file.source);else if(tag=="STAMP"&&version>=117){std::string stampPath;uint64_t stamp=0;row>>std::quoted(stampPath)>>stamp;stampPath=Normalize(stampPath);if(stampPath.size()>255||!stamp||file.stamps.count(stampPath))return false;file.stamps[stampPath]=stamp;}else if(tag=="MAT"){std::string part,name;uint32_t hash=0;row>>std::quoted(part)>>hash>>std::quoted(name);if(name.size()>127||MaterialNameHash(name)!=hash)return false;file.materials.insert(hash);}else if(tag=="MESH"){MeshBinding m;row>>std::quoted(m.model)>>m.index>>m.material>>m.ordinal>>m.vertices>>m.indices>>m.lod;m.model=Normalize(m.model);if(m.model.size()>255||m.index>=65536)return false;file.meshes.push_back(m);}else if(tag=="DOCUMENT"){doc=ReadDocument(in,file.document);break;}else if(!tag.empty())return false;if(row.fail())return false;}if(!doc)return false;}
  else{std::istringstream legacy(raw);if(!ReadDocument(legacy,file.document))return false;if(file.document.groups.empty())return false;file.source=file.document.groups.front().scope;}
@@ -42,7 +42,7 @@ bool ReadFile(const std::filesystem::path& path,File& file){
  for(auto& [target,view]:file.document.meshDisplay)if(Equip(target.model)!=file.source)return false;
  for(auto& [model,stamp]:file.stamps)if(Equip(model)!=file.source)return false;
  for(auto& mesh:file.meshes){if(Equip(mesh.model)!=file.source)return false;file.materials.insert(mesh.material);}
- if(file.meshes.empty())for(auto& m:Get().models)if(m.equip==file.source)AddModel(file,m);
+ if(allowCatalogFallback&&file.meshes.empty())for(auto& m:Get().models)if(m.equip==file.source)AddModel(file,m);
  return true;
 }
 std::vector<const Model*> CurrentModels(const std::string& scope,bool liveOnly){
@@ -184,4 +184,19 @@ void TickProfiles(){
  }
 }
 #include "Storage.inl"
+uint64_t StableModelStamp(const Model& model){return ModelStamp(model);}
+bool ReadPeerProfile(const std::string& scope,const std::vector<const Model*>& models,Document& document,std::string& revision){
+ // Canonical files only: no template search, import, backup, migration or save.
+ if(!EquipmentId(scope)||models.empty())return false;File file;
+ if(!ReadFile(Folder()/PathUtf8(scope+".wdp"),file,false)||file.source!=scope)return false;
+ for(auto* model:models){
+  if(!model||model->equip!=scope||model->meshes.empty())return false;auto path=Normalize(model->relativePath);auto stamp=file.stamps.find(path);
+  if(stamp!=file.stamps.end()){if(stamp->second!=ModelStamp(*model))return false;continue;}
+  std::vector<const MeshBinding*> bindings;for(auto& b:file.meshes)if(b.model==path)bindings.push_back(&b);if(bindings.size()!=model->meshes.size())return false;
+  std::set<uint32_t> seen;
+  for(auto* b:bindings)if(!seen.insert(b->index).second)return false;
+  for(auto& mesh:model->meshes){if(mesh.materialId>=model->materials.size())return false;auto b=std::find_if(bindings.begin(),bindings.end(),[&](auto* row){return row->index==mesh.index;});if(b==bindings.end()||(*b)->material!=model->materials[mesh.materialId].hash||(*b)->vertices!=mesh.vertexCount||(*b)->indices!=mesh.indexCount||(*b)->lod!=mesh.lod)return false;}
+ }
+ document=std::move(file.document);revision=file.fingerprint;return true;
+}
 }

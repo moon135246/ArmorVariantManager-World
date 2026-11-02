@@ -16,7 +16,7 @@ try {
     $plugins = Join-Path $gameRoot 'nativePC\plugins'
     $dataDir = Join-Path $plugins 'WorldDiff'
     New-Item -ItemType Directory -Path $plugins -Force | Out-Null
-    $backup = Join-Path $gameRoot ('WorldDiff-backups\before-1.1.8-' + [Guid]::NewGuid().ToString('N'))
+    $backup = Join-Path $gameRoot ('WorldDiff-backups\before-1.1.9-' + [Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $backup -Force | Out-Null
     $target = Join-Path $plugins 'WorldDiff.dll'
     if (Test-Path -LiteralPath $target) { Copy-Item -LiteralPath $target -Destination $backup }
@@ -25,7 +25,7 @@ try {
     if ((Get-FileHash -LiteralPath $source).Hash -ne (Get-FileHash -LiteralPath $target).Hash) {
         throw '安装后的 DLL 校验不一致，请重新安装。'
     }
-    Write-Host '1.1.8 安装完成，启动游戏后按 F9 打开。'
+    Write-Host '1.1.9 安装完成，启动游戏后按 F9 打开。'
     Write-Host ('原文件备份：' + $backup)
     Write-Host '原有配置由插件自动迁移；无需运行外置管理器。'
 } catch {

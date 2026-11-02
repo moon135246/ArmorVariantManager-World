@@ -1,9 +1,11 @@
 #include "State.h"
+#include "Multiplayer.h"
 #include <algorithm>
 #include <climits>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <cstdio>
 namespace worlddiff::app {
 State& Get(){static State* state=new State;return *state;}
 std::string Normalize(std::string p){for(auto& c:p){if(c=='/')c='\\';else if(c>='A'&&c<='Z')c+=32;}if(p.size()>5&&p.substr(p.size()-5)==".mod3")p.resize(p.size()-5);return p;}
@@ -162,17 +164,17 @@ void Import102(const std::filesystem::path& file){
  for(auto& [name,r]:sections){std::set<std::string> scopes;for(auto& t:r.hidden)scopes.insert(Equip(t.model));for(auto& t:r.shown)scopes.insert(Equip(t.model));for(auto& scope:scopes){auto& g=Main(scope);Rules part;for(auto& t:r.hidden)if(Equip(t.model)==scope)part.hidden.insert(t);for(auto& t:r.shown)if(Equip(t.model)==scope)part.shown.insert(t);if(name=="Current")g.working=part;else{Preset p;p.id=s.data.nextId++;p.name=name.substr(7);p.rules=part;g.presets.push_back(p);}}}Changed("旧版规则与预设已导入主列表");
 }
 void Initialize(SharedState* live,const std::filesystem::path& dir,const std::filesystem::path& root){
- auto& s=Get();std::lock_guard lock(s.mutex);s.live=live;s.directory=dir/L"WorldDiff";s.gameRoot=root;s.configPath=s.directory/L"Settings.cfg";s.trackingPlayer=true;
+ auto& s=Get();std::lock_guard lock(s.mutex);ResetPlayerPolicies();s.live=live;s.directory=dir/L"WorldDiff";s.gameRoot=root;s.configPath=s.directory/L"Settings.cfg";s.trackingPlayer=true;
  std::vector<std::string> errors;s.models=LoadCatalog(root,&errors);for(auto& m:s.models)m.relativePath=Normalize(m.relativePath);
  s.storageReady=std::filesystem::exists(s.configPath)?LoadSettings():MigrateStorage();if(!s.storageReady)s.notice="配置迁移或读取失败，已暂停编辑；原文件保留。";
  s.loaded=true;
 }
 void Tick(){
- auto& s=Get();std::lock_guard lock(s.mutex);if(!s.live)return;DWORD now=GetTickCount();if(s.trackingPlayer)FollowPlayerOutfit(ReadPlayerOutfit());UpdateTransforms();auto n=std::min<LONG>(std::max<LONG>((LONG)s.live->rowCount,0),(LONG)kMaxRows);
+ auto& s=Get();std::lock_guard lock(s.mutex);if(!s.live)return;DWORD now=GetTickCount();if(s.trackingPlayer)FollowPlayerOutfit(ReadPlayerOutfit());TickProfiles();UpdateTransforms();UpdatePlayerPolicies();auto policies=renderPolicies.load(std::memory_order_acquire);auto n=std::min<LONG>(std::max<LONG>((LONG)s.live->rowCount,0),(LONG)kMaxRows);
  for(LONG i=0;i<n;i++){auto& r=s.live->rows[i];if(r.ready!=1)continue;std::string path=Normalize(r.modelPath);if(Equip(path).empty())continue;
-  if(s.trackingPlayer){bool current=false;if(s.outfit.ready&&!s.outfitChanging)for(size_t slot=0;slot<5;slot++)if(s.outfit.paths[slot]==path&&s.outfit.resources[slot]==r.resource)current=true;
+  if(s.trackingPlayer){auto context=rowContexts[i].load(std::memory_order_relaxed);auto* policy=policies?policies->Find(context):nullptr;bool current=policy&&policy->local;
    if(current&&(DWORD)(now-(DWORD)r.lastTick)<1500)s.lastSeen[path]=(DWORD)r.lastTick;
-   InterlockedExchange(&r.hide,current&&s.storageReady&&!s.blockedScopes.count(Equip(path))&&Hidden(path,r.meshIndex,r.materialHash)?1:0);continue;
+   InterlockedExchange(&r.hide,policy&&PolicyHides(*policy,(uintptr_t)r.resource,r.meshIndex,r.materialId,r.meshCount)?1:0);continue;
   }
   auto at=std::find_if(s.models.begin(),s.models.end(),[&](auto& m){return m.relativePath==path;});if(at==s.models.end()){Model m;m.relativePath=path;m.equip=Equip(path);auto p=path.find('\\',path.find(m.equip)+m.equip.size()+1);auto start=path.find(m.equip)+m.equip.size()+1;m.part=path.substr(start,p-start);m.display=path.substr(path.find_last_of('\\')+1);LoadMaterialOrder(m,s.gameRoot);s.models.push_back(std::move(m));at=s.models.end()-1;}
   auto& model=*at;if(r.materialId>=65536)continue;if(model.materials.size()<=r.materialId)model.materials.resize(r.materialId+1);auto& mat=model.materials[r.materialId];if(mat.name!=r.materialName||mat.hash!=r.materialHash){mat.name=r.materialName;mat.hash=r.materialHash;auto order=std::find(model.materialOrder.begin(),model.materialOrder.end(),mat.hash);mat.mrlIndex=order==model.materialOrder.end()?-1:(int)(order-model.materialOrder.begin());}
@@ -181,7 +183,7 @@ void Tick(){
   InterlockedExchange(&r.hide,s.storageReady&&IsCurrentModel(path)&&!s.blockedScopes.count(model.equip)&&Hidden(path,r.meshIndex,r.materialHash)?1:0);
  }
  InterlockedExchange(&s.live->enabled,s.data.enabled?1:0);InterlockedExchange(&s.live->heartbeat,(LONG)now);
- TickProfiles();
+ if(s.trackingPlayer)sprintf_s(s.live->message,"WorldDiff 1.1.9 local=%llx preview=%d ready=%d peers=%zu matched=%zu modelInstances=%zu",(unsigned long long)s.outfit.entity,s.outfit.savePreview?1:0,s.outfit.ready&&!s.outfitChanging?1:0,s.peerCount,s.matchedPeers,policies?policies->models.size():0);
  if(s.dirty&&(DWORD)(now-s.dirtyAt)>450)Save();
 }
 }

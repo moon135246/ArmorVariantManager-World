@@ -11,10 +11,6 @@ template<class T> bool Read(uintptr_t address,T& value){
  if(address<0x10000||address>0x00007FFFFFFEFFFFull)return false;
  SIZE_T got=0;return ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<const void*>(address),&value,sizeof(value),&got)&&got==sizeof(value);
 }
-uintptr_t Pointer(uintptr_t address){uintptr_t value=0;return Read(address,value)&&value>=0x10000?value:0;}
-int Integer(uintptr_t address,int minimum,int maximum){int value=-1;return Read(address,value)&&value>=minimum&&value<=maximum?value:-1;}
-int Flag(uintptr_t address){uint8_t value=0;return Read(address,value)&&value<=1?value:-1;}
-int TimerFlag(uintptr_t address){float seconds=0;return Read(address,seconds)?TimerState(seconds):-1;}
 }
 OutfitSnapshot InspectPlayerOutfit(uintptr_t entity,MemoryReader read){
  OutfitSnapshot out;out.entity=entity;if(!entity||!read)return out;
@@ -56,6 +52,26 @@ OutfitSnapshot InspectSceneOutfit(uintptr_t base,MemoryReader read){
  out.savePreview=true;return out;
 }
 OutfitSnapshot ReadPlayerOutfit(){return InspectSceneOutfit(reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr)),ReadBytes);}
+std::vector<PlayerInstance> InspectPlayers(uintptr_t base,const OutfitSnapshot& local,MemoryReader read){
+ std::vector<PlayerInstance> out;if(!base||!read||!local.ready||local.savePreview)return out;
+ auto pointer=[&](uintptr_t a){uintptr_t v=0;return read(a,&v,8)&&v>=0x10000&&v<0x00007FFFFFFEFFFFull?v:uintptr_t{0};};
+ auto manager=pointer(base+0x50139A0);if(!manager||pointer(manager+0x50)!=local.entity)return out;
+ auto container=pointer(base+0x500ECA0);if(!container||pointer(container)!=base+0x33FE5B0)return out;
+ std::set<uintptr_t> seen;
+ for(size_t i=0;i<16;i++){
+  auto record=container+0x40+i*0x740;if(pointer(record)!=base+0x33FE588)continue;
+  uintptr_t token=0;if(!read(record+8,&token,8))continue;auto actor=pointer(record+0x18);
+  if(!actor||pointer(actor)!=base+0x34A6D18||!seen.insert(actor).second)continue;
+  auto outfit=InspectPlayerOutfit(actor,read);uintptr_t finalToken=0;
+  if(!outfit.ready||pointer(record+0x18)!=actor||!read(record+8,&finalToken,8)||finalToken!=token)continue;
+  out.push_back({std::move(outfit),record,token,container,actor==local.entity});
+ }
+ if(pointer(base+0x500ECA0)!=container||pointer(container)!=base+0x33FE5B0||pointer(base+0x50139A0)!=manager||pointer(manager+0x50)!=local.entity)return {};
+ // No arbitrary first-player fallback if the explicit local entry is absent.
+ if(std::none_of(out.begin(),out.end(),[](auto& p){return p.local;}))return {};
+ return out;
+}
+std::vector<PlayerInstance> ReadPlayers(const OutfitSnapshot& local){return InspectPlayers(reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr)),local,ReadBytes);}
 bool ReadRuntimeModel(uintptr_t resource,const std::string& path,Model& model){
  char resourcePath[256]{};if(!ReadBytes(resource+0xC,resourcePath,255)||!memchr(resourcePath,0,255)||Normalize(resourcePath)!=Normalize(path))return false;
  uintptr_t meshes=0,names=0;uint32_t count=0,materials=0;
@@ -69,19 +85,22 @@ bool ReadRuntimeModel(uintptr_t resource,const std::string& path,Model& model){
  if(!Read(resource+0xC8,finalMeshes)||!Read(resource+0x400,finalNames)||!Read(resource+0xD0,finalCount)||!Read(resource+0xE4,finalMaterials)||!ReadBytes(resource+0xC,finalPath,255)||memcmp(resourcePath,finalPath,255)||finalMeshes!=meshes||finalNames!=names||finalCount!=count||finalMaterials!=materials)return false;
  result.signature=MeshOrderSignature(result);model=std::move(result);return true;
 }
-PlayerSnapshot ReadPlayerSnapshot(){
- PlayerSnapshot p;const auto base=reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+PlayerSnapshot InspectPlayerSnapshot(uintptr_t base,uintptr_t entity,MemoryReader reader,bool remote){
+ PlayerSnapshot p;if(!base||!entity||!reader)return p;p.entity=entity;
+ auto read=[&](uintptr_t a,auto& v){return reader(a,&v,sizeof(v));};
+ auto Pointer=[&](uintptr_t a){uintptr_t v=0;return read(a,v)&&v>=0x10000&&v<0x00007FFFFFFEFFFFull?v:uintptr_t{0};};
+ auto Integer=[&](uintptr_t a,int lo,int hi){int v=-1;return read(a,v)&&v>=lo&&v<=hi?v:-1;};
+ auto Flag=[&](uintptr_t a){uint8_t v=0;return read(a,v)&&v<=1?v:-1;};
+ auto TimerFlag=[&](uintptr_t a){float v=0;return read(a,v)?TimerState(v):-1;};
  // Steam 15.23.00. Pointer chains are read-only and derived from the local
  // MHWI-VisualControllerExtended 1.4.0 reference; no additional hooks or writes.
  auto map=Pointer(base+0x500CDA0);if(map)map=Pointer(map+0x80);if(map)map=Pointer(map+0xEEC0);
- uint16_t mapId=0;if(map&&Read(map+0x118,mapId))p.map=mapId;
- auto manager=Pointer(base+0x50139A0);if(!manager)return p;
- p.entity=Pointer(manager+0x50);if(!p.entity)return p;
+ uint16_t mapId=0;if(map&&read(map+0x118,mapId))p.map=mapId;
  auto weapon=Pointer(p.entity+0xC0);if(weapon)weapon=Pointer(weapon+0x8);if(weapon)weapon=Pointer(weapon+0x78);
  if(weapon)p.weapon=Integer(weapon+0x2E8,0,13);
  auto state=Pointer(p.entity+0x76B0);
  if(state){if(p.weapon==3)p.spirit=Integer(state+0x2370,0,3);if(p.weapon==2){p.demon=Flag(state+0x2368);p.archdemon=Flag(state+0x2369);}}
- if(state&&p.weapon==10){bool read=Read(state+0x2368,p.extractTimers[0])&&Read(state+0x236C,p.extractTimers[1])&&Read(state+0x2370,p.extractTimers[2]);if(read)p.extracts=ExtractMask(p.extractTimers);}
+ if(state&&p.weapon==10){bool valid=read(state+0x2368,p.extractTimers[0])&&read(state+0x236C,p.extractTimers[1])&&read(state+0x2370,p.extractTimers[2]);if(valid)p.extracts=ExtractMask(p.extractTimers);}
  // Verified against read-only 50 Hz captures of charging, release, morphing,
  // red shield/sword/axe and amped sword. 0x23A0 retains the last bow attack's
  // charge; use 0x23B4 instead. Preserve the 109 storage values 1..4, displayed
@@ -98,10 +117,19 @@ PlayerSnapshot ReadPlayerSnapshot(){
   auto abnormal=Pointer(p.entity+0x7D20);if(abnormal){int active=Flag(abnormal+0x6E5);if(active==0)p.switchAxePowered=0;else if(active==1)p.switchAxePowered=TimerFlag(abnormal+0x6E8);}
  }
  auto action=Pointer(p.entity+0x468);if(action)p.lmt=Integer(action+0xE9C4,0,0x7fffffff);
+ // Remote motion streams can expose absent/sentinel values. They must not
+ // accidentally satisfy a sheathed/drawn or custom action condition.
+ if(remote&&(p.lmt==0||p.lmt==65535))p.lmt=-1;
  auto vitality=Pointer(p.entity+0x7630);float health=-1,max=-1;
- if(vitality&&Read(vitality+0x64,health)&&Read(vitality+0x60,max)&&std::isfinite(health)&&std::isfinite(max)&&health>=0&&max>0&&max<100000){
+ if(vitality&&read(vitality+0x64,health)&&read(vitality+0x60,max)&&std::isfinite(health)&&std::isfinite(max)&&health>=0&&max>0&&max<100000){
   p.health=health;p.maxHealth=max;p.healthPercent=std::clamp(health*100.f/max,0.f,100.f);
  }
  return p;
+}
+PlayerSnapshot ReadActorSnapshot(uintptr_t entity,bool remote){return InspectPlayerSnapshot(reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr)),entity,ReadBytes,remote);}
+PlayerSnapshot ReadPlayerSnapshot(){
+ const auto base=reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));uintptr_t manager=0,entity=0;
+ if(!Read(base+0x50139A0,manager)||!manager||!Read(manager+0x50,entity)||!entity)return {};
+ return InspectPlayerSnapshot(base,entity,ReadBytes);
 }
 }

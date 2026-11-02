@@ -6,6 +6,7 @@
 #include <string>
 #include <cstdarg>
 #include "Protocol.h"
+#include "RenderPolicy.h"
 #include "State.h"
 #include "Overlay.h"
 #include "safetyhook.hpp"
@@ -79,18 +80,18 @@ LiveRow* MakeRow(Slot& s,uintptr_t ctx,uintptr_t q){
  auto* r=&shared->rows[n];strcpy_s(r->modelPath,id.path);r->meshIndex=id.index;r->materialId=id.material;r->groupId=id.group;r->resource=id.resource;r->query=q;
  strcpy_s(r->materialName,id.name);r->meshCount=id.count;r->materialCount=id.materialCount;r->lod=id.lod;
  uint32_t crc=0xFFFFFFFF;for(const unsigned char* p=(const unsigned char*)id.name;*p;p++){crc^=*p;for(int bit=0;bit<8;bit++)crc=(crc>>1)^(0xEDB88320u&-(int32_t)(crc&1));}r->materialHash=crc;
- InterlockedExchange(&r->ready,1);s.row.store(n,std::memory_order_release);return r;
+ rowContexts[n].store(ctx,std::memory_order_relaxed);InterlockedExchange(&r->ready,1);s.row.store(n,std::memory_order_release);return r;
 }
 LiveRow* FindRow(uintptr_t ctx,uintptr_t q){
  Identity id{};if(!ReadIdentity(ctx,q,&id,false))return nullptr;
- uint64_t key=(q^((id.resource<<17)|(id.resource>>47)))|1ull;
+ uint64_t key=(q^((id.resource<<17)|(id.resource>>47))^((ctx<<31)|(ctx>>33)))|1ull;
  uint32_t slot=(uint32_t)((key>>4)*11400714819323198485ull)&(kSlots-1);
  for(unsigned probe=0;probe<32;probe++,slot=(slot+1)&(kSlots-1)){
   auto& s=slots[slot];uint64_t k=s.key.load(std::memory_order_acquire);
   if(k==key){
    LONG n=s.row.load(std::memory_order_acquire);if(n<0||n>=(LONG)kMaxRows)return nullptr;
    auto* r=&shared->rows[n];
-   if(r->query!=q||r->resource!=id.resource)return nullptr;
+   if(r->query!=q||r->resource!=id.resource||rowContexts[n].load(std::memory_order_relaxed)!=ctx)continue;
    if(r->ready!=1||r->materialId!=id.material||r->meshIndex!=id.index||!PathMatches(id.resource,r->modelPath)||!NameMatches(id.resource,id.material,r->materialName)){
     if(s.row.compare_exchange_strong(n,-2,std::memory_order_acq_rel)){InterlockedExchange(&r->ready,-1);return MakeRow(s,ctx,q);}return nullptr;
    }
@@ -102,16 +103,28 @@ LiveRow* FindRow(uintptr_t ctx,uintptr_t q){
  }
  return nullptr;
 }
+bool PolicyOwnerMatches(const ModelPolicy& p,uintptr_t localEntity){
+ __try{
+  const auto base=(uintptr_t)GetModuleHandleW(nullptr);auto manager=*(uintptr_t*)(base+0x50139A0);auto local=manager?*(uintptr_t*)(manager+0x50):0;
+  if(p.preview){if(local)return false;}else if(local!=localEntity||!local)return false;
+  if(p.record){
+   if(*(uintptr_t*)(base+0x500ECA0)!=p.container||*(uintptr_t*)p.container!=base+0x33FE5B0||*(uintptr_t*)p.record!=base+0x33FE588||*(uintptr_t*)(p.record+0x18)!=p.actor||*(uintptr_t*)(p.record+8)!=p.token||*(uintptr_t*)p.actor!=base+0x34A6D18)return false;
+  }else if(!p.local)return false;
+  constexpr uintptr_t offsets[]={0x300,0,0x80,0x100,0x180};if(p.part>=5)return false;
+  auto armor=*(uintptr_t*)(p.actor+0xC928);
+  return armor&&*(uintptr_t*)armor==p.actor&&*(uintptr_t*)(armor+offsets[p.part])==p.context&&*(uintptr_t*)(p.context+0x2A0)==p.resource&&*(uintptr_t*)(p.resource+0xC8)==p.meshes&&*(uintptr_t*)(p.resource+0x400)==p.names&&*(uint32_t*)(p.resource+0xE4)==p.materialCount;
+ }__except(EXCEPTION_EXECUTE_HANDLER){return false;}
+}
 bool __fastcall Detour(uintptr_t ctx,uintptr_t b,uintptr_t q,uintptr_t d){
  bool visible=original(ctx,b,q,d);
  if(!shared||shared->ready!=1)return visible;
- if(!IsLocalModelContext(ctx))return visible;
- LiveRow* r=FindRow(ctx,q);if(!r)return visible;
- InterlockedIncrement(&r->hits);InterlockedExchange(&r->lastTick,(LONG)GetTickCount());InterlockedExchange(&r->originalVisible,visible?1:0);
- if(r->hide&&shared->enabled&&(DWORD)(GetTickCount()-(DWORD)shared->heartbeat)<5000&&PathMatches((uintptr_t)r->resource,r->modelPath)){
-  InterlockedIncrement(&r->hiddenHits);return false;
- }
- return visible;
+ auto policies=renderPolicies.load(std::memory_order_acquire);auto* policy=policies?policies->Find(ctx):nullptr;auto now=GetTickCount();
+ if(!policy||(DWORD)(now-policies->tick)>=1500||!PolicyOwnerMatches(*policy,policies->localEntity))return visible;
+ Identity id{};if(!ReadIdentity(ctx,q,&id,false))return visible;
+ bool hidden=shared->enabled&&(DWORD)(now-(DWORD)shared->heartbeat)<5000&&PolicyHides(*policy,id.resource,id.index,id.material,id.count)&&PathMatches(id.resource,policy->path.c_str());
+ // Telemetry exhaustion must never disable visibility control.
+ if(auto* r=FindRow(ctx,q)){InterlockedIncrement(&r->hits);InterlockedExchange(&r->lastTick,(LONG)now);InterlockedExchange(&r->originalVisible,visible?1:0);InterlockedExchange(&r->hide,hidden?1:0);if(hidden)InterlockedIncrement(&r->hiddenHits);}
+ return hidden?false:visible;
 }
 void Log(const char* msg){FILE* f=nullptr;_wfopen_s(&f,logPath.c_str(),L"ab");if(f){fprintf(f,"[%llu] %s\n",GetTickCount64(),msg);fclose(f);}}
 void SetMessage(const char* s,LONG error=0){strcpy_s(shared->message,s);InterlockedExchange(&shared->lastError,error);Log(s);}
@@ -133,7 +146,7 @@ DWORD WINAPI Start(void* arg){
  if(!visibilityHook->enable()){SetMessage("Visibility hook activation failed.",3);return 0;}
  wchar_t gameExe[32768];GetModuleFileNameW(nullptr,gameExe,32768);
  app::Initialize(shared,pluginDirectory,std::filesystem::path(gameExe).parent_path());
- SetMessage("WorldDiff 1.1.8 internal ready; F9 toggles the in-game panel.");InterlockedExchange(&shared->ready,1);
+ SetMessage("WorldDiff 1.1.9 internal ready; F9 toggles the in-game panel.");InterlockedExchange(&shared->ready,1);
  if(!overlay::Install())RuntimeLog("Overlay initialization failed; visibility controls remain available to diagnostics.");
  for(;;){app::Tick();overlay::WorkerTick();Sleep(100);}
 }

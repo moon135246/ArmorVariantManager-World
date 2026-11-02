@@ -40,10 +40,19 @@ struct OutfitSnapshot {
  bool savePreview=false; // Current save-selection avatar; never serialized.
 };
 using MemoryReader=bool(*)(uintptr_t,void*,size_t);
+struct PlayerInstance {
+ OutfitSnapshot outfit;uintptr_t record=0,token=0,container=0;bool local=false;
+};
 OutfitSnapshot InspectPlayerOutfit(uintptr_t entity,MemoryReader);
 OutfitSnapshot InspectSceneOutfit(uintptr_t moduleBase,MemoryReader);
+std::vector<PlayerInstance> InspectPlayers(uintptr_t moduleBase,const OutfitSnapshot& local,MemoryReader);
+PlayerSnapshot InspectPlayerSnapshot(uintptr_t moduleBase,uintptr_t entity,MemoryReader,bool remote=false);
+std::vector<PlayerInstance> ReadPlayers(const OutfitSnapshot& local);
+PlayerSnapshot ReadActorSnapshot(uintptr_t entity,bool remote);
 OutfitSnapshot ReadPlayerOutfit();
 bool ReadRuntimeModel(uintptr_t resource,const std::string& path,Model&);
+uint64_t StableModelStamp(const Model&);
+bool ReadPeerProfile(const std::string& scope,const std::vector<const Model*>& models,Document&,std::string& revision);
 struct State {
  std::recursive_mutex mutex;Document data;std::vector<Model> models;
  std::map<std::string,DWORD> lastSeen;std::filesystem::path directory,gameRoot,configPath;
@@ -58,6 +67,7 @@ struct State {
  std::map<std::string,std::string> profileStatus;
  std::map<std::string,uintptr_t> modelResources;
  TransformRuntime transform;
+ uint64_t transformEpoch=0;size_t peerCount=0,matchedPeers=0;
 };
 State& Get();
 void Initialize(SharedState*,const std::filesystem::path& pluginDir,const std::filesystem::path& gameRoot);

@@ -132,7 +132,7 @@ void EvaluateTransforms(const Document& d,TransformRuntime& rt,const PlayerSnaps
  }
 }
 void UpdateTransforms(){auto& s=Get();EvaluateTransforms(s.data,s.transform,ReadPlayerSnapshot());}
-void ResetTransforms(){Get().transform={};}
+void ResetTransforms(){auto& s=Get();s.transform={};s.transformEpoch++;}
 uint64_t AddHealthNode(const std::string& scope){
  auto& s=Get();if(scope.empty()||scope.size()>128||s.data.transforms.size()>=2048)return 0;
  TransformRule r;r.id=s.data.nextId++;r.name="自定义血量";r.scope=scope;r.condition.kind=ConditionKind::Health;auto id=r.id;s.data.transforms.push_back(std::move(r));ResetTransforms();Changed("血量节点已添加");return id;
