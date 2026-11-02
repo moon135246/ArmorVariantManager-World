@@ -45,7 +45,7 @@ void Restore(Group& g){g.working={};g.selected=0;Changed("当前分组已恢复�
 void RestoreAll(){auto& s=Get();for(auto& g:s.data.groups){g.working={};g.selected=0;}s.data.enabled=false;Changed("已暂停全部控制，游戏显隐已恢复；预设仍然保留");}
 static void WriteRules(std::ostream& f,const Rules& r,uint64_t gid,uint64_t pid){for(auto& t:r.hidden)f<<"RULE "<<gid<<' '<<pid<<" 0 "<<t.mesh<<' '<<std::quoted(t.model)<<' '<<t.value<<'\n';for(auto& t:r.shown)f<<"RULE "<<gid<<' '<<pid<<" 1 "<<t.mesh<<' '<<std::quoted(t.model)<<' '<<t.value<<'\n';}
 void WriteDocument(std::ostream& f,const Document& d){
- f<<"WorldDiffInternal 104\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.nextId<<'\n';
+ f<<"WorldDiffInternal 104\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.nextId<<' '<<d.hideDragHint<<'\n';
  f<<"AUTOFIND "<<d.autoFind<<'\n';
  for(const auto& [scope,file]:d.bindings)f<<"BINDING "<<std::quoted(scope)<<' '<<std::quoted(file)<<'\n';
  for(const auto& g:d.groups){f<<"GROUP "<<g.id<<' '<<std::quoted(g.name)<<' '<<std::quoted(g.scope)<<' '<<g.main<<' '<<g.global<<' '<<g.selected<<' '<<g.defaultPreset<<'\n';for(const auto& t:g.members)f<<"MEMBER "<<g.id<<' '<<std::quoted(t.model)<<' '<<t.value<<'\n';WriteRules(f,g.working,g.id,0);for(const auto& p:g.presets){f<<"PRESET "<<g.id<<' '<<p.id<<' '<<std::quoted(p.name)<<'\n';WriteRules(f,p.rules,g.id,p.id);}}
@@ -62,7 +62,7 @@ bool ReadDocument(std::istream& f,Document& result){
  std::string magic;unsigned version=0;f>>magic>>version;if(magic!="WorldDiffInternal"||(version!=103&&version!=104))return false;
  Document d;std::string line;std::getline(f,line);bool valid=true;size_t records=0;
  while(std::getline(f,line)&&valid){if(++records>200000){valid=false;break;}std::istringstream in(line);std::string tag;in>>tag;if(tag.empty())continue;
-  if(tag=="SET"){in>>d.enabled>>d.autoDefault>>d.autoOpen>>d.menuKey>>d.scale>>d.nextId;}
+  if(tag=="SET"){in>>d.enabled>>d.autoDefault>>d.autoOpen>>d.menuKey>>d.scale>>d.nextId;if(in&&!in.eof()){in>>std::ws;if(!in.eof())in>>d.hideDragHint;}}
   else if(tag=="AUTOFIND"){in>>d.autoFind;}
   else if(tag=="BINDING"){std::string scope,file;in>>std::quoted(scope)>>std::quoted(file);if(scope.empty()||scope.size()>128||file.size()>240)valid=false;d.bindings[scope]=file;}
   else if(tag=="GROUP"){Group g;in>>g.id>>std::quoted(g.name)>>std::quoted(g.scope)>>g.main>>g.global>>g.selected>>g.defaultPreset;if(!GoodName(g.name)||g.scope.empty()||g.scope.size()>128||!g.id||d.groups.size()>=2048)valid=false;for(auto& x:d.groups)if(x.id==g.id||(x.main&&g.main&&x.scope==g.scope))valid=false;d.groups.push_back(std::move(g));}
