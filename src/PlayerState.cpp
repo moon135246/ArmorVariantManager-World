@@ -31,10 +31,31 @@ OutfitSnapshot InspectPlayerOutfit(uintptr_t entity,MemoryReader read){
  uintptr_t finalArmor=0,finalBody=0;if(!read(entity+0xC928,&finalArmor,8)||finalArmor!=armor||!read(armor,&finalBody,8)||finalBody!=entity)return {};
  out.ready=std::any_of(out.paths.begin(),out.paths.end(),[](auto& p){return !p.empty();});return out;
 }
-OutfitSnapshot ReadPlayerOutfit(){
- auto base=reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));auto manager=Pointer(base+0x50139A0);auto entity=manager?Pointer(manager+0x50):0;
- auto out=InspectPlayerOutfit(entity,ReadBytes);if(manager&&Pointer(manager+0x50)!=entity)return {};return out;
+OutfitSnapshot InspectSceneOutfit(uintptr_t base,MemoryReader read){
+ if(!base||!read)return {};
+ auto pointer=[&](uintptr_t address){uintptr_t value=0;return read(address,&value,sizeof(value))&&value>=0x10000&&value<0x00007FFFFFFEFFFFull?value:uintptr_t{0};};
+ auto manager=pointer(base+0x50139A0);auto entity=manager?pointer(manager+0x50):0;
+ if(entity){
+  // Normal gameplay never consults the title GUI or cached preview avatar.
+  auto out=InspectPlayerOutfit(entity,read);if(pointer(base+0x50139A0)!=manager||pointer(manager+0x50)!=entity)return {};return out;
+ }
+ // Steam 15.23.00: cached save avatars survive returning to the title menu.
+ // Require the actual uGUITitleDataSelect visibility flag, not just its pointer.
+ auto gui=pointer(base+0x51C4640);auto table=gui?pointer(gui+0x278):0;uint32_t count=0,capacity=0;
+ if(!table||!read(gui+0x268,&count,4)||!read(gui+0x26C,&capacity,4)||!count||count>capacity||capacity>4096)return {};
+ // GUI registration order changes between title and gameplay. Search the
+ // bounded live unit array by exact class instead of assuming a fixed slot.
+ std::vector<uintptr_t> windows(count);if(!read(table,windows.data(),windows.size()*sizeof(uintptr_t)))return {};
+ uintptr_t window=0;size_t windowIndex=0;
+ for(size_t i=0;i<windows.size();i++){uint32_t flags=0;auto candidate=windows[i];if(candidate>=0x10000&&pointer(candidate)==base+0x3487740&&read(candidate+0x14,&flags,4)&&(flags&0x10)){window=candidate;windowIndex=i;break;}}
+ if(!window)return {};
+ auto players=pointer(base+0x500ECA0);if(!players||pointer(players)!=base+0x33FE5B0)return {};
+ auto avatar=pointer(players+0x58);auto out=InspectPlayerOutfit(avatar,read);if(!out.ready)return {};
+ uint32_t finalFlags=0,finalCount=0,finalCapacity=0;auto finalManager=pointer(base+0x50139A0);
+ if(finalManager!=manager||(manager&&pointer(manager+0x50))||pointer(base+0x51C4640)!=gui||pointer(gui+0x278)!=table||!read(gui+0x268,&finalCount,4)||!read(gui+0x26C,&finalCapacity,4)||finalCount!=count||finalCapacity!=capacity||pointer(table+windowIndex*8)!=window||pointer(window)!=base+0x3487740||!read(window+0x14,&finalFlags,sizeof(finalFlags))||!(finalFlags&0x10)||pointer(base+0x500ECA0)!=players||pointer(players+0x58)!=avatar)return {};
+ out.savePreview=true;return out;
 }
+OutfitSnapshot ReadPlayerOutfit(){return InspectSceneOutfit(reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr)),ReadBytes);}
 bool ReadRuntimeModel(uintptr_t resource,const std::string& path,Model& model){
  char resourcePath[256]{};if(!ReadBytes(resource+0xC,resourcePath,255)||!memchr(resourcePath,0,255)||Normalize(resourcePath)!=Normalize(path))return false;
  uintptr_t meshes=0,names=0;uint32_t count=0,materials=0;

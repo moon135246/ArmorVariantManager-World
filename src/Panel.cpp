@@ -271,16 +271,16 @@ void SettingsPanel(){
 void DrawPanel(){
  auto& s=app::Get();std::lock_guard lock(s.mutex);if(!s.loaded)return;
  std::set<std::string> scopes,active;DWORD now=GetTickCount();for(auto& m:s.models)if(IsCurrentModel(m.relativePath)){scopes.insert(m.equip);if(s.trackingPlayer||s.lastSeen.count(m.relativePath)&&(DWORD)(now-s.lastSeen[m.relativePath])<1800)active.insert(m.equip);}
- std::string identity=outfit;if(s.trackingPlayer){identity=std::to_string(s.outfit.entity);for(size_t i=0;i<5;i++)identity+=s.outfit.paths[i]+std::to_string(s.outfit.resources[i]);}
+ std::string identity=outfit;if(s.trackingPlayer){identity=std::to_string(s.outfit.entity)+(s.outfit.savePreview?"/save":"/play");for(size_t i=0;i<5;i++)identity+=s.outfit.paths[i]+std::to_string(s.outfit.resources[i]);}
  if(displayedOutfit!=identity){displayedOutfit=identity;creating=false;staged.clear();editingMembers=0;openMeshNote=false;confirmGroup=confirmPreset=renameGroup=0;reorderDrag.cancelled=true;if(ImGui::GetCurrentContext()->OpenPopupStack.Size)ImGui::ClosePopupToLevel(0,true);if(s.trackingPlayer)NativeInputClose();}
  if(s.trackingPlayer&&(!s.outfit.ready||s.outfitChanging||!s.storageReady))scopes.clear();
  if(outfit.empty()||(!active.empty()&&!active.count(outfit))){if(!active.empty())outfit=*active.begin();else if(!scopes.empty())outfit=*scopes.begin();}
- if(scopes.empty()||outfit.empty()){if(ImGui::Begin("差分管理器 · 世界版 1.1.7###WorldDiffInternal")){ImGui::TextUnformatted(s.storageReady?"正在等待主角外观部位稳定加载…":s.notice.c_str());if(Button("关闭面板"))SetVisible(false);}ImGui::End();return;}
+ if(scopes.empty()||outfit.empty()){if(ImGui::Begin("差分管理器 · 世界版 1.1.8###WorldDiffInternal")){ImGui::TextUnformatted(s.storageReady?"正在等待主角外观部位稳定加载…":s.notice.c_str());if(Button("关闭面板"))SetVisible(false);}ImGui::End();return;}
  if(!scopes.count(outfit))outfit=*scopes.begin();
  if(!Find(groupId)||Find(groupId)->scope!=outfit){groupId=Main(outfit).id;creating=false;staged.clear();}
  auto& io=ImGui::GetIO();float scale=s.data.scale;ImGui::SetNextWindowSize(ImVec2(std::min(io.DisplaySize.x-S(60),S(1460)),std::min(io.DisplaySize.y-S(80),S(850))),ImGuiCond_FirstUseEver);ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x*.5f,io.DisplaySize.y*.5f),ImGuiCond_FirstUseEver,ImVec2(.5f,.5f));ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(S(1050),io.DisplaySize.x-30),std::min(S(620),io.DisplaySize.y-30)),ImVec2(io.DisplaySize.x,io.DisplaySize.y));
  ImGui::PushFont(nullptr,22*scale);bool open=true;ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(S(18),S(14)));
- if(ImGui::Begin("差分管理器 · 世界版 1.1.7###WorldDiffInternal",&open,ImGuiWindowFlags_NoCollapse)){
+ if(ImGui::Begin("差分管理器 · 世界版 1.1.8###WorldDiffInternal",&open,ImGuiWindowFlags_NoCollapse)){
   if(ImGui::BeginTable("装备与控制",2,ImGuiTableFlags_SizingStretchProp|ImGuiTableFlags_NoPadOuterX)){
   float controlsWidth=ImGui::GetFrameHeight()+ImGui::GetStyle().ItemInnerSpacing.x+ImGui::CalcTextSize("启用").x+ImGui::GetStyle().ItemSpacing.x+ImGui::CalcTextSize("暂停并恢复").x+ImGui::GetStyle().FramePadding.x*2;
   ImGui::TableSetupColumn("装备状态",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("控制",ImGuiTableColumnFlags_WidthFixed,controlsWidth);ImGui::TableNextColumn();
@@ -289,7 +289,7 @@ void DrawPanel(){
   float comboWidth=std::min(std::max(S(140),ImGui::GetContentRegionAvail().x-statusWidth),std::max(S(225),ImGui::CalcTextSize(equipment.c_str()).x+ImGui::GetFrameHeight()+ImGui::GetStyle().FramePadding.x*2));
   if(scopes.size()==1){ImGui::TextUnformatted(equipment.c_str());EquipmentTip(outfit);}
   else{ImGui::SetNextItemWidth(comboWidth);if(ImGui::BeginCombo("当前混搭部位",equipment.c_str())){for(auto& scope:scopes){auto label=EquipmentLabel(scope);if(ImGui::Selectable(label.c_str(),outfit==scope)){outfit=scope;groupId=Main(outfit).id;creating=false;staged.clear();}EquipmentTip(scope);}ImGui::EndCombo();}}
-  ImGui::SameLine();ImGui::TextColored(muted,"%s",s.data.enabled?"显隐控制运行中":"已暂停 · 全部跟随游戏");
+  ImGui::SameLine();ImGui::TextColored(muted,"%s%s",s.outfit.savePreview?"存档预览 · ":"",s.data.enabled?"显隐控制运行中":"已暂停 · 全部跟随游戏");
   ImGui::TableNextColumn();if(ImGui::Checkbox("启用",&s.data.enabled))Changed();ImGui::SameLine();if(Button("暂停并恢复"))RestoreAll();ImGui::EndTable();
   }ImGui::Separator();
   bool requestFind=false,requestExport=false,headerTable=!s.data.hideDragHint&&ImGui::BeginTable("查找与提示",2,ImGuiTableFlags_SizingStretchProp|ImGuiTableFlags_NoPadOuterX);if(headerTable){ImGui::TableSetupColumn("查找",ImGuiTableColumnFlags_WidthFixed,S(550));ImGui::TableSetupColumn("提示",ImGuiTableColumnFlags_WidthStretch);ImGui::TableNextColumn();}

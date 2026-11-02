@@ -37,9 +37,11 @@ struct OutfitSnapshot {
  std::array<uintptr_t,5> contexts{},resources{};
  std::array<std::string,5> paths{}; // helm, body, arm, waist, legs
  bool ready=false;
+ bool savePreview=false; // Current save-selection avatar; never serialized.
 };
 using MemoryReader=bool(*)(uintptr_t,void*,size_t);
 OutfitSnapshot InspectPlayerOutfit(uintptr_t entity,MemoryReader);
+OutfitSnapshot InspectSceneOutfit(uintptr_t moduleBase,MemoryReader);
 OutfitSnapshot ReadPlayerOutfit();
 bool ReadRuntimeModel(uintptr_t resource,const std::string& path,Model&);
 struct State {

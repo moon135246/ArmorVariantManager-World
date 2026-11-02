@@ -89,10 +89,10 @@ bool MigrateStorage(){
 void FollowPlayerOutfit(const OutfitSnapshot& snapshot){
  auto& s=Get();for(auto& ctx:localModelContexts)ctx.store(0,std::memory_order_relaxed);
  if(!snapshot.ready){s.outfit.ready=false;s.pendingOutfit={};s.outfitSince=0;s.outfitChanging=true;return;}
- bool same=s.outfit.ready&&s.outfit.entity==snapshot.entity&&s.outfit.paths==snapshot.paths&&s.outfit.resources==snapshot.resources&&s.outfit.contexts==snapshot.contexts;
+ bool same=s.outfit.ready&&s.outfit.savePreview==snapshot.savePreview&&s.outfit.entity==snapshot.entity&&s.outfit.paths==snapshot.paths&&s.outfit.resources==snapshot.resources&&s.outfit.contexts==snapshot.contexts;
  if(same){s.outfitChanging=false;for(size_t i=0;i<5;i++)localModelContexts[i].store(snapshot.contexts[i],std::memory_order_relaxed);return;}
  s.outfitChanging=true;
- if(s.pendingOutfit.entity!=snapshot.entity||s.pendingOutfit.paths!=snapshot.paths||s.pendingOutfit.resources!=snapshot.resources||s.pendingOutfit.contexts!=snapshot.contexts){s.pendingOutfit=snapshot;s.outfitSince=GetTickCount();return;}
+ if(s.pendingOutfit.savePreview!=snapshot.savePreview||s.pendingOutfit.entity!=snapshot.entity||s.pendingOutfit.paths!=snapshot.paths||s.pendingOutfit.resources!=snapshot.resources||s.pendingOutfit.contexts!=snapshot.contexts){s.pendingOutfit=snapshot;s.outfitSince=GetTickCount();return;}
  if((DWORD)(GetTickCount()-s.outfitSince)<300)return;
  // Flush the old model before replacing its metadata or allowing new edits.
  bool saved=SaveEquipmentProfiles();if(!saved){s.outfit.ready=false;return;}std::vector<Model> models;
