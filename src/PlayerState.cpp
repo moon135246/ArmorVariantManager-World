@@ -24,6 +24,7 @@ PlayerSnapshot ReadPlayerSnapshot(){
  if(weapon)p.weapon=Integer(weapon+0x2E8,0,13);
  auto state=Pointer(p.entity+0x76B0);
  if(state){if(p.weapon==3)p.spirit=Integer(state+0x2370,0,3);if(p.weapon==2){p.demon=Flag(state+0x2368);p.archdemon=Flag(state+0x2369);}}
+ if(state&&p.weapon==10){bool read=Read(state+0x2368,p.extractTimers[0])&&Read(state+0x236C,p.extractTimers[1])&&Read(state+0x2370,p.extractTimers[2]);if(read)p.extracts=ExtractMask(p.extractTimers);}
  auto action=Pointer(p.entity+0x468);if(action)p.lmt=Integer(action+0xE9C4,0,0x7fffffff);
  auto vitality=Pointer(p.entity+0x7630);float health=-1,max=-1;
  if(vitality&&Read(vitality+0x64,health)&&Read(vitality+0x60,max)&&std::isfinite(health)&&std::isfinite(max)&&health>=0&&max>0&&max<100000){

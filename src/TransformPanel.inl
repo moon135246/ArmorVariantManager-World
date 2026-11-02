@@ -1,109 +1,104 @@
-// Included inside Panel.cpp's UI namespace; all game-state access remains in
-// the worker, and this editor only changes saved rules after explicit Save.
-TransformRule transformDraft;
-char transformName[192]{};
-std::string transformError;
-uint64_t confirmTransform=0;
-void WeaponChoice(const char* label,int& value,bool any){
- ImGui::SetNextItemWidth(-1);
- if(ImGui::BeginCombo(label,value<0?"不限武器":WeaponName(value))){
-  if(any&&ImGui::Selectable("不限武器",value==-1))value=-1;
-  for(int i=0;i<14;i++)if(ImGui::Selectable(WeaponName(i),value==i))value=i;
-  ImGui::EndCombo();
- }
+// State-first configuration: every built-in state exists in the UI before the
+// user assigns any preset. Only actual assignments are materialized as rules.
+TransformRule* TransformById(uint64_t id){for(auto& r:Get().data.transforms)if(r.id==id)return &r;return nullptr;}
+void TransformChanged(const char* message="变身设置已自动保存"){ResetTransforms();Changed(message);}
+uint64_t FindTransformSlot(const TransformSlot& slot){for(auto& r:Get().data.transforms)if(r.scope==outfit&&SameCondition(r.condition,slot.condition))return r.id;return 0;}
+uint64_t CreateTransformSlot(const TransformSlot& slot){
+ auto& d=Get().data;TransformRule r;r.id=d.nextId++;r.scope=outfit;r.name=slot.name;r.condition=slot.condition;d.transforms.push_back(r);return r.id;
 }
-void EditCondition(Condition& c){
- ImGui::TextUnformatted("触发条件");ImGui::SetNextItemWidth(-1);
- if(ImGui::BeginCombo("##条件类型",ConditionName(c.kind))){
-  for(int i=0;i<(int)ConditionKind::Count;i++)if(i!=(int)ConditionKind::InsectGlaive&&ImGui::Selectable(ConditionName((ConditionKind)i),c.kind==(ConditionKind)i)){
-   c={};c.kind=(ConditionKind)i;if(c.kind==ConditionKind::Enhanced)c.state=1;if(c.kind==ConditionKind::WeaponType)c.weapon=0;
-  }ImGui::EndCombo();
- }
- ImGui::SetNextItemWidth(-1);
- if(c.kind==ConditionKind::WeaponState){const char* n[]={"收刀","拔刀"};ImGui::Combo("##收拔状态",&c.state,n,2);}
- else if(c.kind==ConditionKind::LongSword){const char* n[]={"无刃","白刃","黄刃","红刃","白刃及以上","黄刃及以上"};ImGui::Combo("##练气等级",&c.state,n,6);}
- else if(c.kind==ConditionKind::DualBlades){const char* n[]={"普通（未鬼人化、未鬼人强化）","鬼人化","鬼人强化（可与鬼人化重叠）"};ImGui::Combo("##双刀状态",&c.state,n,3);}
- else if(c.kind==ConditionKind::InsectGlaive){const char* n[]={"无灯 / 档位 0","一灯 / 档位 1","二灯 / 档位 2","三灯 / 档位 3"};ImGui::Combo("##灯级",&c.state,n,4);ImGui::TextWrapped("沿用参考实现的灯级读数；不同灯色组合请在游戏内验证。");}
- else if(c.kind==ConditionKind::Enhanced){const char* n[]={"未强化","强化中"};ImGui::Combo("##强化状态",&c.state,n,2);ImGui::TextWrapped("当前支持太刀红刃与双刀鬼人强化。");}
- else if(c.kind==ConditionKind::Health){
-  const char* ranges[]={"自定义范围","血量归零","0% < 血量 ≤ 25%","25% < 血量 ≤ 50%","50% < 血量 ≤ 75%","75% < 血量 ≤ 100%","血量 ≤ 25%（触发后保持）","血量 ≤ 50%（触发后保持）","血量 ≤ 75%（触发后保持）"};int range=0;
-  if(ImGui::Combo("快速选择",&range,ranges,9)&&range){c.healthMin=0;c.healthMax=0;c.lowerOpen=false;c.latch=range>=6;if(range>=2&&range<=5){c.healthMin=(float)((range-2)*25);c.healthMax=c.healthMin+25;c.lowerOpen=true;}else if(range>=6){c.healthMax=(float)((range-5)*25);c.lowerOpen=true;}}
-  ImGui::SetNextItemWidth(S(140));ImGui::InputFloat("下限 (%)",&c.healthMin,1,5,"%.1f");ImGui::SetNextItemWidth(S(140));ImGui::InputFloat("上限 (%)",&c.healthMax,1,5,"%.1f");
-  ImGui::Checkbox("不包含下限",&c.lowerOpen);ImGui::Checkbox("触发后保持",&c.latch);
-  if(c.latch)ImGui::TextWrapped("正血量时触发后保持；血量归零、切图、换角色、换武器、关闭变身或重载时复位。");
- }
- else if(c.kind==ConditionKind::WeaponType){WeaponChoice("##武器种类",c.weapon,false);}
- else if(c.kind==ConditionKind::ActionLmt){ImGui::SetNextItemWidth(S(150));ImGui::InputInt("动作下限",&c.minimum);ImGui::SetNextItemWidth(S(150));ImGui::InputInt("动作上限",&c.maximum);}
- if(c.kind==ConditionKind::Health||c.kind==ConditionKind::WeaponState||c.kind==ConditionKind::ActionLmt){ImGui::TextUnformatted("限定武器");WeaponChoice("##限定武器",c.weapon,true);}
+uint64_t StoreTransformTarget(uint64_t id,const TransformSlot& slot,size_t index,const TransformTarget& target){
+ if(!id)id=CreateTransformSlot(slot);auto* r=TransformById(id);if(!r)return id;
+ if(index<r->targets.size())r->targets[index]=target;else if(r->targets.size()<64)r->targets.push_back(target);
+ TransformChanged();return id;
 }
-void AddTransformTarget(){
- auto& d=Get().data;
- auto available=[&](const Group& g){return g.scope==transformDraft.scope&&!g.presets.empty()&&std::none_of(transformDraft.targets.begin(),transformDraft.targets.end(),[&](auto& t){return t.group==g.id;});};
- if(auto* g=Find(groupId);g&&available(*g)){transformDraft.targets.push_back({g->id,g->selected?g->selected:g->presets.front().id});return;}
- for(auto& g:d.groups)if(available(g)){transformDraft.targets.push_back({g.id,g.presets.front().id});return;}
-}
-void StartTransformEditor(const TransformRule* rule=nullptr){
- transformDraft=rule?*rule:TransformRule{};transformError.clear();
- if(!rule){transformDraft.scope=outfit;transformDraft.name="新变身规则";AddTransformTarget();}
- strcpy_s(transformName,transformDraft.name.c_str());ImGui::OpenPopup("编辑变身规则");
-}
-void TransformEditor(){
- auto& s=Get();auto display=ImGui::GetIO().DisplaySize;
- ImGui::SetNextWindowSize(ImVec2(std::min(S(660),display.x-S(50)),std::min(S(700),display.y-S(60))),ImGuiCond_Appearing);
- if(!ImGui::BeginPopupModal("编辑变身规则",nullptr,ImGuiWindowFlags_NoCollapse))return;
- ImGui::BeginChild("变身编辑内容",ImVec2(0,-S(65)));
- ImGui::TextUnformatted("规则名称");ImGui::SetNextItemWidth(-1);TextField("##变身名称","规则名称",transformName,sizeof(transformName));
- ImGui::SetNextItemWidth(S(130));ImGui::InputInt("优先级（1 最高，99 最低）",&transformDraft.priority);ImGui::Checkbox("启用此规则",&transformDraft.enabled);
- ImGui::Separator();EditCondition(transformDraft.condition);ImGui::Separator();ImGui::TextUnformatted("命中条件时切换到");
- int remove=-1;
- if(ImGui::BeginTable("变身目标",3,ImGuiTableFlags_SizingStretchProp)){
-  ImGui::TableSetupColumn("分组",ImGuiTableColumnFlags_WidthStretch,1);ImGui::TableSetupColumn("预设",ImGuiTableColumnFlags_WidthStretch,1.3f);ImGui::TableSetupColumn("删除",ImGuiTableColumnFlags_WidthFixed,S(34));ImGui::TableHeadersRow();
-  for(size_t i=0;i<transformDraft.targets.size();i++){
-   auto& t=transformDraft.targets[i];ImGui::PushID((int)i);ImGui::TableNextRow();ImGui::TableNextColumn();auto* g=Find(t.group);ImGui::SetNextItemWidth(-1);
-   if(ImGui::BeginCombo("##目标分组",g?g->name.c_str():"选择分组")){for(auto& item:s.data.groups)if(item.scope==transformDraft.scope&&!item.presets.empty()&&ImGui::Selectable(item.name.c_str(),item.id==t.group)){t.group=item.id;t.preset=item.presets.front().id;}ImGui::EndCombo();}
-   g=Find(t.group);const char* preset="选择预设";if(g)for(auto& p:g->presets)if(p.id==t.preset)preset=p.name.c_str();
-   ImGui::TableNextColumn();ImGui::SetNextItemWidth(-1);if(ImGui::BeginCombo("##目标预设",preset)){if(g)for(auto& p:g->presets)if(ImGui::Selectable(p.name.c_str(),p.id==t.preset))t.preset=p.id;ImGui::EndCombo();}
-   ImGui::TableNextColumn();if(ImGui::SmallButton("x"))remove=(int)i;ImGui::PopID();
-  }ImGui::EndTable();
- }
- if(remove>=0)transformDraft.targets.erase(transformDraft.targets.begin()+remove);
- ImGui::BeginDisabled(transformDraft.targets.size()>=64);if(Button("添加目标分组"))AddTransformTarget();ImGui::EndDisabled();
- if(transformDraft.targets.empty())ImGui::TextWrapped("请先在左侧保存分组预设，再添加变身目标。");
- ImGui::TextWrapped("未命中条件时恢复基础预设。同一分组按优先级选择一条规则；同优先级按列表顺序。全局分组仍叠加隐藏。");
- if(!transformError.empty())ImGui::TextColored(danger,"%s",transformError.c_str());ImGui::EndChild();ImGui::Separator();
- if(Button("保存规则")){
-  transformDraft.name=transformName;transformError.clear();
-  if(ValidateTransform(transformDraft,s.data,&transformError)){
-   if(!transformDraft.id){transformDraft.id=s.data.nextId++;s.data.transforms.push_back(transformDraft);}else{auto it=std::find_if(s.data.transforms.begin(),s.data.transforms.end(),[&](auto& r){return r.id==transformDraft.id;});if(it!=s.data.transforms.end())*it=transformDraft;else transformError="规则已被重新载入，请重新打开编辑器";}
-   if(transformError.empty()){ResetTransforms();Changed("变身规则已保存，随预设文件一起分享");ImGui::CloseCurrentPopup();}
+void DrawTransformTarget(uint64_t& id,const TransformSlot& slot,size_t index,TransformTarget target,bool placeholder){
+ auto& d=Get().data;ImGui::PushID((int)index);
+ if(ImGui::BeginTable("目标",3,ImGuiTableFlags_SizingStretchProp)){
+  ImGui::TableSetupColumn("分组",ImGuiTableColumnFlags_WidthStretch,1);ImGui::TableSetupColumn("预设",ImGuiTableColumnFlags_WidthStretch,1.3f);ImGui::TableSetupColumn("移除",ImGuiTableColumnFlags_WidthFixed,S(25));ImGui::TableNextRow();ImGui::TableNextColumn();
+  auto* group=Find(target.group);ImGui::SetNextItemWidth(-1);
+  if(ImGui::BeginCombo("##选择分组",group?group->name.c_str():"选择分组")){
+   for(auto& g:d.groups)if(g.scope==outfit&&!g.presets.empty()){
+    auto* rule=TransformById(id);bool duplicate=false;if(rule)for(size_t j=0;j<rule->targets.size();j++)if(j!=index&&rule->targets[j].group==g.id)duplicate=true;
+    ImGui::BeginDisabled(duplicate);auto label=(g.global?"[全局] ":"")+g.name;
+    if(ImGui::Selectable(label.c_str(),target.group==g.id)){target={g.id,0};id=StoreTransformTarget(id,slot,index,target);}ImGui::EndDisabled();
+   }ImGui::EndCombo();
   }
- }ImGui::SameLine();if(Button("取消##变身编辑"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
+  ImGui::TableNextColumn();group=Find(target.group);const char* preset="不切换";if(group)for(auto& p:group->presets)if(p.id==target.preset)preset=p.name.c_str();ImGui::SetNextItemWidth(-1);ImGui::BeginDisabled(!group);
+  if(ImGui::BeginCombo("##选择预设",preset)){
+   if(ImGui::Selectable("不切换",!target.preset)){target.preset=0;if(!placeholder)id=StoreTransformTarget(id,slot,index,target);}
+   if(group)for(auto& p:group->presets)if(ImGui::Selectable(p.name.c_str(),p.id==target.preset)){target.preset=p.id;id=StoreTransformTarget(id,slot,index,target);}ImGui::EndCombo();
+  }ImGui::EndDisabled();ImGui::TableNextColumn();
+  if(!placeholder&&ImGui::SmallButton("x")){if(auto* rule=TransformById(id);rule&&index<rule->targets.size()){rule->targets.erase(rule->targets.begin()+index);TransformChanged();}}
+  ImGui::EndTable();
+ }ImGui::PopID();
+}
+void DrawTransformBindings(uint64_t& id,const TransformSlot& slot){
+ auto* r=TransformById(id);bool enabled=r?r->enabled:true;
+ if(r&&!r->enabled){if(ImGui::Checkbox("启用此状态",&enabled)){r->enabled=enabled;TransformChanged();}}
+ std::vector<TransformTarget> targets=r?r->targets:std::vector<TransformTarget>{};
+ if(targets.empty()){
+  auto* current=Find(groupId);if(!current||current->scope!=outfit||current->presets.empty()){current=nullptr;for(auto& g:Get().data.groups)if(g.scope==outfit&&!g.presets.empty()){current=&g;break;}}
+  DrawTransformTarget(id,slot,0,{current?current->id:0,0},true);
+ }else{
+  for(size_t i=0;i<targets.size();i++)DrawTransformTarget(id,slot,i,targets[i],false);
+  if(targets.size()<64&&Button("添加目标分组")){
+   for(auto& g:Get().data.groups)if(g.scope==outfit&&!g.presets.empty()&&std::none_of(targets.begin(),targets.end(),[&](auto& t){return t.group==g.id;})){StoreTransformTarget(id,slot,targets.size(),{g.id,0});break;}
+  }
+ }
+}
+void DrawTransformState(const TransformSlot& slot,uint64_t id,int key,bool editableHealth=false){
+ ImGui::PushID(key);auto& s=Get();bool current=Matches(slot.condition,s.transform.player);auto* rule=TransformById(id);bool applied=rule&&s.transform.activeRules.count(id);auto label=slot.name+(applied?"  [生效]":current?"  [当前]":"");
+ if(current)ImGui::PushStyleColor(ImGuiCol_Header,ImVec4(.1f,.36f,.43f,1));
+ bool expanded=ImGui::CollapsingHeader(label.c_str(),ImGuiTreeNodeFlags_DefaultOpen);if(current)ImGui::PopStyleColor();
+ if(expanded){
+  if(editableHealth&&rule){
+   auto c=rule->condition;bool change=false;ImGui::SetNextItemWidth(S(115));change|=ImGui::InputFloat("下限 %",&c.healthMin,1,5,"%.0f");ImGui::SetNextItemWidth(S(115));change|=ImGui::InputFloat("上限 %",&c.healthMax,1,5,"%.0f");change|=ImGui::Checkbox("不包含下限",&c.lowerOpen);change|=ImGui::Checkbox("触发后保持",&c.latch);
+   if(change&&ValidCondition(c)){rule->condition=c;TransformChanged();}
+  }
+  DrawTransformBindings(id,slot);ImGui::Spacing();
+ }ImGui::PopID();
+}
+std::string CurrentTransformState(int category){
+ auto& p=Get().transform.player;if(!p.entity)return "等待猎人进入场景";
+ if(category==0)return p.lmt<0?"读取中":p.lmt<0x8000?"收刀":"拔刀";
+ if(category==1){if(p.weapon!=3)return "当前未装备太刀";const char* n[]={"无刃","白刃","黄刃","红刃"};return p.spirit>=0&&p.spirit<=3?n[p.spirit]:"读取中";}
+ if(category==2){if(p.weapon!=2)return "当前未装备双刀";if(p.demon==1)return "鬼人化";if(p.demon==0&&p.archdemon==1)return "鬼人强化";if(p.demon==0&&p.archdemon==0)return "普通";return "读取中";}
+ if(category==3){if(p.weapon!=10)return "当前未装备操虫棍";const char* n[]={"无精华","红灯","白灯","红＋白","橙灯","红＋橙","白＋橙","三灯齐全"};return p.extracts>=0&&p.extracts<8?n[p.extracts]:"读取中";}
+ if(p.healthPercent<0)return "读取中";char value[96];sprintf_s(value,"%.0f / %.0f（%.1f%%）",p.health,p.maxHealth,p.healthPercent);return value;
+}
+void DrawTransformCategory(int category){
+ auto slots=TransformSlots(category);auto title=std::string(TransformCategoryName(category))+" · "+CurrentTransformState(category);ImGui::TextWrapped("%s",title.c_str());
+ if(category==2)ImGui::TextColored(muted,"鬼人化时使用鬼人化项；退出后按强化状态切换。");
+ if(category==3)ImGui::TextColored(muted,"按实际精华组合匹配，三灯齐全时使用三灯预设。");
+ if(category==4)ImGui::TextWrapped("区间包含上限；保持类触发后，回血仍保持，力尽或切图复位。");
+ std::set<uint64_t> shown;int key=0;
+ for(auto& slot:slots){auto id=FindTransformSlot(slot);if(id)shown.insert(id);DrawTransformState(slot,id,key++);}
+ std::vector<uint64_t> extra;for(auto& r:Get().data.transforms)if(r.scope==outfit&&TransformCategory(r.condition.kind)==category&&!shown.count(r.id))extra.push_back(r.id);
+ if(!extra.empty()){ImGui::Separator();ImGui::TextColored(muted,"其他已保存的状态");}
+ for(auto id:extra)if(auto* rule=TransformById(id)){TransformSlot slot{DescribeCondition(rule->condition),rule->condition};DrawTransformState(slot,id,(int)id+100,category==4);}
+ if(category==4&&Button("添加血量节点")){TransformSlot slot{"自定义血量",{}};slot.condition.kind=ConditionKind::Health;CreateTransformSlot(slot);TransformChanged();}
 }
 void TransformPanel(){
- auto& s=Get();if(ImGui::Checkbox("启用变身",&s.data.transformsEnabled)){ResetTransforms();Changed(s.data.transformsEnabled?"变身已启用":"变身已暂停，恢复基础预设");}
+ auto& s=Get();auto& mode=EnsureTransformMode(s.data,outfit);bool enabled=mode.enabled&&s.data.transformsEnabled;
+ if(ImGui::Checkbox("启用变身",&enabled)){mode.enabled=enabled;if(enabled)s.data.transformsEnabled=true;TransformChanged(enabled?"当前装备的变身已启用":"当前装备的变身已暂停");}
  ImGui::SameLine();if(Button("复位保持状态")){ResetTransforms();s.notice="保持状态已复位；条件仍满足时会再次触发";}
- auto& p=s.transform.player;
- if(p.entity){
-  if(p.weapon>=0&&p.lmt>=0)ImGui::TextColored(accent,"当前：%s · %s",WeaponName(p.weapon),p.lmt<0x8000?"收刀":"拔刀");else ImGui::TextColored(muted,"正在读取猎人状态…");
-  if(p.healthPercent>=0)ImGui::TextColored(muted,"血量：%.0f / %.0f（%.1f%%）",p.health,p.maxHealth,p.healthPercent);
-  if(p.weapon==3&&p.spirit>=0)ImGui::TextColored(muted,"太刀练气：%d",p.spirit);
-  if(p.weapon==2)ImGui::TextColored(muted,"鬼人化：%s · 鬼人强化：%s",p.demon==1?"开启":p.demon==0?"关闭":"未知",p.archdemon==1?"开启":p.archdemon==0?"关闭":"未知");
-  if(p.weapon==10&&p.spirit>=0)ImGui::TextColored(muted,"操虫棍灯级：%d",p.spirit);
- }else ImGui::TextWrapped("等待本地猎人进入场景；读取不到状态时使用基础预设。");
- ImGui::TextWrapped("条件触发时临时切换分组预设，退出后恢复基础状态。数字越小优先级越高；默认预设不会被变身改写。");
- if(Button("新建变身规则"))StartTransformEditor();ImGui::Separator();bool any=false;const TransformRule* editRequested=nullptr;
- for(auto& r:s.data.transforms){if(r.scope!=outfit)continue;any=true;ImGui::PushID((int)r.id);
-  if(ImGui::Checkbox("##启用规则",&r.enabled)){ResetTransforms();Changed();}ImGui::SameLine();ImGui::TextUnformatted(r.name.c_str());if(s.transform.activeRules.count(r.id)){ImGui::SameLine();ImGui::TextColored(accent,"[生效]");}
-  ImGui::TextColored(muted,"优先级 %d · %s",r.priority,DescribeCondition(r.condition).c_str());
-  for(auto& t:r.targets){auto* g=Find(t.group);if(!g)continue;for(auto& preset:g->presets)if(preset.id==t.preset)ImGui::TextWrapped("%s → %s",g->name.c_str(),preset.name.c_str());}
-  if(Button("编辑"))editRequested=&r;ImGui::SameLine();if(Button("删除")){confirmTransform=r.id;}
-  ImGui::Separator();ImGui::PopID();
+ ImGui::TextColored(muted,"各状态已预先设定，直接选择分组和预设即可。");
+ if(ImGui::RadioButton("选择模式",!mode.parallel)){mode.parallel=false;TransformChanged();}ImGui::SameLine();if(ImGui::RadioButton("并行模式",mode.parallel)){mode.parallel=true;TransformChanged();}
+ if(!mode.parallel){
+  ImGui::SetNextItemWidth(-1);if(ImGui::BeginCombo("##变身条件类型",TransformCategoryName(mode.selected))){for(int i=0;i<5;i++)if(ImGui::Selectable(TransformCategoryName(i),mode.selected==i)){mode.selected=i;TransformChanged();}ImGui::EndCombo();}
+ }else{
+  ImGui::TextColored(muted,"勾选同时使用的条件；优先级数字越小越优先。");
+  if(ImGui::BeginTable("并行条件",2,ImGuiTableFlags_SizingStretchProp)){
+   ImGui::TableSetupColumn("条件",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("优先级",ImGuiTableColumnFlags_WidthFixed,S(105));
+   for(int i=0;i<5;i++){ImGui::PushID(i);ImGui::TableNextRow();ImGui::TableNextColumn();if(ImGui::Checkbox(TransformCategoryName(i),&mode.categories[i]))TransformChanged();ImGui::TableNextColumn();int priority=mode.priorities[i];ImGui::SetNextItemWidth(-1);if(ImGui::InputInt("##优先级",&priority)&&priority>=1&&priority<=99){mode.priorities[i]=priority;TransformChanged();}ImGui::PopID();}ImGui::EndTable();
+  }
  }
- if(editRequested)StartTransformEditor(editRequested);
- if(!any)ImGui::TextColored(muted,"尚无变身规则\n先保存所需预设，再选择条件和目标分组。");
- if(confirmTransform){ImGui::OpenPopup("删除变身规则？");}
- if(ImGui::BeginPopupModal("删除变身规则？",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
-  ImGui::TextUnformatted("删除此变身规则？已有分组与预设会保留。");if(Button("删除规则")){std::erase_if(s.data.transforms,[](auto& r){return r.id==confirmTransform;});ResetTransforms();Changed("变身规则已删除");confirmTransform=0;ImGui::CloseCurrentPopup();}ImGui::SameLine();if(Button("取消##删除变身")){confirmTransform=0;ImGui::CloseCurrentPopup();}ImGui::EndPopup();
+ ImGui::Separator();ImGui::BeginChild("变身状态列表",ImVec2(0,0));
+ if(!mode.parallel)DrawTransformCategory(mode.selected);else{bool any=false;for(int i=0;i<5;i++)if(mode.categories[i]){any=true;ImGui::PushID(i);DrawTransformCategory(i);ImGui::Separator();ImGui::PopID();}if(!any)ImGui::TextWrapped("先勾选要同时使用的条件。");}
+ bool hasLegacy=std::any_of(s.data.transforms.begin(),s.data.transforms.end(),[](auto& r){return r.scope==outfit&&TransformCategory(r.condition.kind)<0;});
+ if(hasLegacy&&ImGui::CollapsingHeader("以前版本的其他条件")){
+  if(ImGui::Checkbox("启用其他条件",&mode.legacy))TransformChanged();ImGui::TextWrapped("已保留以前的配置。需要时可继续使用这些分组与预设绑定。");std::vector<uint64_t> ids;for(auto& r:s.data.transforms)if(r.scope==outfit&&TransformCategory(r.condition.kind)<0)ids.push_back(r.id);
+  for(auto id:ids)if(auto* r=TransformById(id)){TransformSlot slot{DescribeCondition(r->condition),r->condition};DrawTransformState(slot,id,(int)id+10000);}
  }
- TransformEditor();
+ ImGui::TextWrapped("不切换 = 保持基础状态；条件退出后恢复基础预设，默认项不会被变身改写。");ImGui::EndChild();
 }

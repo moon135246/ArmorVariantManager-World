@@ -26,6 +26,7 @@ struct Document {
  uint64_t nextId=1;std::vector<Group> groups;
  std::map<std::string,std::string> bindings;
  std::vector<TransformRule> transforms;
+ std::map<std::string,TransformMode> transformModes;
 };
 struct State {
  std::recursive_mutex mutex;Document data;std::vector<Model> models;

@@ -1,5 +1,14 @@
 # Third-party notices
 
+## Extract timer layout verification
+
+The three MHW extract timer offsets were independently checked against HunterPie's
+`MHWInsectGlaiveStructure` definition:
+https://github.com/HunterPie/HunterPie/blob/main/HunterPie.Integrations/Datasources/MonsterHunterWorld/Definitions/MHWInsectGlaiveStructure.cs
+
+WorldDiff uses its own guarded reader and exact color-combination evaluator. No
+HunterPie source implementation or binary is included.
+
 This plugin includes Dear ImGui, SafetyHook, and the Zydis/Zycore disassembler distribution used by SafetyHook.
 
 The original license texts are distributed in `licenses/ImGui-LICENSE.txt`, `licenses/LICENSE.SafetyHook`, and `licenses/LICENSE.Zydis`. Source copies are retained under the workspace's `third_party` directory.

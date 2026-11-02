@@ -46,11 +46,12 @@ void Restore(Group& g){g.working={};g.selected=0;Changed("当前分组已恢复�
 void RestoreAll(){auto& s=Get();for(auto& g:s.data.groups){g.working={};g.selected=0;}s.data.enabled=false;ResetTransforms();Changed("已暂停全部控制，游戏显隐已恢复；预设仍然保留");}
 static void WriteRules(std::ostream& f,const Rules& r,uint64_t gid,uint64_t pid){for(auto& t:r.hidden)f<<"RULE "<<gid<<' '<<pid<<" 0 "<<t.mesh<<' '<<std::quoted(t.model)<<' '<<t.value<<'\n';for(auto& t:r.shown)f<<"RULE "<<gid<<' '<<pid<<" 1 "<<t.mesh<<' '<<std::quoted(t.model)<<' '<<t.value<<'\n';}
 void WriteDocument(std::ostream& f,const Document& d){
- f<<"WorldDiffInternal 107\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.nextId<<' '<<d.hideDragHint<<'\n';
+ f<<"WorldDiffInternal 108\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.nextId<<' '<<d.hideDragHint<<'\n';
  f<<"AUTOFIND "<<d.autoFind<<'\n';
  for(const auto& [scope,file]:d.bindings)f<<"BINDING "<<std::quoted(scope)<<' '<<std::quoted(file)<<'\n';
  for(const auto& g:d.groups){f<<"GROUP "<<g.id<<' '<<std::quoted(g.name)<<' '<<std::quoted(g.scope)<<' '<<g.main<<' '<<g.global<<' '<<g.selected<<' '<<g.defaultPreset<<'\n';for(const auto& t:g.members)f<<"MEMBER "<<g.id<<' '<<std::quoted(t.model)<<' '<<t.value<<'\n';WriteRules(f,g.working,g.id,0);for(const auto& p:g.presets){f<<"PRESET "<<g.id<<' '<<p.id<<' '<<std::quoted(p.name)<<'\n';WriteRules(f,p.rules,g.id,p.id);}}
  f<<"TRANSFORMS "<<d.transformsEnabled<<'\n';
+ for(auto& [scope,m]:d.transformModes){f<<"TRMODE "<<std::quoted(scope)<<' '<<m.enabled<<' '<<m.parallel<<' '<<m.selected<<' '<<m.legacy;for(int i=0;i<5;i++)f<<' '<<m.categories[i]<<' '<<m.priorities[i];f<<'\n';}
  for(auto& r:d.transforms){auto& c=r.condition;f<<"TRANSFORM "<<r.id<<' '<<std::quoted(r.name)<<' '<<std::quoted(r.scope)<<' '<<r.enabled<<' '<<r.priority<<' '<<(int)c.kind<<' '<<c.state<<' '<<c.weapon<<' '<<c.minimum<<' '<<c.maximum<<' '<<c.healthMin<<' '<<c.healthMax<<' '<<c.lowerOpen<<' '<<c.latch<<'\n';for(auto& t:r.targets)f<<"TRTARGET "<<r.id<<' '<<t.group<<' '<<t.preset<<'\n';}
 }
 bool Save(){
@@ -62,12 +63,13 @@ bool Save(){
  if(!MoveFileExW(temp.c_str(),s.configPath.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)){s.notice="保存失败：无法替换配置文件";return false;}s.dirty=false;return true;
 }
 bool ReadDocument(std::istream& f,Document& result){
- std::string magic;unsigned version=0;f>>magic>>version;if(magic!="WorldDiffInternal"||(version!=103&&version!=104&&version!=107))return false;
+ std::string magic;unsigned version=0;f>>magic>>version;if(magic!="WorldDiffInternal"||(version!=103&&version!=104&&version!=107&&version!=108))return false;
  Document d;std::string line;std::getline(f,line);bool valid=true;size_t records=0;
  while(std::getline(f,line)&&valid){if(++records>200000){valid=false;break;}std::istringstream in(line);std::string tag;in>>tag;if(tag.empty())continue;
   if(tag=="SET"){in>>d.enabled>>d.autoDefault>>d.autoOpen>>d.menuKey>>d.scale>>d.nextId;if(in&&!in.eof()){in>>std::ws;if(!in.eof())in>>d.hideDragHint;}}
   else if(tag=="AUTOFIND"){in>>d.autoFind;}
   else if(tag=="TRANSFORMS"){in>>d.transformsEnabled;}
+  else if(tag=="TRMODE"){std::string scope;TransformMode m;in>>std::quoted(scope)>>m.enabled>>m.parallel>>m.selected>>m.legacy;for(int i=0;i<5;i++){in>>m.categories[i]>>m.priorities[i];if(m.priorities[i]<1||m.priorities[i]>99)valid=false;}if(scope.empty()||scope.size()>128||m.selected<0||m.selected>=5||d.transformModes.count(scope))valid=false;d.transformModes[scope]=m;}
   else if(tag=="TRANSFORM"){
    TransformRule r;int kind=-1;auto& c=r.condition;in>>r.id>>std::quoted(r.name)>>std::quoted(r.scope)>>r.enabled>>r.priority>>kind>>c.state>>c.weapon>>c.minimum>>c.maximum>>c.healthMin>>c.healthMax>>c.lowerOpen>>c.latch;c.kind=(ConditionKind)kind;
    if(!r.id||d.transforms.size()>=2048||!ValidCondition(c))valid=false;
@@ -90,7 +92,7 @@ bool ReadDocument(std::istream& f,Document& result){
  if(!valid||d.menuKey<0x70||d.menuKey>0x87||d.scale<0.65f||d.scale>1.7f)return false;
  uint64_t highest=0;for(auto& g:d.groups){highest=std::max(highest,g.id);for(auto& p:g.presets)highest=std::max(highest,p.id);if(g.defaultPreset)for(auto& p:g.presets)if(p.id==g.defaultPreset){g.working=p.rules;g.selected=p.id;}}
  for(auto& r:d.transforms){if(!ValidateTransform(r,d))return false;highest=std::max(highest,r.id);}
- if(highest>1000000000||d.nextId>1000000001)return false;d.nextId=std::max(d.nextId,highest+1);result=std::move(d);return true;
+ if(highest>1000000000||d.nextId>1000000001)return false;d.nextId=std::max(d.nextId,highest+1);if(version<108)InferTransformModes(d);result=std::move(d);return true;
 }
 bool Load(){auto& s=Get();std::ifstream f(s.configPath,std::ios::binary);if(!f)return false;Document d;if(!ReadDocument(f,d)){s.notice="配置损坏，未应用；原文件保留";return false;}s.data=std::move(d);ResetTransforms();s.notice="配置、默认预设与变身规则已自动加载";return true;}
 void Import102(const std::filesystem::path& file){
@@ -99,7 +101,7 @@ void Import102(const std::filesystem::path& file){
  while(std::getline(f,line)){if(!line.empty()&&line.back()=='\r')line.pop_back();if(line.empty()||line[0]==';')continue;if(line.front()=='['&&line.back()==']'){section=line.substr(1,line.size()-2);continue;}if(section!="Current"&&section.rfind("Preset:",0)!=0)continue;auto pos=line.find_last_of('|');if(pos==std::string::npos)continue;try{char type='H';size_t begin=0;if(line.size()>2&&line[1]=='|'){type=line[0];begin=2;}Target t{Normalize(line.substr(begin,pos-begin)),(uint32_t)std::stoull(line.substr(pos+1)),type!='M'};if(Equip(t.model).empty())continue;(type=='S'?sections[section].shown:sections[section].hidden).insert(t);}catch(...){}}
  for(auto& [name,r]:sections){std::set<std::string> scopes;for(auto& t:r.hidden)scopes.insert(Equip(t.model));for(auto& t:r.shown)scopes.insert(Equip(t.model));for(auto& scope:scopes){auto& g=Main(scope);Rules part;for(auto& t:r.hidden)if(Equip(t.model)==scope)part.hidden.insert(t);for(auto& t:r.shown)if(Equip(t.model)==scope)part.shown.insert(t);if(name=="Current")g.working=part;else{Preset p;p.id=s.data.nextId++;p.name=name.substr(7);p.rules=part;g.presets.push_back(p);}}}Changed("旧版规则与预设已导入主列表");
 }
-void Initialize(SharedState* live,const std::filesystem::path& dir,const std::filesystem::path& root){auto& s=Get();std::lock_guard lock(s.mutex);s.live=live;s.directory=dir/L"WorldDiff";s.gameRoot=root;s.configPath=s.directory/L"WorldDiff107.cfg";std::vector<std::string> errors;s.models=LoadCatalog(root,&errors);for(auto& m:s.models)m.relativePath=Normalize(m.relativePath);if(!Load()&&!std::filesystem::exists(s.configPath)){for(auto name:{L"WorldDiff104.cfg",L"WorldDiff103.cfg"}){std::ifstream legacy(s.directory/name,std::ios::binary);Document old;if(legacy&&ReadDocument(legacy,old)){s.data=std::move(old);s.migrating=true;Changed("旧版本分组与预设已迁移到 1.0.7，旧配置保留");break;}}}InitializeProfiles();s.loaded=true;}
+void Initialize(SharedState* live,const std::filesystem::path& dir,const std::filesystem::path& root){auto& s=Get();std::lock_guard lock(s.mutex);s.live=live;s.directory=dir/L"WorldDiff";s.gameRoot=root;s.configPath=s.directory/L"WorldDiff108.cfg";std::vector<std::string> errors;s.models=LoadCatalog(root,&errors);for(auto& m:s.models)m.relativePath=Normalize(m.relativePath);if(!Load()&&!std::filesystem::exists(s.configPath)){for(auto name:{L"WorldDiff107.cfg",L"WorldDiff104.cfg",L"WorldDiff103.cfg"}){std::ifstream legacy(s.directory/name,std::ios::binary);Document old;if(legacy&&ReadDocument(legacy,old)){s.data=std::move(old);s.migrating=true;Changed("旧版本分组与预设已迁移到 1.0.8，旧配置保留");break;}}}InitializeProfiles();s.loaded=true;}
 void Tick(){
  auto& s=Get();std::lock_guard lock(s.mutex);if(!s.live)return;DWORD now=GetTickCount();UpdateTransforms();auto n=std::min<LONG>(std::max<LONG>((LONG)s.live->rowCount,0),(LONG)kMaxRows);
  for(LONG i=0;i<n;i++){auto& r=s.live->rows[i];if(r.ready!=1)continue;std::string path=Normalize(r.modelPath);if(Equip(path).empty())continue;auto at=std::find_if(s.models.begin(),s.models.end(),[&](auto& m){return m.relativePath==path;});if(at==s.models.end()){Model m;m.relativePath=path;m.equip=Equip(path);auto p=path.find('\\',path.find(m.equip)+m.equip.size()+1);auto start=path.find(m.equip)+m.equip.size()+1;m.part=path.substr(start,p-start);m.display=path.substr(path.find_last_of('\\')+1);s.models.push_back(m);at=s.models.end()-1;}

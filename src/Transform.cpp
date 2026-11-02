@@ -20,7 +20,7 @@ bool ValidCondition(const Condition& c){
  case ConditionKind::WeaponState:case ConditionKind::Enhanced:return c.state>=0&&c.state<=1;
  case ConditionKind::LongSword:return c.state>=0&&c.state<=5;
  case ConditionKind::DualBlades:return c.state>=0&&c.state<=2;
- case ConditionKind::InsectGlaive:return false; // Reserved: +0x2370 is a float extract timer, not an integer lamp count.
+ case ConditionKind::InsectGlaive:return c.state>=0&&c.state<=7;
  case ConditionKind::Health:return std::isfinite(c.healthMin)&&std::isfinite(c.healthMax)&&c.healthMin>=0&&c.healthMax<=100&&c.healthMin<=c.healthMax&&(!c.lowerOpen||c.healthMin<c.healthMax);
  case ConditionKind::WeaponType:return c.weapon>=0;
  case ConditionKind::ActionLmt:return c.minimum>=0&&c.maximum>=c.minimum&&c.maximum<=0x7fffffff;
@@ -37,9 +37,9 @@ bool Matches(const Condition& c,const PlayerSnapshot& p){
  case ConditionKind::DualBlades:
   if(p.weapon!=2)return false;
   if(c.state==1)return p.demon==1;
-  if(c.state==2)return p.archdemon==1;
+  if(c.state==2)return p.demon==0&&p.archdemon==1;
   return p.demon==0&&p.archdemon==0;
- case ConditionKind::InsectGlaive:return p.weapon==10&&p.spirit>=0&&p.spirit<=3&&p.spirit==c.state;
+ case ConditionKind::InsectGlaive:return p.weapon==10&&p.extracts>=0&&p.extracts<=7&&p.extracts==c.state;
  case ConditionKind::Enhanced:{
   if(p.weapon==3&&p.spirit>=0&&p.spirit<=3)return (p.spirit==3)==(c.state==1);
   if(p.weapon==2&&p.archdemon>=0&&p.archdemon<=1)return (p.archdemon==1)==(c.state==1);
@@ -57,7 +57,7 @@ std::string DescribeCondition(const Condition& c){
  case ConditionKind::WeaponState:s<<(c.state?"拔刀":"收刀");break;
  case ConditionKind::LongSword:{const char* n[]={"无刃","白刃","黄刃","红刃","白刃及以上","黄刃及以上"};s<<n[std::clamp(c.state,0,5)];break;}
  case ConditionKind::DualBlades:{const char* n[]={"普通（无鬼人化/强化）","鬼人化","鬼人强化"};s<<n[std::clamp(c.state,0,2)];break;}
- case ConditionKind::InsectGlaive:s<<std::clamp(c.state,0,3)<<" 灯级";break;
+ case ConditionKind::InsectGlaive:{const char* names[]={"无精华","红灯","白灯","红＋白","橙灯","红＋橙","白＋橙","三灯齐全"};s<<names[std::clamp(c.state,0,7)];break;}
  case ConditionKind::Enhanced:s<<(c.state?"强化中":"未强化");break;
  case ConditionKind::Health:s<<(c.lowerOpen?"(":"[")<<c.healthMin<<"%, "<<c.healthMax<<"%]"<<(c.latch?" · 触发后保持":"");break;
  case ConditionKind::WeaponType:s<<WeaponName(c.weapon);break;
@@ -71,13 +71,13 @@ bool ValidateTransform(const TransformRule& r,const Document& d,std::string* rea
  auto fail=[&](const char* message){if(reason)*reason=message;return false;};
  if(r.name.empty()||r.name.size()>160||r.name.find_first_of("\r\n\t")!=std::string::npos)return fail("请填写有效的规则名称");
  if(r.scope.empty()||r.scope.size()>128||r.priority<1||r.priority>99||!ValidCondition(r.condition))return fail("请检查条件范围和优先级");
- if(r.targets.empty()||r.targets.size()>64)return fail("至少选择一个目标分组与预设，最多 64 个");
+ if(r.targets.size()>64)return fail("最多选择 64 个目标分组");
  std::set<uint64_t> seen;
  for(auto& target:r.targets){
   if(!seen.insert(target.group).second)return fail("同一规则内，每个分组只能选择一个预设");
   const Group* g=nullptr;for(auto& x:d.groups)if(x.id==target.group&&x.scope==r.scope)g=&x;
   if(!g)return fail("目标分组已不存在");
-  if(std::none_of(g->presets.begin(),g->presets.end(),[&](auto& p){return p.id==target.preset;}))return fail("请选择有效的目标预设");
+  if(target.preset&&std::none_of(g->presets.begin(),g->presets.end(),[&](auto& p){return p.id==target.preset;}))return fail("请选择有效的目标预设");
  }
  return true;
 }
@@ -98,15 +98,23 @@ void EvaluateTransforms(const Document& d,TransformRuntime& rt,const PlayerSnaps
  std::vector<const TransformRule*> ordered;std::set<uint64_t> ids;
  for(auto& r:d.transforms){
   ids.insert(r.id);uint64_t sig=Signature(r);auto it=rt.signatures.find(r.id);if(it==rt.signatures.end()||it->second!=sig)rt.latched.erase(r.id);rt.signatures[r.id]=sig;
-  if(!r.enabled||!ValidateTransform(r,d)){rt.latched.erase(r.id);continue;}ordered.push_back(&r);
+  auto mode=d.transformModes.find(r.scope);bool allowed=true;
+  if(mode!=d.transformModes.end()){int category=TransformCategory(r.condition.kind);auto& setting=mode->second;allowed=setting.enabled&&(category<0?setting.legacy:setting.parallel?setting.categories[category]:setting.selected==category);}
+  if(!allowed||!r.enabled||!ValidateTransform(r,d)){rt.latched.erase(r.id);continue;}ordered.push_back(&r);
  }
  std::erase_if(rt.latched,[&](auto id){return !ids.count(id);});std::erase_if(rt.signatures,[&](auto& item){return !ids.count(item.first);});
- std::stable_sort(ordered.begin(),ordered.end(),[](auto* a,auto* b){return a->priority<b->priority;});
+ auto priority=[&](const TransformRule& r){auto it=d.transformModes.find(r.scope);int category=TransformCategory(r.condition.kind);return it!=d.transformModes.end()&&category>=0?it->second.priorities[category]*100+r.priority:r.priority;};
+ std::stable_sort(ordered.begin(),ordered.end(),[&](auto* a,auto* b){
+  int ap=priority(*a),bp=priority(*b);if(ap!=bp)return ap<bp;
+  if(a->condition.kind==ConditionKind::Health&&b->condition.kind==ConditionKind::Health){if(a->condition.healthMax!=b->condition.healthMax)return a->condition.healthMax<b->condition.healthMax;if(a->condition.healthMin!=b->condition.healthMin)return a->condition.healthMin>b->condition.healthMin;}
+  if(a->condition.kind==ConditionKind::LongSword&&b->condition.kind==ConditionKind::LongSword){bool exactA=a->condition.state<4,exactB=b->condition.state<4;if(exactA!=exactB)return exactA;}
+  return false;
+ });
  for(auto* rule:ordered){
   bool matched=Matches(rule->condition,p);
   if(rule->condition.latch){if(matched)rt.latched.insert(rule->id);matched=(matched||rt.latched.count(rule->id))&&p.healthPercent>0&&(rule->condition.weapon<0||rule->condition.weapon==p.weapon);}
   if(!matched)continue;bool won=false;
-  for(auto& target:rule->targets)if(rt.activePresets.emplace(target.group,target.preset).second)won=true;
+  for(auto& target:rule->targets)if(target.preset&&rt.activePresets.emplace(target.group,target.preset).second)won=true;
   if(won)rt.activeRules.insert(rule->id);
  }
 }
