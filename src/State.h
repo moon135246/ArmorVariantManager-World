@@ -15,6 +15,9 @@ struct Target {
  bool operator==(const Target& b)const{return model==b.model&&value==b.value&&mesh==b.mesh;}
 };
 struct Rules {std::set<Target> hidden,shown;};
+struct MeshDisplay {
+ uint64_t signature=0;uint32_t material=0;int order=-1;std::string note;
+};
 struct Preset {uint64_t id=0;std::string name;Rules rules;};
 struct Group {
  uint64_t id=0;std::string name,scope;bool main=false,global=false;
@@ -27,6 +30,7 @@ struct Document {
  std::map<std::string,std::string> bindings;
  std::vector<TransformRule> transforms;
  std::map<std::string,TransformMode> transformModes;
+ std::map<Target,MeshDisplay> meshDisplay;
 };
 struct State {
  std::recursive_mutex mutex;Document data;std::vector<Model> models;
@@ -53,6 +57,11 @@ bool RuleHidden(const Rules&,const std::string& model,uint32_t mesh,uint32_t mat
 bool Hidden(const std::string& model,uint32_t mesh,uint32_t material);
 bool GlobalHidden(const std::string& model,uint32_t mesh,uint32_t material);
 void SetVisible(Group&,const Target&,bool visible);
+const MeshDisplay* MeshView(const Model&,uint32_t index);
+std::vector<const Mesh*> OrderedMeshes(const Model&,bool manual=true);
+bool MoveMeshBefore(const Model&,uint32_t source,uint32_t before);
+bool SetMeshNote(const Model&,uint32_t index,const std::string& note);
+void ResetMeshOrder(const Model&);
 bool CreateGroup(const std::string& name,const std::string& scope,bool global,const std::set<Target>& members,uint64_t& id);
 bool DeleteGroup(uint64_t);
 bool RenameGroup(uint64_t,const std::string&);

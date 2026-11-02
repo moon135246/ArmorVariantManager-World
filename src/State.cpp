@@ -1,5 +1,6 @@
 #include "State.h"
 #include <algorithm>
+#include <climits>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
@@ -21,6 +22,37 @@ void SetVisible(Group& g,const Target& t,bool visible){
  auto& r=g.working;if(t.mesh){if(visible){r.hidden.erase(t);r.shown.insert(t);}else{r.shown.erase(t);r.hidden.insert(t);}}
  else{ClearMaterialMeshOverrides(r,t);if(visible)r.hidden.erase(t);else r.hidden.insert(t);}
  Changed();
+}
+const MeshDisplay* MeshView(const Model& model,uint32_t index){
+ auto it=Get().data.meshDisplay.find({Normalize(model.relativePath),index,true});if(it==Get().data.meshDisplay.end())return nullptr;
+ const Mesh* mesh=nullptr;if(index<model.meshes.size()&&model.meshes[index].index==index)mesh=&model.meshes[index];else{auto found=std::find_if(model.meshes.begin(),model.meshes.end(),[&](auto& m){return m.index==index;});if(found!=model.meshes.end())mesh=&*found;}
+ if(!mesh||mesh->materialId>=model.materials.size()||it->second.material!=model.materials[mesh->materialId].hash)return nullptr;
+ if(it->second.signature&&it->second.signature!=model.signature)return nullptr;return &it->second;
+}
+std::vector<const Mesh*> OrderedMeshes(const Model& model,bool manual){
+ std::vector<const Mesh*> result;for(auto& m:model.meshes)if(m.materialId<model.materials.size())result.push_back(&m);
+ std::sort(result.begin(),result.end(),[&](auto* a,auto* b){
+  auto* av=manual?MeshView(model,a->index):nullptr;auto* bv=manual?MeshView(model,b->index):nullptr;
+  int ar=av&&av->order>=0?av->order:INT_MAX,br=bv&&bv->order>=0?bv->order:INT_MAX;
+  return std::make_tuple(ar,MaterialListOrder(model.materials[a->materialId],a->materialId),a->index)<std::make_tuple(br,MaterialListOrder(model.materials[b->materialId],b->materialId),b->index);
+ });return result;
+}
+static MeshDisplay CurrentMeshView(const Model& model,const Mesh& mesh){
+ MeshDisplay value;if(auto* old=MeshView(model,mesh.index))value=*old;value.signature=model.signature;value.material=model.materials[mesh.materialId].hash;return value;
+}
+bool MoveMeshBefore(const Model& model,uint32_t source,uint32_t before){
+ if(source==before)return false;auto ordered=OrderedMeshes(model);auto from=std::find_if(ordered.begin(),ordered.end(),[&](auto* m){return m->index==source;});
+ auto to=std::find_if(ordered.begin(),ordered.end(),[&](auto* m){return m->index==before;});if(from==ordered.end()||(before!=UINT32_MAX&&to==ordered.end()))return false;
+ auto* moved=*from;ordered.erase(from);to=std::find_if(ordered.begin(),ordered.end(),[&](auto* m){return m->index==before;});ordered.insert(to,moved);
+ int rank=0;auto path=Normalize(model.relativePath);for(auto* m:ordered){auto value=CurrentMeshView(model,*m);value.order=rank++;Get().data.meshDisplay[{path,m->index,true}]=std::move(value);}Changed("网格顺序已保存");return true;
+}
+bool SetMeshNote(const Model& model,uint32_t index,const std::string& note){
+ if(!note.empty()&&!GoodName(note))return false;auto mesh=std::find_if(model.meshes.begin(),model.meshes.end(),[&](auto& m){return m.index==index;});
+ if(mesh==model.meshes.end()||mesh->materialId>=model.materials.size())return false;auto value=CurrentMeshView(model,*mesh);value.note=note;Target key{Normalize(model.relativePath),index,true};
+ if(value.order<0&&value.note.empty())Get().data.meshDisplay.erase(key);else Get().data.meshDisplay[key]=std::move(value);Changed(note.empty()?"网格备注已清除":"网格备注已保存");return true;
+}
+void ResetMeshOrder(const Model& model){
+ auto path=Normalize(model.relativePath);for(auto it=Get().data.meshDisplay.begin();it!=Get().data.meshDisplay.end();){if(it->first.model==path){it->second.order=-1;if(it->second.note.empty()){it=Get().data.meshDisplay.erase(it);continue;}}++it;}Changed("已恢复材质顺序，网格备注保留");
 }
 bool CreateGroup(const std::string& name,const std::string& scope,bool global,const std::set<Target>& members,uint64_t& id){
  auto& s=Get();if(!GoodName(name)||scope.empty()||members.empty())return false;
@@ -46,10 +78,11 @@ void Restore(Group& g){g.working={};g.selected=0;Changed("当前分组已恢复�
 void RestoreAll(){auto& s=Get();for(auto& g:s.data.groups){g.working={};g.selected=0;}s.data.enabled=false;ResetTransforms();Changed("已暂停全部控制，游戏显隐已恢复；预设仍然保留");}
 static void WriteRules(std::ostream& f,const Rules& r,uint64_t gid,uint64_t pid){for(auto& t:r.hidden)f<<"RULE "<<gid<<' '<<pid<<" 0 "<<t.mesh<<' '<<std::quoted(t.model)<<' '<<t.value<<'\n';for(auto& t:r.shown)f<<"RULE "<<gid<<' '<<pid<<" 1 "<<t.mesh<<' '<<std::quoted(t.model)<<' '<<t.value<<'\n';}
 void WriteDocument(std::ostream& f,const Document& d){
- f<<"WorldDiffInternal 110\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.nextId<<' '<<d.hideDragHint<<'\n';
+ f<<"WorldDiffInternal 115\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.nextId<<' '<<d.hideDragHint<<'\n';
  f<<"AUTOFIND "<<d.autoFind<<'\n';
  for(const auto& [scope,file]:d.bindings)f<<"BINDING "<<std::quoted(scope)<<' '<<std::quoted(file)<<'\n';
  for(const auto& g:d.groups){f<<"GROUP "<<g.id<<' '<<std::quoted(g.name)<<' '<<std::quoted(g.scope)<<' '<<g.main<<' '<<g.global<<' '<<g.selected<<' '<<g.defaultPreset<<'\n';for(const auto& t:g.members)f<<"MEMBER "<<g.id<<' '<<std::quoted(t.model)<<' '<<t.value<<'\n';WriteRules(f,g.working,g.id,0);for(const auto& p:g.presets){f<<"PRESET "<<g.id<<' '<<p.id<<' '<<std::quoted(p.name)<<'\n';WriteRules(f,p.rules,g.id,p.id);}}
+ for(auto& [t,v]:d.meshDisplay)f<<"MESHVIEW "<<std::quoted(t.model)<<' '<<t.value<<' '<<v.signature<<' '<<v.material<<' '<<v.order<<' '<<std::quoted(v.note)<<'\n';
  f<<"TRANSFORMS "<<d.transformsEnabled<<'\n';
  for(auto& [scope,m]:d.transformModes){f<<"TRMODE "<<std::quoted(scope)<<' '<<m.enabled<<' '<<m.parallel<<' '<<m.selected;for(int i=0;i<kTransformCategories;i++)f<<' '<<m.categories[i]<<' '<<m.priorities[i];f<<'\n';}
  for(auto& r:d.transforms){auto& c=r.condition;f<<"TRANSFORM "<<r.id<<' '<<std::quoted(r.name)<<' '<<std::quoted(r.scope)<<' '<<r.enabled<<' '<<r.priority<<' '<<(int)c.kind<<' '<<c.state<<' '<<c.weapon<<' '<<c.minimum<<' '<<c.maximum<<' '<<c.healthMin<<' '<<c.healthMax<<' '<<c.lowerOpen<<' '<<c.latch<<'\n';for(auto& t:r.targets)f<<"TRTARGET "<<r.id<<' '<<t.group<<' '<<t.preset<<'\n';}
@@ -63,7 +96,7 @@ bool Save(){
  if(!MoveFileExW(temp.c_str(),s.configPath.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)){s.notice="保存失败：无法替换配置文件";return false;}s.dirty=false;return true;
 }
 bool ReadDocument(std::istream& f,Document& result){
- std::string magic;unsigned version=0;f>>magic>>version;if(magic!="WorldDiffInternal"||(version!=103&&version!=104&&version!=107&&version!=108&&version!=109&&version!=110))return false;
+ std::string magic;unsigned version=0;f>>magic>>version;if(magic!="WorldDiffInternal"||(version!=103&&version!=104&&version!=107&&version!=108&&version!=109&&version!=110&&version!=115))return false;
  Document d;std::string line;std::getline(f,line);bool valid=true;size_t records=0;
  while(std::getline(f,line)&&valid){if(++records>200000){valid=false;break;}std::istringstream in(line);std::string tag;in>>tag;if(tag.empty())continue;
   if(tag=="SET"){in>>d.enabled>>d.autoDefault>>d.autoOpen>>d.menuKey>>d.scale>>d.nextId;if(in&&!in.eof()){in>>std::ws;if(!in.eof())in>>d.hideDragHint;}}
@@ -79,6 +112,11 @@ bool ReadDocument(std::istream& f,Document& result){
   else if(tag=="TRTARGET"){
    uint64_t id=0;TransformTarget t;in>>id>>t.group>>t.preset;auto it=std::find_if(d.transforms.begin(),d.transforms.end(),[&](auto& r){return r.id==id;});
    if(it==d.transforms.end()||it->targets.size()>=64)valid=false;else it->targets.push_back(t);
+  }
+  else if(tag=="MESHVIEW"){
+   Target t;MeshDisplay v;t.mesh=true;in>>std::quoted(t.model)>>t.value>>v.signature>>v.material>>v.order>>std::quoted(v.note);t.model=Normalize(t.model);
+   if(version<115||t.model.empty()||t.model.size()>255||Equip(t.model).empty()||t.value>=65536||v.order < -1||v.order>=65536||(!v.note.empty()&&!GoodName(v.note))||d.meshDisplay.size()>=65536||d.meshDisplay.count(t))valid=false;
+   else d.meshDisplay[t]=std::move(v);
   }
   else if(tag=="BINDING"){std::string scope,file;in>>std::quoted(scope)>>std::quoted(file);if(scope.empty()||scope.size()>128||file.size()>240)valid=false;d.bindings[scope]=file;}
   else if(tag=="GROUP"){Group g;in>>g.id>>std::quoted(g.name)>>std::quoted(g.scope)>>g.main>>g.global>>g.selected>>g.defaultPreset;if(!GoodName(g.name)||g.scope.empty()||g.scope.size()>128||!g.id||d.groups.size()>=2048)valid=false;for(auto& x:d.groups)if(x.id==g.id||(x.main&&g.main&&x.scope==g.scope))valid=false;d.groups.push_back(std::move(g));}
@@ -104,11 +142,11 @@ void Import102(const std::filesystem::path& file){
  while(std::getline(f,line)){if(!line.empty()&&line.back()=='\r')line.pop_back();if(line.empty()||line[0]==';')continue;if(line.front()=='['&&line.back()==']'){section=line.substr(1,line.size()-2);continue;}if(section!="Current"&&section.rfind("Preset:",0)!=0)continue;auto pos=line.find_last_of('|');if(pos==std::string::npos)continue;try{char type='H';size_t begin=0;if(line.size()>2&&line[1]=='|'){type=line[0];begin=2;}Target t{Normalize(line.substr(begin,pos-begin)),(uint32_t)std::stoull(line.substr(pos+1)),type!='M'};if(Equip(t.model).empty())continue;(type=='S'?sections[section].shown:sections[section].hidden).insert(t);}catch(...){}}
  for(auto& [name,r]:sections){std::set<std::string> scopes;for(auto& t:r.hidden)scopes.insert(Equip(t.model));for(auto& t:r.shown)scopes.insert(Equip(t.model));for(auto& scope:scopes){auto& g=Main(scope);Rules part;for(auto& t:r.hidden)if(Equip(t.model)==scope)part.hidden.insert(t);for(auto& t:r.shown)if(Equip(t.model)==scope)part.shown.insert(t);if(name=="Current")g.working=part;else{Preset p;p.id=s.data.nextId++;p.name=name.substr(7);p.rules=part;g.presets.push_back(p);}}}Changed("旧版规则与预设已导入主列表");
 }
-void Initialize(SharedState* live,const std::filesystem::path& dir,const std::filesystem::path& root){auto& s=Get();std::lock_guard lock(s.mutex);s.live=live;s.directory=dir/L"WorldDiff";s.gameRoot=root;s.configPath=s.directory/L"WorldDiff110.cfg";std::vector<std::string> errors;s.models=LoadCatalog(root,&errors);for(auto& m:s.models)m.relativePath=Normalize(m.relativePath);if(!Load()&&!std::filesystem::exists(s.configPath)){for(auto name:{L"WorldDiff109.cfg",L"WorldDiff108.cfg",L"WorldDiff107.cfg",L"WorldDiff104.cfg",L"WorldDiff103.cfg"}){std::ifstream legacy(s.directory/name,std::ios::binary);Document old;if(legacy&&ReadDocument(legacy,old)){s.data=std::move(old);s.migrating=true;Changed("旧版本分组与预设已迁移到 1.1.0，旧配置保留");break;}}}InitializeProfiles();s.loaded=true;}
+void Initialize(SharedState* live,const std::filesystem::path& dir,const std::filesystem::path& root){auto& s=Get();std::lock_guard lock(s.mutex);s.live=live;s.directory=dir/L"WorldDiff";s.gameRoot=root;s.configPath=s.directory/L"WorldDiff115.cfg";std::vector<std::string> errors;s.models=LoadCatalog(root,&errors);for(auto& m:s.models)m.relativePath=Normalize(m.relativePath);if(!Load()&&!std::filesystem::exists(s.configPath)){for(auto name:{L"WorldDiff110.cfg",L"WorldDiff109.cfg",L"WorldDiff108.cfg",L"WorldDiff107.cfg",L"WorldDiff104.cfg",L"WorldDiff103.cfg"}){std::ifstream legacy(s.directory/name,std::ios::binary);Document old;if(legacy&&ReadDocument(legacy,old)){s.data=std::move(old);s.migrating=true;Changed("旧版本分组与预设已迁移到 1.1.5，旧配置保留");break;}}}InitializeProfiles();s.loaded=true;}
 void Tick(){
  auto& s=Get();std::lock_guard lock(s.mutex);if(!s.live)return;DWORD now=GetTickCount();UpdateTransforms();auto n=std::min<LONG>(std::max<LONG>((LONG)s.live->rowCount,0),(LONG)kMaxRows);
- for(LONG i=0;i<n;i++){auto& r=s.live->rows[i];if(r.ready!=1)continue;std::string path=Normalize(r.modelPath);if(Equip(path).empty())continue;auto at=std::find_if(s.models.begin(),s.models.end(),[&](auto& m){return m.relativePath==path;});if(at==s.models.end()){Model m;m.relativePath=path;m.equip=Equip(path);auto p=path.find('\\',path.find(m.equip)+m.equip.size()+1);auto start=path.find(m.equip)+m.equip.size()+1;m.part=path.substr(start,p-start);m.display=path.substr(path.find_last_of('\\')+1);s.models.push_back(m);at=s.models.end()-1;}
-  auto& model=*at;if(r.materialId>=65536)continue;if(model.materials.size()<=r.materialId)model.materials.resize(r.materialId+1);auto& mat=model.materials[r.materialId];if(mat.name!=r.materialName||mat.hash!=r.materialHash){mat.name=r.materialName;mat.hash=r.materialHash;mat.mrlIndex=-1;}
+ for(LONG i=0;i<n;i++){auto& r=s.live->rows[i];if(r.ready!=1)continue;std::string path=Normalize(r.modelPath);if(Equip(path).empty())continue;auto at=std::find_if(s.models.begin(),s.models.end(),[&](auto& m){return m.relativePath==path;});if(at==s.models.end()){Model m;m.relativePath=path;m.equip=Equip(path);auto p=path.find('\\',path.find(m.equip)+m.equip.size()+1);auto start=path.find(m.equip)+m.equip.size()+1;m.part=path.substr(start,p-start);m.display=path.substr(path.find_last_of('\\')+1);LoadMaterialOrder(m,s.gameRoot);s.models.push_back(std::move(m));at=s.models.end()-1;}
+  auto& model=*at;if(r.materialId>=65536)continue;if(model.materials.size()<=r.materialId)model.materials.resize(r.materialId+1);auto& mat=model.materials[r.materialId];if(mat.name!=r.materialName||mat.hash!=r.materialHash){mat.name=r.materialName;mat.hash=r.materialHash;auto order=std::find(model.materialOrder.begin(),model.materialOrder.end(),mat.hash);mat.mrlIndex=order==model.materialOrder.end()?-1:(int)(order-model.materialOrder.begin());}
   auto mesh=std::find_if(model.meshes.begin(),model.meshes.end(),[&](auto& m){return m.index==r.meshIndex;});if(mesh==model.meshes.end()){Mesh m;m.index=r.meshIndex;model.meshes.push_back(m);mesh=model.meshes.end()-1;}mesh->materialId=(uint16_t)r.materialId;mesh->groupId=(uint16_t)r.groupId;mesh->lod=(uint16_t)r.lod;
   if((DWORD)(now-(DWORD)r.lastTick)<1500)s.lastSeen[path]=(DWORD)r.lastTick;
   Main(model.equip);InterlockedExchange(&r.hide,Hidden(path,r.meshIndex,r.materialHash)?1:0);

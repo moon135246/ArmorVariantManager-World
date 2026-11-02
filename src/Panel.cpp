@@ -14,6 +14,7 @@ std::string outfit;uint64_t groupId=0;int tab=0,part=-1;bool meshMode=true,creat
 char groupName[192]{},presetName[192]{},search[192]{},rename[192]{};std::set<Target> staged;
 char profileName[192]{};std::vector<ProfileCandidate> profileFiles;
 uint64_t editingMembers=0,confirmGroup=0,confirmPreset=0,renameGroup=0;
+Target meshNoteTarget;char meshNote[192]{};bool openMeshNote=false;
 ImVec4 accent{0.33f,0.72f,0.78f,1},muted{0.6f,0.66f,0.72f,1},danger{0.91f,0.51f,0.51f,1};
 float S(float x){return x*Get().data.scale;}
 std::string Lower(std::string x){for(auto& c:x)if(c>='A'&&c<='Z')c+=32;return x;}
@@ -175,28 +176,68 @@ void PresetsPane(float width,float height){
  EndActions();
  ImGui::EndChild();
 }
+void MeshNameRow(const Model& model,const Target& target,const std::string& label,bool allowed){
+ if(!allowed)ImGui::PushStyleColor(ImGuiCol_Text,muted);
+ float width=std::min(ImGui::GetContentRegionAvail().x,ImGui::CalcTextSize(label.c_str()).x+S(10));
+ ImGui::Selectable(label.c_str(),false,0,ImVec2(width,ImGui::GetFrameHeight()));
+ if(!allowed)ImGui::PopStyleColor();
+ struct Drag {char model[256];uint32_t index;uint64_t signature;};
+ if(target.model.size()<256&&ImGui::BeginDragDropSource()){
+  Drag payload{};strcpy_s(payload.model,target.model.c_str());payload.index=target.value;payload.signature=model.signature;
+  ImGui::SetDragDropPayload("WD_MESH",&payload,sizeof(payload));ImGui::TextUnformatted(label.c_str());ImGui::EndDragDropSource();
+ }
+ if(ImGui::BeginDragDropTarget()){
+  if(auto* data=ImGui::AcceptDragDropPayload("WD_MESH"))if(data->DataSize==sizeof(Drag)){
+   auto& payload=*(const Drag*)data->Data;
+   if(std::string_view(payload.model)==target.model&&payload.signature==model.signature){
+    uint32_t before=target.value;
+    if(ImGui::GetMousePos().y>(ImGui::GetItemRectMin().y+ImGui::GetItemRectMax().y)*.5f){
+     auto ordered=OrderedMeshes(model);auto to=std::find_if(ordered.begin(),ordered.end(),[&](auto* m){return m->index==target.value;});
+     before=to!=ordered.end()&&++to!=ordered.end()?(*to)->index:UINT32_MAX;
+    }
+    MoveMeshBefore(model,payload.index,before);
+   }
+  }ImGui::EndDragDropTarget();
+ }
+ if(ImGui::BeginPopupContextItem("网格操作")){
+  if(ImGui::MenuItem("编辑备注")){meshNoteTarget=target;auto* view=MeshView(model,target.value);strcpy_s(meshNote,view?view->note.c_str():"");openMeshNote=true;}
+  if(ImGui::MenuItem("清除备注",nullptr,false,MeshView(model,target.value)&&!MeshView(model,target.value)->note.empty()))SetMeshNote(model,target.value,{});
+  ImGui::EndPopup();
+ }
+}
+void MeshNotePopup(){
+ if(openMeshNote){ImGui::OpenPopup("编辑网格备注");openMeshNote=false;}
+ if(!ImGui::BeginPopupModal("编辑网格备注",nullptr,ImGuiWindowFlags_AlwaysAutoResize))return;
+ auto& s=Get();auto model=std::find_if(s.models.begin(),s.models.end(),[&](auto& m){return Normalize(m.relativePath)==meshNoteTarget.model;});
+ ImGui::TextUnformatted("备注只用于显示，留空可恢复原名称。");ImGui::SetNextItemWidth(S(360));TextField("##网格备注","输入网格备注",meshNote,sizeof(meshNote));
+ if(Button("保存备注")){
+  if(model!=s.models.end()&&SetMeshNote(*model,meshNoteTarget.value,meshNote))ImGui::CloseCurrentPopup();else s.notice="备注过长、包含控制字符或网格已失效";
+ }ImGui::SameLine();if(Button("取消##网格备注"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
+}
 void TargetsPanel(){
  auto& state=Get();auto* current=Find(groupId);if(current&&ActivePreset(*current)&&!creating){ImGui::TextColored(accent,"变身正在控制当前组；基础预设与默认项保持原样");if(Button("暂停变身并编辑")){state.data.transformsEnabled=false;ResetTransforms();Changed("变身已暂停，可以编辑基础显隐");}}
  auto& s=Get();auto* g=Find(groupId);if(!g){ImGui::TextDisabled("等待装备加载…");return;}
  if(creating)ImGui::TextColored(accent,"分组选择模式：勾选要交给该组管理的材质");
  else{ImGui::BeginDisabled(creating);if(ImGui::RadioButton("按子网格",meshMode))meshMode=true;ImGui::SameLine();if(ImGui::RadioButton("按材质",!meshMode))meshMode=false;ImGui::EndDisabled();}
- ImGui::SetNextItemWidth(-1);TextField("##搜索材质","搜索材质或模型名称",search,sizeof(search));
+ ImGui::SetNextItemWidth(-1);TextField("##搜索材质","搜索材质、网格备注或模型名称",search,sizeof(search));
  const char* parts[]={"全部","头部","身体","手臂","腰部","腿部"};float rowWidth=ImGui::GetContentRegionAvail().x,used=0;for(int p=-1;p<5;p++){float buttonWidth=std::min(rowWidth,ImGui::CalcTextSize(parts[p+1]).x+S(20));if(used&&used+S(8)+buttonWidth<=rowWidth){ImGui::SameLine(0,S(8));used+=S(8);}else used=0;if(PartButton(parts[p+1],part==p,buttonWidth))part=p;used+=buttonWidth;}
  ImGui::Separator();
- ImGui::BeginChild("材质滚动区",ImVec2(0,-S(28)));
+ ImGui::BeginChild("材质滚动区",ImVec2(0,-S(meshMode&&!creating?52.f:28.f)));
  std::string filter=Lower(search);DWORD now=GetTickCount();bool any=false;
  for(int slot=0;slot<6;slot++)for(auto& model:s.models){if(model.equip!=outfit||PartIndex(model.part)!=slot||(part!=-1&&part!=slot))continue;auto path=Normalize(model.relativePath);bool active=s.lastSeen.count(path)&&(DWORD)(now-s.lastSeen[path])<1800;std::string head=std::string(PartName(slot))+"  ·  "+model.display+(active?"  [已加载]":"  [待加载]");ImGui::PushID(path.c_str());
   if(ImGui::CollapsingHeader(head.c_str(),ImGuiTreeNodeFlags_DefaultOpen)){
    std::map<uint32_t,std::vector<const Mesh*>> targets;for(auto& m:model.meshes){if(m.materialId>=model.materials.size())continue;targets[meshMode&&!creating?m.index:model.materials[m.materialId].hash].push_back(&m);}
-   struct Item {Target target;const Material* mat;std::vector<const Mesh*> meshes;bool allowed,member;Group* owner;};std::vector<Item> items;
-   for(auto& [key,meshes]:targets){auto* mat=&model.materials[meshes[0]->materialId];if(!filter.empty()&&Lower(mat->name+model.display).find(filter)==std::string::npos)continue;auto* owner=Owner(path,mat->hash);bool allowed=creating?(globalGroup||!owner||owner->id==editingMembers):InGroup(*g,path,mat->hash);Target t{path,key,meshMode&&!creating};items.push_back({t,mat,meshes,allowed,staged.count(t)!=0,owner});}
-   if(meshMode&&!creating)std::stable_sort(items.begin(),items.end(),[](const Item& a,const Item& b){return MeshListOrder(*a.meshes.front())<MeshListOrder(*b.meshes.front());});
+   struct Item {Target target;const Material* mat;std::vector<const Mesh*> meshes;bool allowed,member;Group* owner;std::string label;};std::vector<Item> items;
+   for(auto& [key,meshes]:targets){auto* mat=&model.materials[meshes[0]->materialId];auto* view=meshMode&&!creating?MeshView(model,key):nullptr;std::string label=view&&!view->note.empty()?view->note+"  ·  "+mat->name:mat->name;if(!filter.empty()&&Lower(label+model.display).find(filter)==std::string::npos)continue;auto* owner=Owner(path,mat->hash);bool allowed=creating?(globalGroup||!owner||owner->id==editingMembers):InGroup(*g,path,mat->hash);Target t{path,key,meshMode&&!creating};items.push_back({t,mat,meshes,allowed,staged.count(t)!=0,owner,label});}
+   if(meshMode&&!creating){std::map<uint32_t,size_t> ranks;size_t rank=0;for(auto* mesh:OrderedMeshes(model))ranks[mesh->index]=rank++;std::stable_sort(items.begin(),items.end(),[&](const Item& a,const Item& b){return ranks.at(a.target.value)<ranks.at(b.target.value);});}
+   else std::stable_sort(items.begin(),items.end(),[](const Item& a,const Item& b){return MaterialListOrder(*a.mat,a.meshes.front()->materialId)<MaterialListOrder(*b.mat,b.meshes.front()->materialId);});
    ImGui::BeginDisabled(!creating&&ActivePreset(*g));if(Button(creating?"全选":"全显示")){for(auto& item:items)if(item.allowed){if(creating)staged.insert(item.target);else SetVisible(*g,item.target,true);}}
    ImGui::SameLine();if(Button(creating?"清空选择":"全隐藏")){for(auto& item:items)if(item.allowed){if(creating)staged.erase(item.target);else SetVisible(*g,item.target,false);}}
    ImGui::EndDisabled();ImGui::SameLine();ImGui::TextDisabled("%zu 项",items.size());
+   if(meshMode&&!creating){if(ImGui::GetContentRegionAvail().x>S(420))ImGui::SameLine();if(Button("恢复材质顺序"))ResetMeshOrder(model);}
    for(auto& item:items){ImGui::PushID((int)item.target.value);bool shown=true;size_t hidden=0;bool locked=false;for(auto* mesh:item.meshes){if(RuleHidden(EffectiveRules(*g),path,mesh->index,item.mat->hash))hidden++;if(!g->global&&GlobalHidden(path,mesh->index,item.mat->hash))locked=true;}shown=hidden==0;if(creating)shown=staged.count(item.target)!=0;if(locked&&!creating)shown=false;
     ImGui::BeginDisabled(!item.allowed||(!creating&&(locked||ActivePreset(*g))));if(ImGui::Checkbox("##可见",&shown)){if(creating){if(shown)staged.insert(item.target);else staged.erase(item.target);}else SetVisible(*g,item.target,shown);}ImGui::EndDisabled();
-    ImGui::SameLine();if(!item.allowed)ImGui::TextDisabled("%s",item.mat->name.c_str());else ImGui::TextUnformatted(item.mat->name.c_str());
+    ImGui::SameLine();if(item.target.mesh)MeshNameRow(model,item.target,item.label,item.allowed);else if(!item.allowed)ImGui::TextDisabled("%s",item.label.c_str());else ImGui::TextUnformatted(item.label.c_str());
     if(locked&&!creating){ImGui::SameLine();ImGui::TextColored(danger,"全局隐藏");}
     else if(!item.allowed&&item.owner){ImGui::SameLine();ImGui::TextColored(accent,"[%s]",item.owner->name.c_str());}
     else if(!creating&&hidden&&hidden<item.meshes.size()){ImGui::SameLine();ImGui::TextColored(muted,"部分隐藏");}
@@ -206,6 +247,7 @@ void TargetsPanel(){
  }
  if(!any)ImGui::TextColored(muted,"尚无匹配材质。\n请进入场景、选择装备，或清空搜索。");
  ImGui::EndChild();ImGui::TextColored(muted,creating?"勾选 = 加入分组；普通组不能重复占用成员":"勾选 = 显示；取消 = 隐藏；恢复时保留游戏自身显隐");
+ if(meshMode&&!creating)ImGui::TextColored(muted,"拖动网格名称调整顺序；右键编辑备注");MeshNotePopup();
 }
 #include "TransformPanel.inl"
 void SettingsPanel(){
@@ -215,7 +257,7 @@ void SettingsPanel(){
  ImGui::Separator();ImGui::TextColored(accent,"配置与恢复");if(Button("立即保存配置")){if(Save())s.notice="配置已保存";else s.notice="配置保存失败，请检查目录是否可写";}ImGui::SameLine();if(Button("恢复当前组")){if(auto* g=Find(groupId))Restore(*g);}
  if(Button("暂停全部并恢复游戏显隐"))RestoreAll();Tip("不会删除任何已保存预设；重新启用控制后，可选择预设恢复方案。");
  if(Button("导入 1.0.2 配置"))Import102(s.directory/L"WorldDiff102.ini");
- ImGui::TextWrapped("配置：nativePC/plugins/WorldDiff/WorldDiff110.cfg。可分享的分组与预设文件在 WorldDiff/Presets/*.wdp，可改名或复制后用手动/自动查找载入。");
+ ImGui::TextWrapped("配置：nativePC/plugins/WorldDiff/WorldDiff115.cfg。可分享的分组与预设文件在 WorldDiff/Presets/*.wdp，可改名或复制后用手动/自动查找载入。");
  if(ImGui::Checkbox("换装后自动识别预设文件",&s.data.autoFind))Changed();
  ImGui::Separator();ImGui::TextColored(accent,"操作说明");ImGui::TextWrapped("普通分组独占成员，主列表不再管理已分组材质。全局分组可以与其他分组重叠，只叠加隐藏。每个分组保存独立预设和默认预设。列表支持拖动排序。");
  ImGui::TextWrapped("关闭面板后规则仍然生效。Ctrl+F9 可暂停全部控制；Esc 关闭面板。插件随 Stracker's Loader 加载，不需要连接或外置程序。");
@@ -228,11 +270,11 @@ void DrawPanel(){
  auto& s=app::Get();std::lock_guard lock(s.mutex);if(!s.loaded)return;
  std::set<std::string> scopes,active;DWORD now=GetTickCount();for(auto& m:s.models){scopes.insert(m.equip);if(s.lastSeen.count(m.relativePath)&&(DWORD)(now-s.lastSeen[m.relativePath])<1800)active.insert(m.equip);}
  if(outfit.empty()||(!active.empty()&&!active.count(outfit))){if(!active.empty())outfit=*active.begin();else if(!scopes.empty())outfit=*scopes.begin();}
- if(outfit.empty()){if(ImGui::Begin("差分管理器 · 世界版 1.1.4###WorldDiffInternal")){ImGui::TextUnformatted("插件已随游戏加载，正在等待角色装备进入绘制流程。");if(Button("关闭面板"))SetVisible(false);}ImGui::End();return;}
+ if(outfit.empty()){if(ImGui::Begin("差分管理器 · 世界版 1.1.5###WorldDiffInternal")){ImGui::TextUnformatted("插件已随游戏加载，正在等待角色装备进入绘制流程。");if(Button("关闭面板"))SetVisible(false);}ImGui::End();return;}
  if(!Find(groupId)||Find(groupId)->scope!=outfit){groupId=Main(outfit).id;creating=false;staged.clear();}
  auto& io=ImGui::GetIO();float scale=s.data.scale;ImGui::SetNextWindowSize(ImVec2(std::min(io.DisplaySize.x-S(60),S(1460)),std::min(io.DisplaySize.y-S(80),S(850))),ImGuiCond_FirstUseEver);ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x*.5f,io.DisplaySize.y*.5f),ImGuiCond_FirstUseEver,ImVec2(.5f,.5f));ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(S(1050),io.DisplaySize.x-30),std::min(S(620),io.DisplaySize.y-30)),ImVec2(io.DisplaySize.x,io.DisplaySize.y));
  ImGui::PushFont(nullptr,22*scale);bool open=true;ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(S(18),S(14)));
- if(ImGui::Begin("差分管理器 · 世界版 1.1.4###WorldDiffInternal",&open,ImGuiWindowFlags_NoCollapse)){
+ if(ImGui::Begin("差分管理器 · 世界版 1.1.5###WorldDiffInternal",&open,ImGuiWindowFlags_NoCollapse)){
   if(ImGui::BeginTable("装备与控制",2,ImGuiTableFlags_SizingStretchProp|ImGuiTableFlags_NoPadOuterX)){
   float controlsWidth=ImGui::GetFrameHeight()+ImGui::GetStyle().ItemInnerSpacing.x+ImGui::CalcTextSize("启用").x+ImGui::GetStyle().ItemSpacing.x+ImGui::CalcTextSize("暂停并恢复").x+ImGui::GetStyle().FramePadding.x*2;
   ImGui::TableSetupColumn("装备状态",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("控制",ImGuiTableColumnFlags_WidthFixed,controlsWidth);ImGui::TableNextColumn();

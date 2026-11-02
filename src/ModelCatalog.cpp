@@ -3,8 +3,6 @@
 #include <algorithm>
 #include <cstring>
 #include <fstream>
-#include <iomanip>
-#include <sstream>
 #include <system_error>
 #include <unordered_map>
 #include <utility>
@@ -187,9 +185,11 @@ void MatchMrl3(const fs::path& modPath, Model& model,
     }
     std::unordered_map<std::uint32_t, int> indices;
     indices.reserve(count);
+    model.materialOrder.clear();
     for (std::uint32_t i = 0; i < count; ++i) {
         const auto at = static_cast<std::size_t>(offset + static_cast<std::uint64_t>(i) * 56);
         const auto hash = U32(bytes, at + 4);
+        model.materialOrder.push_back(hash);
         if (!indices.emplace(hash, static_cast<int>(i)).second) {
             Diagnostic(diagnostics, path, "duplicate material hash " + std::to_string(hash));
         }
@@ -206,43 +206,6 @@ void MatchMrl3(const fs::path& modPath, Model& model,
                                          material.name);
         }
     }
-}
-
-void LoadMeshOrder(const fs::path& modPath, Model& model,
-                   std::vector<std::string>* diagnostics) {
-    auto path = modPath;
-    path.replace_extension(L".meshorder");
-    std::error_code ec;
-    if (!fs::exists(path, ec)) return;
-    auto reject = [&] { Diagnostic(diagnostics, path,
-        "invalid or stale mesh order; using MOD3 mesh-table order"); };
-    if (fs::file_size(path, ec) > 4 * 1024 * 1024 || ec) { reject(); return; }
-    std::ifstream input(path, std::ios::binary);
-    std::string tag;
-    unsigned version = 0;
-    std::uint64_t signature = 0;
-    if (!(input >> tag >> version) || tag != "WorldDiffMeshOrder" || version != 1 ||
-        !(input >> tag >> signature) || tag != "SIGNATURE" ||
-        signature != MeshOrderSignature(model)) { reject(); return; }
-    std::vector<std::uint32_t> order(model.meshes.size(), UINT32_MAX);
-    std::uint32_t rank = 0;
-    while (input >> tag) {
-        std::uint32_t index = 0;
-        std::string material, objectName;
-        if (tag != "MESH" || !(input >> index >> std::quoted(material) >> std::quoted(objectName)) ||
-            index >= model.meshes.size() || order[index] != UINT32_MAX ||
-            material.size() > 127 || objectName.empty() || objectName.size() > 255 ||
-            material != model.materials[model.meshes[index].materialId].name) {
-            reject(); return;
-        }
-        order[index] = rank++;
-    }
-    if (!input.eof() || rank != model.meshes.size()) { reject(); return; }
-    // Commit only after validating the whole table. An old/partial sidecar must
-    // never leave the model half reordered, or change any actual mesh indices.
-    for (std::size_t i = 0; i < model.meshes.size(); ++i)
-        model.meshes[i].displayOrder = order[i];
-    model.meshOrderLoaded = true;
 }
 
 bool IdentifyModel(const fs::path& path, const fs::path& nativePc, Model& model) {
@@ -295,6 +258,22 @@ std::uint64_t MeshOrderSignature(const Model& model) noexcept {
     return hash;
 }
 
+std::uint64_t MaterialListOrder(const Material& material, std::uint32_t materialId) noexcept {
+    return material.mrlIndex >= 0 ? static_cast<std::uint64_t>(material.mrlIndex)
+                                 : 0x100000000ull + materialId;
+}
+
+void LoadMaterialOrder(Model& model, const fs::path& gameRoot) {
+#if defined(__cpp_char8_t)
+    const fs::path relative(std::u8string(model.relativePath.begin(), model.relativePath.end()));
+#else
+    const auto relative = fs::u8path(model.relativePath);
+#endif
+    auto path = gameRoot / L"nativePC" / relative;
+    path.replace_extension(L".mod3");
+    MatchMrl3(path, model, nullptr);
+}
+
 std::vector<Model> LoadCatalog(const fs::path& gameRoot,
                                std::vector<std::string>* diagnostics) {
     std::vector<Model> models;
@@ -320,8 +299,8 @@ std::vector<Model> LoadCatalog(const fs::path& gameRoot,
                 if (IdentifyModel(path, nativePc, model)) {
                     std::string error;
                     if (ParseMod3(path, model, error)) {
+                        model.signature = MeshOrderSignature(model);
                         MatchMrl3(path, model, diagnostics);
-                        LoadMeshOrder(path, model, diagnostics);
                         models.push_back(std::move(model));
                     } else {
                         Diagnostic(diagnostics, path, error);

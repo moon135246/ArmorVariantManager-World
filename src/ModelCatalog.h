@@ -17,8 +17,6 @@ struct Material {
 
 struct Mesh {
     std::uint32_t index = 0; // Index in this MOD3's mesh table, not meshIndex at +0x2A.
-    // Optional Blender list position. Never used as the runtime/config mesh ID.
-    std::uint32_t displayOrder = UINT32_MAX;
     std::uint16_t groupId = 0;
     std::uint16_t materialId = 0;
     std::uint16_t vertexCount = 0;
@@ -37,15 +35,14 @@ struct Model {
     std::string part;
     std::vector<Material> materials; // Includes unused/compatibility material 0.
     std::vector<Mesh> meshes;
-    bool meshOrderLoaded = false;
+    std::uint64_t signature = 0;
+    std::vector<std::uint32_t> materialOrder; // MRL3 record hashes, in file order.
 };
 
-inline std::uint32_t MeshListOrder(const Mesh& mesh) noexcept {
-    return mesh.displayOrder == UINT32_MAX ? mesh.index : mesh.displayOrder;
-}
-
-// Identity of the material names and mesh table; shared with the Blender exporter.
+// Identity of the MOD3 material names and mesh table for saved layout metadata.
 std::uint64_t MeshOrderSignature(const Model& model) noexcept;
+std::uint64_t MaterialListOrder(const Material& material, std::uint32_t materialId) noexcept;
+void LoadMaterialOrder(Model& model, const std::filesystem::path& gameRoot);
 
 // Same as zlib.crc32(utf8Name) ^ 0xFFFFFFFF.
 std::uint32_t MaterialNameHash(std::string_view utf8Name) noexcept;
