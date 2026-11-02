@@ -105,6 +105,7 @@ LiveRow* FindRow(uintptr_t ctx,uintptr_t q){
 bool __fastcall Detour(uintptr_t ctx,uintptr_t b,uintptr_t q,uintptr_t d){
  bool visible=original(ctx,b,q,d);
  if(!shared||shared->ready!=1)return visible;
+ if(!IsLocalModelContext(ctx))return visible;
  LiveRow* r=FindRow(ctx,q);if(!r)return visible;
  InterlockedIncrement(&r->hits);InterlockedExchange(&r->lastTick,(LONG)GetTickCount());InterlockedExchange(&r->originalVisible,visible?1:0);
  if(r->hide&&shared->enabled&&(DWORD)(GetTickCount()-(DWORD)shared->heartbeat)<5000&&PathMatches((uintptr_t)r->resource,r->modelPath)){
@@ -132,7 +133,7 @@ DWORD WINAPI Start(void* arg){
  if(!visibilityHook->enable()){SetMessage("Visibility hook activation failed.",3);return 0;}
  wchar_t gameExe[32768];GetModuleFileNameW(nullptr,gameExe,32768);
  app::Initialize(shared,pluginDirectory,std::filesystem::path(gameExe).parent_path());
- SetMessage("WorldDiff 1.1.6 internal ready; F9 toggles the in-game panel.");InterlockedExchange(&shared->ready,1);
+ SetMessage("WorldDiff 1.1.7 internal ready; F9 toggles the in-game panel.");InterlockedExchange(&shared->ready,1);
  if(!overlay::Install())RuntimeLog("Overlay initialization failed; visibility controls remain available to diagnostics.");
  for(;;){app::Tick();overlay::WorkerTick();Sleep(100);}
 }

@@ -17,7 +17,7 @@ inline const Entry* Find(std::string_view id){
 }
 inline int Gender(const std::string& scope){
  auto& s=Get();bool female=false,male=false;int recent=0;DWORD bestAge=1800,now=GetTickCount();
- for(auto& model:s.models)if(model.equip==scope){
+ for(auto& model:s.models)if(model.equip==scope&&IsCurrentModel(model.relativePath)){
   auto path=Normalize(model.relativePath);int sex=path.find("f_equip\\")!=std::string::npos?1:path.find("m_equip\\")!=std::string::npos?2:0;
   female|=sex==1;male|=sex==2;auto seen=s.lastSeen.find(path);
   if(sex&&seen!=s.lastSeen.end()){DWORD age=now-seen->second;if(age<bestAge){bestAge=age;recent=sex;}}

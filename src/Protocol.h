@@ -4,7 +4,10 @@
 #endif
 #include <windows.h>
 #include <cstdint>
+#include <atomic>
 namespace worlddiff {
+inline std::atomic<uintptr_t> localModelContexts[5]{};
+inline bool IsLocalModelContext(uintptr_t ctx){for(auto& value:localModelContexts)if(ctx&&value.load(std::memory_order_relaxed)==ctx)return true;return false;}
 constexpr uint32_t kMagic=0x34304457,kVersion=104,kMaxRows=8192;
 constexpr wchar_t kMappingPrefix[]=L"Local\\WorldDiff104_";
 struct alignas(8) LiveRow {

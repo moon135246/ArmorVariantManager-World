@@ -32,6 +32,16 @@ struct Document {
  std::map<std::string,TransformMode> transformModes;
  std::map<Target,MeshDisplay> meshDisplay;
 };
+struct OutfitSnapshot {
+ uintptr_t entity=0;
+ std::array<uintptr_t,5> contexts{},resources{};
+ std::array<std::string,5> paths{}; // helm, body, arm, waist, legs
+ bool ready=false;
+};
+using MemoryReader=bool(*)(uintptr_t,void*,size_t);
+OutfitSnapshot InspectPlayerOutfit(uintptr_t entity,MemoryReader);
+OutfitSnapshot ReadPlayerOutfit();
+bool ReadRuntimeModel(uintptr_t resource,const std::string& path,Model&);
 struct State {
  std::recursive_mutex mutex;Document data;std::vector<Model> models;
  std::map<std::string,DWORD> lastSeen;std::filesystem::path directory,gameRoot,configPath;
@@ -40,6 +50,11 @@ struct State {
  std::map<std::string,std::string> loadedFingerprints;
  std::map<std::string,std::string> profileSnapshots;
  bool migrating=false;
+ bool trackingPlayer=false,storageReady=true,outfitChanging=false;
+ OutfitSnapshot outfit,pendingOutfit;DWORD outfitSince=0;
+ std::set<std::string> loadedScopes,blockedScopes,backedUpScopes;
+ std::map<std::string,std::string> profileStatus;
+ std::map<std::string,uintptr_t> modelResources;
  TransformRuntime transform;
 };
 State& Get();
@@ -75,6 +90,7 @@ void Restore(Group&);void RestoreAll();
 void Import102(const std::filesystem::path&);
 struct ProfileCandidate {
  std::string file,name;size_t hits=0,total=0,parts=0;bool filenameMatch=false,backup=false;
+ bool strong=false;double coverage=0;
 };
 std::vector<ProfileCandidate> FindProfiles(const std::string& scope);
 bool AutoFindProfile(const std::string& scope,bool automatic=false);
@@ -86,6 +102,16 @@ void InitializeProfiles();
 std::string ProfilePart(const std::string& model);
 std::string Utf8(const std::wstring&);
 std::filesystem::path PathUtf8(const std::string&);
-void WriteDocument(std::ostream&,const Document&);
+void WriteDocument(std::ostream&,const Document&,bool equipment=false);
 bool ReadDocument(std::istream&,Document&);
+bool SaveSettings();bool LoadSettings();bool MigrateStorage();
+bool SaveEquipmentProfiles();
+bool LoadEquipmentProfile(const std::string& scope);
+bool RebindEquipmentProfile(const std::string& scope);
+bool ReloadEquipmentProfile(const std::string& scope);
+bool RestoreProfileBackup(const std::string& scope,const std::string& name);
+std::vector<std::string> ProfileBackups(const std::string& scope);
+void FollowPlayerOutfit(const OutfitSnapshot& snapshot);
+bool IsCurrentModel(const std::string& path);
+bool CanEditScope(const std::string& scope);
 }
