@@ -19,6 +19,38 @@ int PartIndex(const std::string& p){if(p=="helm")return 0;if(p=="body")return 1;
 const char* PartName(int p){const char* names[]={"头部","身体","手臂","腰部","腿部","其他"};return names[std::clamp(p,0,5)];}
 void Tip(const char* text){if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("%s",text);}
 bool Button(const char* text,float width=0){return ImGui::Button(text,ImVec2(width>0?S(width):0,S(30)));}
+bool ListRow(const char* label,bool selected){
+ // Let Selectable own layout, navigation and drag/drop. Draw the rounded row
+ // inside its spacing-expanded item rectangle, with text centered in that row.
+ const float height=S(42),inset=S(2),gap=S(6),radius=S(8);
+ float width=std::max(1.f,ImGui::GetContentRegionAvail().x);
+ ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,ImVec2(0,gap));
+ ImGui::PushStyleColor(ImGuiCol_Header,ImVec4(0,0,0,0));
+ ImGui::PushStyleColor(ImGuiCol_HeaderHovered,ImVec4(0,0,0,0));
+ ImGui::PushStyleColor(ImGuiCol_HeaderActive,ImVec4(0,0,0,0));
+ bool pressed=ImGui::Selectable("##ListRow",selected,0,ImVec2(width,height));
+ ImGui::PopStyleColor(3);ImGui::PopStyleVar();
+ if(ImGui::IsItemVisible()){
+  auto min=ImGui::GetItemRectMin(),max=ImGui::GetItemRectMax();
+  min.x+=inset;max.x-=inset;min.y+=gap*.5f;max.y-=gap*.5f;
+  bool hovered=ImGui::IsItemHovered(),active=selected||pressed;
+  auto* draw=ImGui::GetWindowDrawList();
+  if(active){
+   draw->AddRectFilled(min,max,IM_COL32(28,65,76,245),radius);
+   draw->AddRect(min,max,IM_COL32(75,208,220,30),radius,S(4));
+   draw->AddRect(min,max,IM_COL32(82,216,227,hovered?175:120),radius,S(1));
+   draw->AddRect(ImVec2(min.x+S(2),min.y+S(2)),ImVec2(max.x-S(2),max.y-S(2)),IM_COL32(92,223,232,22),S(6),S(1));
+   draw->AddRectFilled(ImVec2(min.x+S(1),min.y+S(2)),ImVec2(min.x+S(7),max.y-S(2)),IM_COL32(82,226,236,255),S(3));
+  }else if(hovered)draw->AddRectFilled(min,max,IM_COL32(38,64,76,160),radius);
+  if(ImGui::IsItemFocused())draw->AddRect(min,max,IM_COL32(133,235,242,200),radius,S(1));
+  ImVec2 textMin(min.x+S(14),min.y),textMax(max.x-S(10),max.y);
+  draw->PushClipRect(textMin,textMax,true);
+  draw->AddText(ImVec2(textMin.x,min.y+(max.y-min.y-ImGui::GetFontSize())*.5f),ImGui::GetColorU32(ImGuiCol_Text),label);
+  draw->PopClipRect();
+  if(hovered&&ImGui::CalcTextSize(label).x>textMax.x-textMin.x)ImGui::SetTooltip("%s",label);
+ }
+ return pressed;
+}
 void DragGroup(Group& g){
  if(g.main||g.global)return;
  if(ImGui::BeginDragDropSource()){ImGui::SetDragDropPayload("WD_GROUP",&g.id,sizeof(g.id));ImGui::TextUnformatted(g.name.c_str());ImGui::EndDragDropSource();}
@@ -29,7 +61,7 @@ void GroupsPane(float width,float height){
  ImGui::TextColored(muted,"分组");ImGui::Separator();
  ImGui::BeginChild("分组列表",ImVec2(0,-S(206)));
  for(auto& g:s.data.groups){if(g.scope!=outfit)continue;ImGui::PushID((int)g.id);std::string label=(g.main?"主列表":g.global?"[全局] "+g.name:g.name);
-  if(ImGui::Selectable(label.c_str(),groupId==g.id,0,ImVec2(0,S(34)))){groupId=g.id;creating=false;editingMembers=0;staged.clear();}
+  if(ListRow(label.c_str(),groupId==g.id)){groupId=g.id;creating=false;editingMembers=0;staged.clear();}
   DragGroup(g);ImGui::PopID();
  }ImGui::EndChild();
  ImGui::Separator();auto* g=Find(groupId);
@@ -58,7 +90,7 @@ void PresetsPane(float width,float height){
  auto& s=Get();auto* g=Find(groupId);ImGui::BeginChild("预设面板",ImVec2(width,height),ImGuiChildFlags_Borders);ImGui::TextColored(muted,"%s · 预设",g?g->name.c_str():"主列表");ImGui::Separator();
  ImGui::BeginChild("预设列表",ImVec2(0,-S(249)));
  if(g)for(size_t i=0;i<g->presets.size();i++){auto& p=g->presets[i];ImGui::PushID((int)p.id);auto label=p.name+(g->defaultPreset==p.id?"  [默认]":"");
-  if(ImGui::Selectable(label.c_str(),g->selected==p.id,0,ImVec2(0,S(34))))ApplyPreset(*g,p.id);
+  if(ListRow(label.c_str(),g->selected==p.id))ApplyPreset(*g,p.id);
   if(ImGui::BeginDragDropSource()){ImGui::SetDragDropPayload("WD_PRESET",&p.id,sizeof(p.id));ImGui::TextUnformatted(p.name.c_str());ImGui::EndDragDropSource();}
   if(ImGui::BeginDragDropTarget()){if(auto* payload=ImGui::AcceptDragDropPayload("WD_PRESET")){auto id=*(const uint64_t*)payload->Data;auto it=std::find_if(g->presets.begin(),g->presets.end(),[&](auto& a){return a.id==id;});if(it!=g->presets.end()){std::iter_swap(it,g->presets.begin()+i);Changed();}}ImGui::EndDragDropTarget();}ImGui::PopID();
  }
@@ -127,12 +159,12 @@ void DrawPanel(){
  auto& s=app::Get();std::lock_guard lock(s.mutex);if(!s.loaded)return;
  std::set<std::string> scopes,active;DWORD now=GetTickCount();for(auto& m:s.models){scopes.insert(m.equip);if(s.lastSeen.count(m.relativePath)&&(DWORD)(now-s.lastSeen[m.relativePath])<1800)active.insert(m.equip);}
  if(outfit.empty()||(!active.empty()&&!active.count(outfit))){if(!active.empty())outfit=*active.begin();else if(!scopes.empty())outfit=*scopes.begin();}
- if(outfit.empty()){if(ImGui::Begin("差分管理器 · 世界版 1.0.4###WorldDiffInternal")){ImGui::TextUnformatted("插件已随游戏加载，正在等待角色装备进入绘制流程。");if(Button("关闭面板"))SetVisible(false);}ImGui::End();return;}
+ if(outfit.empty()){if(ImGui::Begin("差分管理器 · 世界版 1.0.5###WorldDiffInternal")){ImGui::TextUnformatted("插件已随游戏加载，正在等待角色装备进入绘制流程。");if(Button("关闭面板"))SetVisible(false);}ImGui::End();return;}
  if(!Find(groupId)||Find(groupId)->scope!=outfit){groupId=Main(outfit).id;creating=false;staged.clear();}
  auto& io=ImGui::GetIO();float scale=s.data.scale;ImGui::SetNextWindowSize(ImVec2(std::min(io.DisplaySize.x-S(60),S(1460)),std::min(io.DisplaySize.y-S(80),S(850))),ImGuiCond_FirstUseEver);ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x*.5f,io.DisplaySize.y*.5f),ImGuiCond_FirstUseEver,ImVec2(.5f,.5f));ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(S(1050),io.DisplaySize.x-30),std::min(S(620),io.DisplaySize.y-30)),ImVec2(io.DisplaySize.x,io.DisplaySize.y));
  ImGui::PushFont(nullptr,22*scale);bool open=true;ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(S(18),S(14)));
- if(ImGui::Begin("差分管理器 · 世界版 1.0.4###WorldDiffInternal",&open,ImGuiWindowFlags_NoCollapse)){
-  ImGui::TextColored(accent,"差分管理器");ImGui::SameLine();ImGui::TextDisabled("世界版  1.0.4");ImGui::SameLine();ImGui::TextDisabled("| 游戏内置");
+ if(ImGui::Begin("差分管理器 · 世界版 1.0.5###WorldDiffInternal",&open,ImGuiWindowFlags_NoCollapse)){
+  ImGui::TextColored(accent,"差分管理器");ImGui::SameLine();ImGui::TextDisabled("世界版  1.0.5");ImGui::SameLine();ImGui::TextDisabled("| 游戏内置");
   ImGui::SameLine(ImGui::GetWindowWidth()-S(350));if(ImGui::Checkbox("启用",&s.data.enabled))Changed();ImGui::SameLine();if(Button("暂停并恢复"))RestoreAll();
   ImGui::SetNextItemWidth(S(225));if(ImGui::BeginCombo("装备",outfit.empty()?"等待装备加载":outfit.c_str())){for(auto& scope:scopes){auto label=scope+(active.count(scope)?" · 已加载":"");if(ImGui::Selectable(label.c_str(),outfit==scope)){outfit=scope;groupId=Main(outfit).id;creating=false;staged.clear();}}ImGui::EndCombo();}
   ImGui::SameLine();ImGui::TextColored(muted,"%s",s.data.enabled?"显隐控制运行中":"已暂停 · 全部跟随游戏");ImGui::Separator();
