@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cstring>
 #include <fstream>
+#include <iomanip>
+#include <sstream>
 #include <system_error>
 #include <unordered_map>
 #include <utility>
@@ -206,6 +208,43 @@ void MatchMrl3(const fs::path& modPath, Model& model,
     }
 }
 
+void LoadMeshOrder(const fs::path& modPath, Model& model,
+                   std::vector<std::string>* diagnostics) {
+    auto path = modPath;
+    path.replace_extension(L".meshorder");
+    std::error_code ec;
+    if (!fs::exists(path, ec)) return;
+    auto reject = [&] { Diagnostic(diagnostics, path,
+        "invalid or stale mesh order; using MOD3 mesh-table order"); };
+    if (fs::file_size(path, ec) > 4 * 1024 * 1024 || ec) { reject(); return; }
+    std::ifstream input(path, std::ios::binary);
+    std::string tag;
+    unsigned version = 0;
+    std::uint64_t signature = 0;
+    if (!(input >> tag >> version) || tag != "WorldDiffMeshOrder" || version != 1 ||
+        !(input >> tag >> signature) || tag != "SIGNATURE" ||
+        signature != MeshOrderSignature(model)) { reject(); return; }
+    std::vector<std::uint32_t> order(model.meshes.size(), UINT32_MAX);
+    std::uint32_t rank = 0;
+    while (input >> tag) {
+        std::uint32_t index = 0;
+        std::string material, objectName;
+        if (tag != "MESH" || !(input >> index >> std::quoted(material) >> std::quoted(objectName)) ||
+            index >= model.meshes.size() || order[index] != UINT32_MAX ||
+            material.size() > 127 || objectName.empty() || objectName.size() > 255 ||
+            material != model.materials[model.meshes[index].materialId].name) {
+            reject(); return;
+        }
+        order[index] = rank++;
+    }
+    if (!input.eof() || rank != model.meshes.size()) { reject(); return; }
+    // Commit only after validating the whole table. An old/partial sidecar must
+    // never leave the model half reordered, or change any actual mesh indices.
+    for (std::size_t i = 0; i < model.meshes.size(); ++i)
+        model.meshes[i].displayOrder = order[i];
+    model.meshOrderLoaded = true;
+}
+
 bool IdentifyModel(const fs::path& path, const fs::path& nativePc, Model& model) {
     const auto relative = path.lexically_relative(nativePc);
     std::vector<std::string> components;
@@ -244,6 +283,18 @@ std::uint32_t MaterialNameHash(std::string_view utf8Name) noexcept {
     return crc;
 }
 
+std::uint64_t MeshOrderSignature(const Model& model) noexcept {
+    std::uint64_t hash = 14695981039346656037ull;
+    auto add = [&](std::uint8_t byte) { hash = (hash ^ byte) * 1099511628211ull; };
+    for (const auto& material : model.materials) {
+        for (const unsigned char byte : material.name) add(byte);
+        add(0);
+    }
+    for (const auto& mesh : model.meshes)
+        for (const auto byte : mesh.raw) add(byte);
+    return hash;
+}
+
 std::vector<Model> LoadCatalog(const fs::path& gameRoot,
                                std::vector<std::string>* diagnostics) {
     std::vector<Model> models;
@@ -270,6 +321,7 @@ std::vector<Model> LoadCatalog(const fs::path& gameRoot,
                     std::string error;
                     if (ParseMod3(path, model, error)) {
                         MatchMrl3(path, model, diagnostics);
+                        LoadMeshOrder(path, model, diagnostics);
                         models.push_back(std::move(model));
                     } else {
                         Diagnostic(diagnostics, path, error);

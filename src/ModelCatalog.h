@@ -17,6 +17,8 @@ struct Material {
 
 struct Mesh {
     std::uint32_t index = 0; // Index in this MOD3's mesh table, not meshIndex at +0x2A.
+    // Optional Blender list position. Never used as the runtime/config mesh ID.
+    std::uint32_t displayOrder = UINT32_MAX;
     std::uint16_t groupId = 0;
     std::uint16_t materialId = 0;
     std::uint16_t vertexCount = 0;
@@ -35,7 +37,15 @@ struct Model {
     std::string part;
     std::vector<Material> materials; // Includes unused/compatibility material 0.
     std::vector<Mesh> meshes;
+    bool meshOrderLoaded = false;
 };
+
+inline std::uint32_t MeshListOrder(const Mesh& mesh) noexcept {
+    return mesh.displayOrder == UINT32_MAX ? mesh.index : mesh.displayOrder;
+}
+
+// Identity of the material names and mesh table; shared with the Blender exporter.
+std::uint64_t MeshOrderSignature(const Model& model) noexcept;
 
 // Same as zlib.crc32(utf8Name) ^ 0xFFFFFFFF.
 std::uint32_t MaterialNameHash(std::string_view utf8Name) noexcept;
