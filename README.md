@@ -1,9 +1,6 @@
 # 怪物猎人：世界／冰原 - 差分管理器
 
-**ArmorVariantManager-World · 当前版本 1.2.2**  
-作者：**明月别枝(moon)**
-
-在游戏内管理防具 MOD 的外观差分，将多个部位的显示／隐藏保存成预设，再通过分组、变身条件或快捷键切换搭配。
+这是一个针对在游戏内管理防具 MOD 的外观差分，将多个部位的显示／隐藏保存成预设，再通过分组、变身条件或快捷键切换搭配的工具。
 
 世界版沿用 ArmorVariantManager 系列名称，针对 MT Framework 独立实现原生 DLL 后端。荒野／崛起版见 [ArmorVariantManager](https://github.com/Monkeysama/ArmorVariantManager)；变身条件参考项目见下方致谢。
 
@@ -74,7 +71,7 @@
 
 ## 致谢
 
-- [Mi1ice / MHWI-VisualControllerExtended](https://github.com/Mi1ice/MHWI-VisualControllerExtended)：世界版的部分变身条件代码、角色状态读取和条件判断参考了该项目，感谢作者的实现与分享。世界版在此基础上实现自己的状态快照、分组预设接管和实例显隐逻辑；相关原始许可证及署名已保留。
+- [Mi1ice / MHWI-VisualControllerExtended](https://github.com/Mi1ice/MHWI-VisualControllerExtended)：本项目的部分变身条件代码、角色状态读取和条件判断参考了该项目，特此感谢。
 - [Monkeysama / ArmorVariantManager](https://github.com/Monkeysama/ArmorVariantManager)：荒野／崛起版的系列项目，为世界版的分组、预设及交互设计提供参考。
 - Dear ImGui、SafetyHook、Zydis／Zycore，以及其他状态布局和兼容性资料的提供者；完整来源与许可见 [第三方署名](THIRD_PARTY_NOTICES.md)。
 
