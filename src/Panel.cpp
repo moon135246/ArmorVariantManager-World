@@ -50,11 +50,14 @@ void DragHint(){
  constexpr const char* message="提示：可拖动左侧的【分组列表】和【预设列表】调整顺序。";
  // Reserve every visual with a normal item; drawing never moves the layout cursor.
  const float padding=S(12),gap=S(10),iconWidth=S(26),closeWidth=S(26);
- float wrapWidth=std::max(1.f,ImGui::GetContentRegionAvail().x-padding*2-iconWidth-closeWidth-gap*2);
+ float available=ImGui::GetContentRegionAvail().x,chrome=padding*2+iconWidth+closeWidth+gap*2;
+ float width=std::min(available,ImGui::CalcTextSize(message).x+chrome+S(2));
+ float wrapWidth=std::max(1.f,width-chrome);
  auto textSize=ImGui::CalcTextSize(message,nullptr,false,wrapWidth);float contentHeight=std::max(S(28),textSize.y);
+ if(available>width){ImGui::Dummy(ImVec2(available-width,0));ImGui::SameLine(0,0);}
  ImGui::PushStyleColor(ImGuiCol_ChildBg,ImVec4(.025f,.10f,.15f,.95f));ImGui::PushStyleColor(ImGuiCol_Border,ImVec4(.13f,.59f,.70f,.95f));
  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(padding,S(9)));ImGui::PushStyleVar(ImGuiStyleVar_CellPadding,ImVec2(gap*.5f,0));ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,S(8));
- ImGui::BeginChild("拖动提示",ImVec2(0,contentHeight+S(18)),ImGuiChildFlags_Borders,FixedPane);
+ ImGui::BeginChild("拖动提示",ImVec2(width,contentHeight+S(18)),ImGuiChildFlags_Borders,FixedPane);
  if(ImGui::BeginTable("提示内容",3,ImGuiTableFlags_SizingStretchProp|ImGuiTableFlags_NoPadOuterX)){
   ImGui::TableSetupColumn("信息",ImGuiTableColumnFlags_WidthFixed,iconWidth);ImGui::TableSetupColumn("内容",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("关闭",ImGuiTableColumnFlags_WidthFixed,closeWidth);ImGui::TableNextColumn();
   ImGui::Dummy(ImVec2(iconWidth,contentHeight));auto p=ImGui::GetItemRectMin();auto* draw=ImGui::GetWindowDrawList();ImVec2 center(p.x+iconWidth*.5f,p.y+contentHeight*.5f);auto ink=IM_COL32(160,218,242,255),dark=IM_COL32(8,37,52,255);
@@ -217,11 +220,11 @@ void DrawPanel(){
  auto& s=app::Get();std::lock_guard lock(s.mutex);if(!s.loaded)return;
  std::set<std::string> scopes,active;DWORD now=GetTickCount();for(auto& m:s.models){scopes.insert(m.equip);if(s.lastSeen.count(m.relativePath)&&(DWORD)(now-s.lastSeen[m.relativePath])<1800)active.insert(m.equip);}
  if(outfit.empty()||(!active.empty()&&!active.count(outfit))){if(!active.empty())outfit=*active.begin();else if(!scopes.empty())outfit=*scopes.begin();}
- if(outfit.empty()){if(ImGui::Begin("差分管理器 · 世界版 1.1.1###WorldDiffInternal")){ImGui::TextUnformatted("插件已随游戏加载，正在等待角色装备进入绘制流程。");if(Button("关闭面板"))SetVisible(false);}ImGui::End();return;}
+ if(outfit.empty()){if(ImGui::Begin("差分管理器 · 世界版 1.1.2###WorldDiffInternal")){ImGui::TextUnformatted("插件已随游戏加载，正在等待角色装备进入绘制流程。");if(Button("关闭面板"))SetVisible(false);}ImGui::End();return;}
  if(!Find(groupId)||Find(groupId)->scope!=outfit){groupId=Main(outfit).id;creating=false;staged.clear();}
  auto& io=ImGui::GetIO();float scale=s.data.scale;ImGui::SetNextWindowSize(ImVec2(std::min(io.DisplaySize.x-S(60),S(1460)),std::min(io.DisplaySize.y-S(80),S(850))),ImGuiCond_FirstUseEver);ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x*.5f,io.DisplaySize.y*.5f),ImGuiCond_FirstUseEver,ImVec2(.5f,.5f));ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(S(1050),io.DisplaySize.x-30),std::min(S(620),io.DisplaySize.y-30)),ImVec2(io.DisplaySize.x,io.DisplaySize.y));
  ImGui::PushFont(nullptr,22*scale);bool open=true;ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(S(18),S(14)));
- if(ImGui::Begin("差分管理器 · 世界版 1.1.1###WorldDiffInternal",&open,ImGuiWindowFlags_NoCollapse)){
+ if(ImGui::Begin("差分管理器 · 世界版 1.1.2###WorldDiffInternal",&open,ImGuiWindowFlags_NoCollapse)){
   if(ImGui::BeginTable("装备与控制",2,ImGuiTableFlags_SizingStretchProp|ImGuiTableFlags_NoPadOuterX)){
   float controlsWidth=ImGui::GetFrameHeight()+ImGui::GetStyle().ItemInnerSpacing.x+ImGui::CalcTextSize("启用").x+ImGui::GetStyle().ItemSpacing.x+ImGui::CalcTextSize("暂停并恢复").x+ImGui::GetStyle().FramePadding.x*2;
   ImGui::TableSetupColumn("装备状态",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("控制",ImGuiTableColumnFlags_WidthFixed,controlsWidth);ImGui::TableNextColumn();
