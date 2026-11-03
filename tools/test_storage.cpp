@@ -30,7 +30,17 @@ struct LiveFixture {
 static bool Memory(uintptr_t p,void* out,size_t n){SIZE_T got=0;return ReadProcessMemory(GetCurrentProcess(),(void*)p,out,n,&got)&&got==n;}
 static void Follow(const OutfitSnapshot& snapshot){FollowPlayerOutfit(snapshot);Get().outfitSince=GetTickCount()-400;FollowPlayerOutfit(snapshot);}
 int main(int argc,char** argv){try{
- unsigned checks=0;auto check=[&](bool good,const char* why){++checks;if(!good)throw std::runtime_error(why);};auto root=fs::temp_directory_path()/(L"WorldDiff117Storage_"+std::to_wstring(GetTickCount64()));Reset(root/L"normal");auto& s=Get();auto a=MakeModel("pl105_0000"),b=MakeModel("pl106_0000");s.models={a,b};auto gid=Configure(a);auto preset=Find(gid)->selected;
+ unsigned checks=0;auto check=[&](bool good,const char* why){++checks;if(!good)throw std::runtime_error(why);};auto root=fs::temp_directory_path()/(L"WorldDiff117Storage_"+std::to_wstring(GetTickCount64()));auto& s=Get();
+ auto plugins=root/L"game/nativePC/plugins";
+ Initialize(nullptr,plugins,root/L"game");
+ check(s.storageReady&&fs::is_regular_file(s.configPath),"first startup creates Settings.cfg");
+ s.data.theme=UiTheme::ClassicBlack;
+ check(SaveSettings(),"custom settings saved before upgrade");
+ const auto saved=Read(s.configPath);
+ Reset(root/L"reset");
+ Initialize(nullptr,plugins,root/L"game");
+ check(s.storageReady&&s.data.theme==UiTheme::ClassicBlack&&Read(s.configPath)==saved,"startup reuses existing settings byte for byte");
+ Reset(root/L"normal");auto a=MakeModel("pl105_0000"),b=MakeModel("pl106_0000");s.models={a,b};auto gid=Configure(a);auto preset=Find(gid)->selected;
  check(Save(),"first canonical save succeeds");auto canonical=s.directory/L"Presets/pl105_0000.wdp";auto settings=Read(s.configPath);auto content=Read(canonical);
  check(settings.find("WorldDiffSettings 123")==0&&settings.find("GROUP")==std::string::npos&&settings.find("MESH")==std::string::npos&&settings.find("BINDING")==std::string::npos,"settings contain no equipment data");
  check(s.data.theme==UiTheme::ClassicWhite,"new configuration defaults to classic white");

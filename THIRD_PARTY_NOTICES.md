@@ -62,3 +62,9 @@ notices for WeaponSoundEnhance's MIT attribution and upstream source revisions.
 
 简体中文防具系列名称读取自用户运行的 Monster Hunter: World（build 421810）。模型编号清单由用户提供；模型与系列 ID 的关系参照本机“怪物猎人世界数据表15.10.00简中_by冰块&Jodo.xlsx”的防具表，并与当前游戏系列文本对应。Monster Hunter 与装备名称属于各自权利人。
 
+## Noto Sans SC
+
+WorldDiff embeds the unmodified Regular and Bold fonts from Noto Sans SC 2.004.
+Copyright © 2014–2021 Adobe (http://www.adobe.com/). Distributed under the SIL Open Font License 1.1.
+Source: https://github.com/notofonts/noto-cjk/tree/523d033d6cb47f4a80c58a35753646f5c3608a78/Sans/SubsetOTF/SC
+License: `licenses/NotoSansSC-OFL.txt`.

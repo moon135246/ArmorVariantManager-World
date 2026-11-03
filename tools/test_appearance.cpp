@@ -1,6 +1,7 @@
 #include "../src/Panel.cpp"
 #include "../src/NativeInput.cpp"
 #include "save_imgui_frame.inl"
+#include "../src/EmbeddedFonts.h"
 #include <iostream>
 #include <stdexcept>
 namespace worlddiff {void RuntimeLog(const char*,...){} }
@@ -9,7 +10,7 @@ using namespace worlddiff;using namespace worlddiff::app;namespace ui=worlddiff:
 int main(int argc,char** argv){try{
  unsigned checks=0;auto check=[&](bool good,const char* reason){checks++;if(!good)throw std::runtime_error(reason);};
  auto pump=[](){MSG message;while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)){TranslateMessage(&message);DispatchMessageW(&message);}};
- ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={900,500};io.DeltaTime=1.f/60;io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/msyh.ttc",22,nullptr,io.Fonts->GetGlyphRangesChineseSimplifiedCommon());unsigned char* pixels;int width,height;io.Fonts->GetTexDataAsRGBA32(&pixels,&width,&height);
+ ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={900,500};io.DeltaTime=1.f/60;if(!worlddiff::fonts::LoadPanelFonts(*io.Fonts,io.Fonts->GetGlyphRangesChineseSimplifiedCommon()))return 1;unsigned char* pixels;int width,height;io.Fonts->GetTexDataAsRGBA32(&pixels,&width,&height);
  auto& style=ImGui::GetStyle();style.WindowRounding=12;style.FrameRounding=6;style.FramePadding={9,6};style.ItemSpacing={10,8};style.Colors[ImGuiCol_WindowBg]={.122f,.149f,.188f,1};style.Colors[ImGuiCol_FrameBg]={.145f,.18f,.227f,1};style.Colors[ImGuiCol_CheckMark]={.33f,.72f,.78f,1};
  Model m;m.equip="pl105_0000";m.relativePath="pl\\f_equip\\pl105_0000\\body\\mod\\f_body105_0000";Target target{m.relativePath,0,true};ImRect row,checkbox,field;ImGuiID fieldId=0;char text[192]{};
  auto draw=[&](bool mesh){ImGui::NewFrame();ImGui::SetNextWindowPos({20,20});ImGui::SetNextWindowSize({600,260});ImGui::Begin("外观检查###Appearance",nullptr,ImGuiWindowFlags_NoSavedSettings);ImGui::PushFont(nullptr,22*Get().data.scale);ui::NativeInputBeginFrame();
@@ -43,6 +44,12 @@ int main(int argc,char** argv){try{
   HRGN region=CreateRectRgn(0,0,0,0);check(GetWindowRgn(ui::host,region)!=ERROR,"native surface has a window clipping region");check(!PtInRegion(region,0,0)&&PtInRegion(region,(bounds.right-bounds.left)/2,(bounds.bottom-bounds.top)/2),"active native surface clips the corners while preserving its center");DeleteObject(region);
   check(!IsWindowVisible(ui::host),"native test does not show or focus an interactive popup");
  }
+ HDC editDC=GetDC(ui::edit);auto oldFont=SelectObject(editDC,ui::font);
+ wchar_t family[LF_FACESIZE]{};GetTextFaceW(editDC,LF_FACESIZE,family);
+ WORD glyphs[3]{};DWORD found=GetGlyphIndicesW(editDC,L"猎龍霞",3,glyphs,GGI_MARK_NONEXISTING_GLYPHS);
+ check(wcscmp(family,fonts::Family)==0,"native editor selected embedded Noto Sans SC");
+ check(found==3&&glyphs[0]!=0xffff&&glyphs[1]!=0xffff&&glyphs[2]!=0xffff,"embedded native font covers Chinese input");
+ SelectObject(editDC,oldFont);ReleaseDC(ui::edit,editDC);
  Get().data.scale=1;draw(false);SendMessageW(ui::host,ui::kUpdate,0,0);exportFrame("input_active");
  check(std::string(text)=="圆角中文输入","Unicode native value reaches the real TextField buffer");SetWindowTextW(ui::edit,L"提交的中文名称");SendMessageW(ui::edit,WM_KEYDOWN,VK_RETURN,0);draw(false);check(std::string(text)=="提交的中文名称"&&!ui::shown,"Enter commits Unicode text and closes the native session");
  SendMessageW(ui::host,ui::kUpdate,0,0);check(!ui::shown&&!IsWindowVisible(ui::host),"queued geometry cannot reopen a committed input");

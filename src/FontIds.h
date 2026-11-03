@@ -1,0 +1,4 @@
+#pragma once
+
+#define WORLDDIFF_FONT_REGULAR 201
+#define WORLDDIFF_FONT_BOLD 202

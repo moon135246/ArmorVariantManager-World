@@ -36,6 +36,7 @@ void ExportFrame(const std::filesystem::path& folder){
   for(int n=0;n<list->CmdBuffer.Size;n++){if(n)output<<',';auto& c=list->CmdBuffer[n];output<<'['<<c.ElemCount<<','<<c.IdxOffset<<','<<c.VtxOffset<<','<<c.ClipRect.x<<','<<c.ClipRect.y<<','<<c.ClipRect.z<<','<<c.ClipRect.w<<']';}output<<"]}";
  }output<<"]}";
 }
+#include "../src/EmbeddedFonts.h"
 int main(int argc,char** argv){try{
  using namespace worlddiff;using namespace worlddiff::app;namespace ui=worlddiff::overlay;
  unsigned checks=0;auto check=[&](bool good,const char* reason){++checks;if(!good)throw std::runtime_error(reason);};
@@ -50,7 +51,7 @@ int main(int argc,char** argv){try{
  check(!MoveGroupBefore(mainId,globalId),"main list pinned");check(!MoveGroupBefore(globalId,foreignId),"groups cannot cross equipment scopes");
  check(MoveGroupBefore(globalId,groupIds[0]),"global group participates in insertion");check(groupOrder().front()==globalId,"global group moved before ordinary group");check(Find(globalId)->global,"global flag retained");
  MoveGroupBefore(globalId);check(groupOrder()==groupIds,"global group can return to last position");check(Find(foreignId)->scope=="pl106_0000","unrelated equipment preserved");
- ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DeltaTime=1.f/60;io.DisplaySize={760,850};io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/msyh.ttc",22,nullptr,io.Fonts->GetGlyphRangesChineseSimplifiedCommon());unsigned char* pixels;int fontWidth,fontHeight;io.Fonts->GetTexDataAsRGBA32(&pixels,&fontWidth,&fontHeight);
+ ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DeltaTime=1.f/60;io.DisplaySize={760,850};if(!worlddiff::fonts::LoadPanelFonts(*io.Fonts,io.Fonts->GetGlyphRangesChineseSimplifiedCommon()))return 1;unsigned char* pixels;int fontWidth,fontHeight;io.Fonts->GetTexDataAsRGBA32(&pixels,&fontWidth,&fontHeight);
  auto& style=ImGui::GetStyle();style.WindowPadding={18,14};style.FramePadding={9,6};style.ItemSpacing={10,8};style.WindowRounding=12;style.ChildRounding=8;style.FrameRounding=6;style.ScrollbarSize=14;
  style.Colors[ImGuiCol_WindowBg]={.078f,.094f,.125f,1};style.Colors[ImGuiCol_ChildBg]={.122f,.149f,.188f,1};style.Colors[ImGuiCol_Border]={.24f,.29f,.36f,.8f};style.Colors[ImGuiCol_Button]={.13f,.30f,.35f,1};style.Colors[ImGuiCol_Text]={.945f,.957f,.972f,1};
  ui::outfit=scope;ui::groupId=mainId;ui::part=2;ui::creating=false;ui::meshMode=true;

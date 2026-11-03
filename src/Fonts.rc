@@ -1,0 +1,3 @@
+#include "FontIds.h"
+WORLDDIFF_FONT_REGULAR RCDATA "third_party/noto/NotoSansSC-Regular.otf"
+WORLDDIFF_FONT_BOLD    RCDATA "third_party/noto/NotoSansSC-Bold.otf"

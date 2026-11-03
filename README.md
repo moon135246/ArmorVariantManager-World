@@ -11,10 +11,10 @@
 ### 1. 安装
 
 1. 安装适用于当前游戏版本的 Stracker's Loader。
-2. 从 [Releases](https://github.com/moon135246/ArmorVariantManager-World/releases/latest) 下载安装包 `ArmorVariantManager-World-v1.2.5.zip`，正常退出游戏后解压。
-3. 将包内 `nativePC` 合并到游戏根目录，即 `MonsterHunterWorld.exe` 所在目录。覆盖前备份已有插件和 `WorldDiff` 数据目录；保留自己的预设、模板、设置及手动更新日志。
-4. 也可以在安装包目录打开 PowerShell，执行 `& '.\安装到游戏.ps1' -GamePath '你的游戏根目录'`。脚本会先备份已有 DLL 和数据；默认路径未必适合本机，请明确传入自己的路径。
-5. 从 Steam 启动游戏，使用 DX12。
+2. 从 [Releases](https://github.com/moon135246/ArmorVariantManager-World/releases/latest) 下载 `ArmorVariantManager-World-v1.2.6.zip`。
+3. 退出游戏，解压安装包，把其中的 `nativePC` 文件夹合并到游戏根目录（`MonsterHunterWorld.exe` 所在目录）。从 Steam 启动游戏，按 **F9** 打开差分管理器。
+
+首次启动会自动生成 `nativePC/plugins/WorldDiff/Settings.cfg`。升级或重装时保留此文件，就能沿用界面、按键等个人设置。装备预设可由对应的外观 MOD 提供，也可在游戏中自行保存。如果自行编辑过更新日志，请在覆盖前备份。
 
 插件路径为 `nativePC/plugins/WorldDiff.dll`。GitHub 的自动生成附件 **Source code (zip / tar.gz)** 是源码，不是可以直接安装的插件包。
 
@@ -37,7 +37,7 @@
 
 - **换了装备，原预设没出现？** 面板只处理当前穿着的装备。更改 MOD 或模型后，需要重新匹配当前文件或查找模板。
 - **保存的预设在哪里？** 位于 `nativePC/plugins/WorldDiff/Presets`；分享时使用“导出模板”，导出的文件位于 `Templates`。
-- **怎样恢复旧内容？** 在“设置”中使用预设备份恢复功能。每份文件保留最近五份不同内容，升级安装另有整目录备份。
+- **怎样恢复旧内容？** 在“设置”中使用预设备份恢复功能。每份文件保留最近五份不同内容。
 - **联机时会修改队友的文件吗？** 效果仅作用于本机画面。队友只读匹配本机已有预设，面板和保存目标始终属于本地主角。
 - **快捷键没有触发？** 检查两项互斥开关、方案启用状态及当前装备是否匹配。面板打开、输入文字、失焦、换装过渡、存档预览或总暂停时，不执行实体快捷键。
 
@@ -65,6 +65,7 @@
 
 ## 更新日志
 
+- **1.2.6** 内嵌中文字体，安装包可直接解压到游戏根目录。
 - **1.2.5** 新增玻璃态主题，默认界面调整为经典白。四套主题的手动查找均改为先选中，再点击「应用预设」。
 - **1.2.4** 新增经典黑主题，覆盖主面板、启动提示和预设文件弹窗。
 - **1.2.3** 新增经典白主题，可在设置中与基础界面切换。

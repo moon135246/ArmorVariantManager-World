@@ -6,6 +6,7 @@
 #include "ClassicTheme.h"
 #include "State.h"
 #include "NativeInput.h"
+#include "EmbeddedFonts.h"
 #include "UpdateNotes.h"
 #include "Dx12Backend.h"
 #include "imgui.h"
@@ -84,10 +85,10 @@ void CreateRtv(IDXGISwapChain* swap){if(rtv){rtv->Release();rtv=nullptr;}ID3D11T
 bool Common(HWND hwnd){
  if(commonReady)return true;
  ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.ConfigFlags|=ImGuiConfigFlags_NavEnableKeyboard;io.ConfigWindowsMoveFromTitleBarOnly=true;
- wchar_t windows[32768];GetWindowsDirectoryW(windows,32768);auto font=std::filesystem::path(windows)/L"Fonts"/L"msyh.ttc";static std::string fontName=font.string();
- if(!io.Fonts->AddFontFromFileTTF(fontName.c_str(),22))io.Fonts->AddFontDefault();
- auto boldPath=std::filesystem::path(windows)/L"Fonts"/L"msyhbd.ttc";
- if(std::filesystem::exists(boldPath))io.Fonts->AddFontFromFileTTF(boldPath.string().c_str(),22);
+ if(!fonts::LoadPanelFonts(*io.Fonts)){
+  RuntimeLog("Embedded panel fonts could not be loaded");
+  ImGui::DestroyContext();return false;
+ }
  ImGui::StyleColorsDark();auto& st=ImGui::GetStyle();st.WindowRounding=12;st.ChildRounding=8;st.FrameRounding=6;st.PopupRounding=8;st.GrabRounding=5;st.WindowBorderSize=1;st.ChildBorderSize=1;st.FramePadding={9,6};st.ItemSpacing={10,8};st.ScrollbarSize=14;
  auto* co=st.Colors;co[ImGuiCol_WindowBg]={.078f,.094f,.125f,.97f};co[ImGuiCol_ChildBg]={.122f,.149f,.188f,.98f};co[ImGuiCol_Border]={.24f,.29f,.36f,.8f};co[ImGuiCol_Text]={.945f,.957f,.972f,1};co[ImGuiCol_TextDisabled]={.60f,.66f,.72f,1};co[ImGuiCol_FrameBg]={.145f,.18f,.227f,1};co[ImGuiCol_Button]={.13f,.30f,.35f,1};co[ImGuiCol_ButtonHovered]={.18f,.45f,.51f,1};co[ImGuiCol_ButtonActive]={.23f,.62f,.68f,1};co[ImGuiCol_Header]={.13f,.30f,.35f,1};co[ImGuiCol_HeaderHovered]={.18f,.45f,.51f,1};co[ImGuiCol_HeaderActive]={.23f,.55f,.61f,1};co[ImGuiCol_CheckMark]={.33f,.72f,.78f,1};co[ImGuiCol_SliderGrab]=co[ImGuiCol_CheckMark];co[ImGuiCol_TabSelected]={.13f,.30f,.35f,1};
  if(!ImGui_ImplWin32_Init(hwnd)){ImGui::DestroyContext();return false;}commonReady=true;return true;
@@ -134,7 +135,7 @@ HRESULT WINAPI Present(IDXGISwapChain* swap,UINT sync,UINT flags){
      }else{
       ImGui::SetNextWindowPos({26,28});ImGui::SetNextWindowBgAlpha(.84f);
       ImGui::Begin("##WorldDiffToast",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoSavedSettings);
-      ImGui::TextColored({.33f,.72f,.78f,1},"世界版差分管理器 1.2.5 已加载");
+      ImGui::TextColored({.33f,.72f,.78f,1},"世界版差分管理器 1.2.6 已加载");
       ImGui::Text("F%d 打开面板  |  Ctrl+F9 暂停控制",key-VK_F1+1);ImGui::End();
      }
     }

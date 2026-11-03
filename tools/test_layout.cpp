@@ -55,6 +55,7 @@ bool LayoutTrackedButton(const char* label,const ImVec2& size=ImVec2(0,0)){
 #undef Selectable
 #undef MenuItem
 #include "save_imgui_frame.inl"
+#include "../src/EmbeddedFonts.h"
 namespace worlddiff::overlay {
 void NativeInputClose(){}
 void SetVisible(bool){}
@@ -66,7 +67,7 @@ int main(int argc,char** argv){
  auto& state=Get();state.loaded=true;worlddiff::Model model;model.equip="pl105_0000";model.part="body";model.display="布局验证模型";model.relativePath="pl\\f_equip\\pl105_0000\\body\\mod\\f_body105_0000";state.models.push_back(model);
  auto main=Main(model.equip).id;for(int i=0;i<24;i++){Group group;group.id=state.data.nextId++;group.name="测试分组 "+std::to_string(i);group.scope=model.equip;state.data.groups.push_back(group);}
  auto* group=Find(main);for(int i=0;i<30;i++){Preset preset;preset.id=state.data.nextId++;preset.name="包含中文与较长名称的预设 "+std::to_string(i);group->presets.push_back(preset);}group->selected=group->defaultPreset=group->presets[0].id;
- ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DeltaTime=1.f/60;io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/msyh.ttc",22,nullptr,io.Fonts->GetGlyphRangesChineseSimplifiedCommon());unsigned char* pixels;int width,height;io.Fonts->GetTexDataAsRGBA32(&pixels,&width,&height);
+ ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DeltaTime=1.f/60;if(!worlddiff::fonts::LoadPanelFonts(*io.Fonts,io.Fonts->GetGlyphRangesChineseSimplifiedCommon()))return 1;unsigned char* pixels;int width,height;io.Fonts->GetTexDataAsRGBA32(&pixels,&width,&height);
  auto& style=ImGui::GetStyle();style.FramePadding={9,6};style.ItemSpacing={10,8};style.ChildRounding=8;style.ScrollbarSize=14;
  struct Case {float screenX,screenY,scale,windowX,windowY;};
  Case cases[]={{1920,1080,.7f,1022,595},{1920,1080,1,1460,850},{1920,1080,1,1050,620},{1280,720,1,1050,620},{3840,2160,1.5f,2190,1275}};

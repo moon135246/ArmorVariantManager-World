@@ -1,4 +1,5 @@
 #include "NativeInput.h"
+#include "EmbeddedFonts.h"
 #include "Overlay.h"
 #include "State.h"
 #include "imgui.h"
@@ -53,7 +54,7 @@ LRESULT CALLBACK HostProc(HWND hwnd,UINT message,WPARAM w,LPARAM l){
    if(region&&!SetWindowRgn(hwnd,region,TRUE))DeleteObject(region);regionWidth=width;regionHeight=height;regionRadius=radius;
   }
   if(!font||fontHeight!=request.height){
-   auto next=CreateFontW(-request.height,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Microsoft YaHei UI");
+   auto next=CreateFontW(-request.height,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,fonts::Family);
    if(next){auto previous=font;font=next;fontHeight=request.height;SendMessageW(edit,WM_SETFONT,(WPARAM)font,FALSE);if(previous)DeleteObject(previous);}
   }
   HDC dc=GetDC(edit);auto previous=SelectObject(dc,font);TEXTMETRICW metrics{};GetTextMetricsW(dc,&metrics);SelectObject(dc,previous);ReleaseDC(edit,dc);
@@ -72,12 +73,20 @@ LRESULT CALLBACK HostProc(HWND hwnd,UINT message,WPARAM w,LPARAM l){
  return DefWindowProcW(hwnd,message,w,l);
 }
 DWORD WINAPI Thread(void*){
+ auto regular = fonts::Read(WORLDDIFF_FONT_REGULAR);
+ DWORD count = 0;
+ HANDLE privateFont = regular.data ? AddFontMemResourceEx(regular.data, regular.size, nullptr, &count) : nullptr;
+ if (!privateFont) RuntimeLog("Native editor could not register the embedded font");
  threadId=GetCurrentThreadId();CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);WNDCLASSW wc{};wc.lpfnWndProc=HostProc;wc.hInstance=GetModuleHandleW(nullptr);wc.lpszClassName=L"WorldDiff104NativeText";wc.hCursor=LoadCursorW(nullptr,MAKEINTRESOURCEW(32513));RegisterClassW(&wc);brush=CreateSolidBrush(RGB(37,46,58));
  host=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_TOPMOST,wc.lpszClassName,L"WorldDiff 中文输入",WS_POPUP,0,0,200,30,owner,nullptr,wc.hInstance,nullptr);
  edit=CreateWindowExW(0,L"EDIT",L"",WS_CHILD|WS_VISIBLE|ES_AUTOHSCROLL|ES_LEFT,0,0,200,30,host,(HMENU)1,wc.hInstance,nullptr);
  if(edit){editOriginal=(WNDPROC)SetWindowLongPtrW(edit,GWLP_WNDPROC,(LONG_PTR)EditProc);ime=ImmCreateContext();ImmAssociateContext(edit,ime);}
  RuntimeLog("Native Unicode/IME editor initialized (dedicated Win32 EDIT context)");
- MSG message;while(GetMessageW(&message,nullptr,0,0)>0){TranslateMessage(&message);DispatchMessageW(&message);}return 0;
+ MSG message;while(GetMessageW(&message,nullptr,0,0)>0){TranslateMessage(&message);DispatchMessageW(&message);}
+ if(host)DestroyWindow(host);
+ if(font){DeleteObject(font);font=nullptr;}
+ if(privateFont)RemoveFontMemResourceEx(privateFont);
+ return 0;
 }
 }
 void NativeInputInitialize(HWND game){owner=game;if(started.exchange(true))return;HANDLE thread=CreateThread(nullptr,0,Thread,nullptr,0,nullptr);if(thread)CloseHandle(thread);}

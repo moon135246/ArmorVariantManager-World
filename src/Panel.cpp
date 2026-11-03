@@ -307,7 +307,7 @@ void PageTabs(bool waiting=false){
 void AboutPanel(){
  auto path=Get().directory/L"更新日志.md";
  if(!updateTabVisible||!updateNotes.loaded||updateNotes.path!=path){updateNotes.Load(path);updateNotice.clear();}updateTabVisible=true;
- PaperKicker("//  ABOUT");SectionTitle("差分管理器 · 世界版 1.2.5");ImGui::TextUnformatted("插件作者：明月别枝(moon)");ImGui::Separator();
+ PaperKicker("//  ABOUT");SectionTitle("差分管理器 · 世界版 1.2.6");ImGui::TextUnformatted("插件作者：明月别枝(moon)");ImGui::Separator();
  if(Button("编辑更新日志")){
   wchar_t folder[MAX_PATH]{};STARTUPINFOW start{sizeof(start)};PROCESS_INFORMATION process{};
   if(GetWindowsDirectoryW(folder,MAX_PATH)){

@@ -24,9 +24,9 @@ build\test_hotkeys.exe
 
 可同样运行 `test-state`、`test-storage`、`test-transforms`、`test-multiplayer`、`test-scene`、`test-mesh-display`、`test-reorder`、`test-hotkey-ui`、`test-layout`、`test-updates`、`test-appearance` 对应脚本和下划线名称的 EXE。各脚本共用 build/*.obj，必须顺序编译，避免同时运行。
 
-ImGui／原生输入检查需要可交互 Windows 桌面和系统微软雅黑字体。原生输入检查会创建临时测试窗口。离线预览渲染脚本另外需要 Python、NumPy 和 Pillow；普通 DLL 编译不依赖 Python。
+ImGui／原生输入检查需要可交互 Windows 桌面。原生输入检查会创建临时测试窗口。离线预览渲染脚本另外需要 Python、NumPy 和 Pillow；普通 DLL 编译不依赖 Python。
 
-`tools/test-installer.ps1` 在唯一临时目录创建假的游戏与加载器文件，只验证隔离安装；需先生成 DLL。用 PowerShell 执行它，不会安装到真实游戏。
+界面测试和插件通过 Windows SDK 的资源编译器嵌入同一份 Noto Sans SC 正文与粗体，原生输入检查会核对实际选中的 GDI 字体。
 
 ## 需要自备夹具的检查
 
@@ -41,6 +41,6 @@ ImGui／原生输入检查需要可交互 Windows 桌面和系统微软雅黑字
 
 ## 发布
 
-源码使用 `src/`，发布支持文件使用 `发布/`。安装 ZIP 只打包发布目录的文件，排除 build、测试、个人 CFG／WDP、运行日志和备份。`发布/SHA256.txt` 保留原正式交付记录，重新编译后的 DLL 必须重新计算发布校验值。
+源码使用 `src/`，发布支持文件使用 `发布/`。安装 ZIP 以 `nativePC/` 为根，只打包 `发布/nativePC/` 内的发布文件，排除 build、测试、个人 CFG／WDP、运行日志和备份。`发布/SHA256.txt` 保留原正式交付记录，重新编译后的 DLL 必须重新计算发布校验值。
 
 每个发布标签对应一份源码快照；安装包及其 SHA256 校验文件见同版本的 GitHub Release。
