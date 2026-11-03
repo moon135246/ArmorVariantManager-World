@@ -71,8 +71,8 @@ int main(int argc,char** argv){
  struct Case {float screenX,screenY,scale,windowX,windowY;};
  Case cases[]={{1920,1080,.7f,1022,595},{1920,1080,1,1460,850},{1920,1080,1,1050,620},{1280,720,1,1050,620},{3840,2160,1.5f,2190,1275}};
  unsigned checks=0;
- for(auto c:cases)for(bool hidden:{false,true})for(bool editing:{false,true})for(int page=0;page<5;page++){
-  io.DisplaySize={c.screenX,c.screenY};state.data.scale=c.scale;state.data.hideDragHint=hidden;worlddiff::overlay::creating=editing;worlddiff::overlay::tab=page;
+ for(auto theme:{UiTheme::Basic,UiTheme::ClassicWhite})for(auto c:cases)for(bool hidden:{false,true})for(bool editing:{false,true})for(int page=0;page<5;page++){
+  state.data.theme=theme;io.DisplaySize={c.screenX,c.screenY};state.data.scale=c.scale;state.data.hideDragHint=hidden;worlddiff::overlay::creating=editing;worlddiff::overlay::tab=page;
   for(int frame=0;frame<3;frame++){ImGui::NewFrame();ImGui::SetWindowSize("差分管理器 · 世界版 1.1.8###WorldDiffInternal",{c.windowX,c.windowY});ImGui::SetWindowPos("差分管理器 · 世界版 1.1.8###WorldDiffInternal",{(c.screenX-c.windowX)*.5f,(c.screenY-c.windowY)*.5f});worlddiff::overlay::DrawPanel();ImGui::Render();}
   unsigned panes=0;for(auto* window:ImGui::GetCurrentContext()->Windows){if(!window->Active)continue;const char* leaf=std::strrchr(window->Name,'/');if(!leaf)continue;
    if(std::strstr(leaf,"/分组面板_")||std::strstr(leaf,"/预设面板_")||std::strstr(leaf,"/分组操作_")||std::strstr(leaf,"/预设操作_")||std::strstr(leaf,"/拖动提示_")){
@@ -81,6 +81,7 @@ int main(int argc,char** argv){
   }if(panes!=(hidden?4u:5u)){std::cerr<<"FAIL missing pane metrics: "<<panes<<'\n';return 2;}
  }
 
+ state.data.theme=UiTheme::Basic;
  unsigned modeChecks=0;auto& mode=EnsureTransformMode(state.data,model.equip);mode.enabled=true;mode.categories.fill(true);
  for(auto c:cases)for(int selection=0;selection<=kTransformCategories;selection++){
   io.DisplaySize={c.screenX,c.screenY};state.data.scale=c.scale;state.data.hideDragHint=true;worlddiff::overlay::creating=false;worlddiff::overlay::tab=1;mode.parallel=selection==kTransformCategories;mode.selected=selection%kTransformCategories;

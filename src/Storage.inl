@@ -3,15 +3,17 @@ bool IsCurrentModel(const std::string& path){auto& s=Get();return !s.trackingPla
 bool CanEditScope(const std::string& scope){auto& s=Get();if(!s.storageReady||s.blockedScopes.count(scope)||s.outfitChanging)return false;if(!s.trackingPlayer)return true;return s.outfit.ready&&std::any_of(s.outfit.paths.begin(),s.outfit.paths.end(),[&](auto& p){return !p.empty()&&Equip(p)==scope;});}
 bool SaveSettings(){
  auto& s=Get();if(!s.storageReady)return false;auto& d=s.data;if(d.transformsEnabled&&d.hotkeysEnabled){s.notice="变身与预设快捷键不能同时开启，未保存设置";return false;}std::ostringstream text;
- text<<"WorldDiffSettings 122\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.hideDragHint<<' '<<d.transformsEnabled<<' '<<d.autoFind<<' '<<d.showStartupNotice<<' '<<d.hotkeysEnabled<<'\n';
+ text<<"WorldDiffSettings 123\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.hideDragHint<<' '<<d.transformsEnabled<<' '<<d.autoFind<<' '<<d.showStartupNotice<<' '<<d.hotkeysEnabled<<' '<<static_cast<int>(d.theme)<<'\n';
  std::string before;if(!ReadText(s.configPath,before)||(!before.empty()&&before==text.str()))return before==text.str();
  if(!AtomicText(s.configPath,text.str())){s.notice="设置保存失败，尚未保存的编辑仍在内存中";return false;}return true;
 }
 bool LoadSettings(){
  auto& s=Get();std::ifstream in(s.configPath,std::ios::binary);std::string magic,tag;unsigned version=0;Document d;
- if(!(in>>magic>>version)||magic!="WorldDiffSettings"||(version!=117&&version!=121&&version!=122)||!(in>>tag)||tag!="SET"||!(in>>d.enabled>>d.autoDefault>>d.autoOpen>>d.menuKey>>d.scale>>d.hideDragHint>>d.transformsEnabled>>d.autoFind)||(version>=121&&!(in>>d.showStartupNotice))||(version>=122&&!(in>>d.hotkeysEnabled))||(d.hotkeysEnabled&&d.transformsEnabled)||d.menuKey<0x70||d.menuKey>0x87||d.scale<.65f||d.scale>1.7f){s.notice="Settings.cfg 无效，原文件保留";return false;}
+ if(!(in>>magic>>version)||magic!="WorldDiffSettings"||(version!=117&&version!=121&&version!=122&&version!=123)||!(in>>tag)||tag!="SET"||!(in>>d.enabled>>d.autoDefault>>d.autoOpen>>d.menuKey>>d.scale>>d.hideDragHint>>d.transformsEnabled>>d.autoFind)||(version>=121&&!(in>>d.showStartupNotice))||(version>=122&&!(in>>d.hotkeysEnabled))||(d.hotkeysEnabled&&d.transformsEnabled)||d.menuKey<0x70||d.menuKey>0x87||d.scale<.65f||d.scale>1.7f){s.notice="Settings.cfg 无效，原文件保留";return false;}
+ int theme=0;
+ if(version>=123&&(!(in>>theme)||theme<0||theme>1)){s.notice="设置中的界面风格无效，原文件保留";return false;}
  in>>std::ws;if(!in.eof()){s.notice="设置文件含有未知内容，已停止读取";return false;}
- auto& to=s.data;to.enabled=d.enabled;to.autoDefault=d.autoDefault;to.autoOpen=d.autoOpen;to.menuKey=d.menuKey;to.scale=d.scale;to.hideDragHint=d.hideDragHint;to.transformsEnabled=d.transformsEnabled;to.autoFind=d.autoFind;to.showStartupNotice=d.showStartupNotice;to.hotkeysEnabled=d.hotkeysEnabled;s.captureHotkey=0;s.keysAllowed=false;return true;
+ auto& to=s.data;to.theme=static_cast<UiTheme>(theme);to.enabled=d.enabled;to.autoDefault=d.autoDefault;to.autoOpen=d.autoOpen;to.menuKey=d.menuKey;to.scale=d.scale;to.hideDragHint=d.hideDragHint;to.transformsEnabled=d.transformsEnabled;to.autoFind=d.autoFind;to.showStartupNotice=d.showStartupNotice;to.hotkeysEnabled=d.hotkeysEnabled;s.captureHotkey=0;s.keysAllowed=false;return true;
 }
 namespace {
 bool CompleteMapping(const std::string& scope,const File& file){

@@ -28,7 +28,9 @@ struct Group {
  std::set<Target> members;Rules working;std::vector<Preset> presets;
  uint64_t selected=0,defaultPreset=0;
 };
+enum class UiTheme { Basic, ClassicWhite };
 struct Document {
+ UiTheme theme=UiTheme::Basic;
  bool enabled=true,autoDefault=true,autoOpen=false,autoFind=true,hideDragHint=false,transformsEnabled=true,showStartupNotice=true,hotkeysEnabled=false;int menuKey=VK_F9;float scale=1.0f;
  uint64_t nextId=1;std::vector<Group> groups;
  std::map<std::string,std::string> bindings;

@@ -3,6 +3,7 @@
 #endif
 #define DIRECTINPUT_VERSION 0x0800
 #include "Overlay.h"
+#include "ClassicWhite.h"
 #include "State.h"
 #include "NativeInput.h"
 #include "UpdateNotes.h"
@@ -85,6 +86,8 @@ bool Common(HWND hwnd){
  ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.ConfigFlags|=ImGuiConfigFlags_NavEnableKeyboard;io.ConfigWindowsMoveFromTitleBarOnly=true;
  wchar_t windows[32768];GetWindowsDirectoryW(windows,32768);auto font=std::filesystem::path(windows)/L"Fonts"/L"msyh.ttc";static std::string fontName=font.string();
  if(!io.Fonts->AddFontFromFileTTF(fontName.c_str(),22))io.Fonts->AddFontDefault();
+ auto boldPath=std::filesystem::path(windows)/L"Fonts"/L"msyhbd.ttc";
+ if(std::filesystem::exists(boldPath))io.Fonts->AddFontFromFileTTF(boldPath.string().c_str(),22);
  ImGui::StyleColorsDark();auto& st=ImGui::GetStyle();st.WindowRounding=12;st.ChildRounding=8;st.FrameRounding=6;st.PopupRounding=8;st.GrabRounding=5;st.WindowBorderSize=1;st.ChildBorderSize=1;st.FramePadding={9,6};st.ItemSpacing={10,8};st.ScrollbarSize=14;
  auto* co=st.Colors;co[ImGuiCol_WindowBg]={.078f,.094f,.125f,.97f};co[ImGuiCol_ChildBg]={.122f,.149f,.188f,.98f};co[ImGuiCol_Border]={.24f,.29f,.36f,.8f};co[ImGuiCol_Text]={.945f,.957f,.972f,1};co[ImGuiCol_TextDisabled]={.60f,.66f,.72f,1};co[ImGuiCol_FrameBg]={.145f,.18f,.227f,1};co[ImGuiCol_Button]={.13f,.30f,.35f,1};co[ImGuiCol_ButtonHovered]={.18f,.45f,.51f,1};co[ImGuiCol_ButtonActive]={.23f,.62f,.68f,1};co[ImGuiCol_Header]={.13f,.30f,.35f,1};co[ImGuiCol_HeaderHovered]={.18f,.45f,.51f,1};co[ImGuiCol_HeaderActive]={.23f,.55f,.61f,1};co[ImGuiCol_CheckMark]={.33f,.72f,.78f,1};co[ImGuiCol_SliderGrab]=co[ImGuiCol_CheckMark];co[ImGuiCol_TabSelected]={.13f,.30f,.35f,1};
  if(!ImGui_ImplWin32_Init(hwnd)){ImGui::DestroyContext();return false;}commonReady=true;return true;
@@ -111,7 +114,7 @@ HRESULT WINAPI Present(IDXGISwapChain* swap,UINT sync,UINT flags){
    if(ready&&swap!=bound){DXGI_SWAP_CHAIN_DESC d{};if(SUCCEEDED(swap->GetDesc(&d))&&d.OutputWindow==window)Teardown();}
    if(!ready)Initialize(swap);
    if(ready&&swap==bound){
-    int key;bool startupNotice;{std::lock_guard stateLock(app::Get().mutex);key=app::Get().data.menuKey;startupNotice=app::Get().loaded&&app::Get().data.showStartupNotice;}
+    int key;float uiScale;bool startupNotice,classicWhite;{std::lock_guard stateLock(app::Get().mutex);uiScale=app::Get().data.scale;classicWhite=app::Get().data.theme==app::UiTheme::ClassicWhite;key=app::Get().data.menuKey;startupNotice=app::Get().loaded&&app::Get().data.showStartupNotice;}
     static bool previous=false,panicPrevious=false;bool down=Key(key)&&!Key(VK_CONTROL);if(down&&!previous&&GetForegroundWindow()==window&&(DWORD)(GetTickCount()-messageToggleAt.load())>250){SetVisible(!open);messageToggleAt=GetTickCount();}previous=down;
     if(!autoOpened&&RuntimeState()&&RuntimeState()->rowCount>0){std::lock_guard stateLock(app::Get().mutex);autoOpened=true;if(app::Get().data.autoOpen)SetVisible(true);}
     bool panic=Key(VK_CONTROL)&&Key(VK_F9)&&(GetForegroundWindow()==window||NativeInputOwnWindow(GetForegroundWindow()));if(panic&&!panicPrevious){std::lock_guard stateLock(app::Get().mutex);app::RestoreAll();}panicPrevious=panic;
@@ -122,7 +125,20 @@ HRESULT WINAPI Present(IDXGISwapChain* swap,UINT sync,UINT flags){
      bool focus=GetForegroundWindow()==window;bool input=NativeInputActive()||io.WantTextInput;
      app::ProcessPresetKeys(keys,focus&&!open&&!input,focus&&open&&!input,app::GameTextInputActive);
     }
-    NativeInputBeginFrame();if(open)DrawPanel();else if(notes::ShowStartupNotice(startupNotice,false,(DWORD)(GetTickCount()-firstTick))){ImGui::SetNextWindowPos({26,28});ImGui::SetNextWindowBgAlpha(.84f);ImGui::Begin("##WorldDiffToast",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoSavedSettings);ImGui::TextColored({.33f,.72f,.78f,1},"世界版差分管理器 1.2.2 已加载");ImGui::Text("F%d 打开面板  |  Ctrl+F9 暂停控制",key-VK_F1+1);ImGui::End();}NativeInputEndFrame();
+    NativeInputBeginFrame();
+    if(open)DrawPanel();
+    else if(notes::ShowStartupNotice(startupNotice,false,(DWORD)(GetTickCount()-firstTick))){
+     if(classicWhite){
+      char menuKey[8];sprintf_s(menuKey,"F%d",key-VK_F1+1);
+      paper::DrawStartupNotice(menuKey,uiScale);
+     }else{
+      ImGui::SetNextWindowPos({26,28});ImGui::SetNextWindowBgAlpha(.84f);
+      ImGui::Begin("##WorldDiffToast",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoSavedSettings);
+      ImGui::TextColored({.33f,.72f,.78f,1},"世界版差分管理器 1.2.3 已加载");
+      ImGui::Text("F%d 打开面板  |  Ctrl+F9 暂停控制",key-VK_F1+1);ImGui::End();
+     }
+    }
+    NativeInputEndFrame();
     ImGui::Render();if(ImGui::GetDrawData()->CmdListsCount){if(is12)dx12::Render(ImGui::GetDrawData());else if(context11&&rtv){ID3D11RenderTargetView* before=nullptr;ID3D11DepthStencilView* depth=nullptr;context11->OMGetRenderTargets(1,&before,&depth);context11->OMSetRenderTargets(1,&rtv,nullptr);ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());context11->OMSetRenderTargets(1,&before,depth);if(before)before->Release();if(depth)depth->Release();}}
    }
   }

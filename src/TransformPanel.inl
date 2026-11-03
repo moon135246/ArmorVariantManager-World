@@ -34,7 +34,7 @@ void DrawTransformTarget(uint64_t& id,const TransformSlot& slot,size_t index,Tra
 }
 void DrawTransformBindings(uint64_t& id,const TransformSlot& slot){
  auto* r=TransformById(id);bool enabled=r?r->enabled:true;
- if(r&&!r->enabled){if(ImGui::Checkbox("启用此状态",&enabled)){r->enabled=enabled;TransformChanged();}}
+ if(r&&!r->enabled){if(PanelCheckbox("启用此状态",&enabled)){r->enabled=enabled;TransformChanged();}}
  std::vector<TransformTarget> targets=r?r->targets:std::vector<TransformTarget>{};
  if(targets.empty()){
   auto* current=Find(groupId);if(!current||current->scope!=outfit||current->presets.empty()){current=nullptr;for(auto& g:Get().data.groups)if(g.scope==outfit&&!g.presets.empty()){current=&g;break;}}
@@ -48,18 +48,18 @@ void DrawTransformBindings(uint64_t& id,const TransformSlot& slot){
 }
 void DrawTransformState(const TransformSlot& slot,uint64_t id,int key,bool editableHealth=false){
  ImGui::PushID(key);auto& s=Get();bool current=Matches(slot.condition,s.transform.player);if(slot.condition.kind==ConditionKind::ChargeBlade)current=ChargeBladeState(s.transform.player)==slot.condition.state;else if(slot.condition.kind==ConditionKind::SwitchAxe)current=SwitchAxeState(s.transform.player)==slot.condition.state;auto* rule=TransformById(id);bool applied=rule&&s.transform.activeRules.count(id);auto label=slot.name+(applied?"  [生效]":current?"  [当前]":"");
- if(current)ImGui::PushStyleColor(ImGuiCol_Header,ImVec4(.1f,.36f,.43f,1));
+ if(current&&!paper::active)ImGui::PushStyleColor(ImGuiCol_Header,ImVec4(.1f,.36f,.43f,1));
  bool expanded=false,removed=false;
  if(editableHealth&&rule){
   if(ImGui::BeginTable("血量节点标题",2,ImGuiTableFlags_SizingStretchProp|ImGuiTableFlags_NoPadOuterX)){
-   ImGui::TableSetupColumn("节点",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("操作",ImGuiTableColumnFlags_WidthFixed,S(64));ImGui::TableNextColumn();expanded=ImGui::CollapsingHeader(label.c_str(),ImGuiTreeNodeFlags_DefaultOpen);ImGui::TableNextColumn();
-   if(ImGui::Button("删除##血量节点",ImVec2(-1,ImGui::GetFrameHeight())))removed=DeleteHealthNode(id,outfit);ImGui::EndTable();
+   ImGui::TableSetupColumn("节点",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("操作",ImGuiTableColumnFlags_WidthFixed,S(64));ImGui::TableNextColumn();expanded=PanelHeader(label.c_str(),ImGuiTreeNodeFlags_DefaultOpen,current);ImGui::TableNextColumn();
+   if(PanelButton("删除##血量节点",ImVec2(-1,ImGui::GetFrameHeight()),ButtonTone::Delete))removed=DeleteHealthNode(id,outfit);ImGui::EndTable();
   }
- }else expanded=ImGui::CollapsingHeader(label.c_str(),ImGuiTreeNodeFlags_DefaultOpen);
- if(current)ImGui::PopStyleColor();if(removed){ImGui::PopID();return;}
+ }else expanded=PanelHeader(label.c_str(),ImGuiTreeNodeFlags_DefaultOpen,current);
+ if(current&&!paper::active)ImGui::PopStyleColor();if(removed){ImGui::PopID();return;}
  if(expanded){
   if(editableHealth&&rule){
-   auto c=rule->condition;bool change=false;ImGui::SetNextItemWidth(S(115));change|=ImGui::InputFloat("下限 %",&c.healthMin,1,5,"%.0f");ImGui::SetNextItemWidth(S(115));change|=ImGui::InputFloat("上限 %",&c.healthMax,1,5,"%.0f");change|=ImGui::Checkbox("不包含下限",&c.lowerOpen);change|=ImGui::Checkbox("触发后保持",&c.latch);
+   auto c=rule->condition;bool change=false;ImGui::SetNextItemWidth(S(115));change|=ImGui::InputFloat("下限 %",&c.healthMin,1,5,"%.0f");ImGui::SetNextItemWidth(S(115));change|=ImGui::InputFloat("上限 %",&c.healthMax,1,5,"%.0f");change|=PanelCheckbox("不包含下限",&c.lowerOpen);change|=PanelCheckbox("触发后保持",&c.latch);
    if(change&&ValidCondition(c)){rule->condition=c;TransformChanged();}
   }
   DrawTransformBindings(id,slot);ImGui::Spacing();
@@ -96,8 +96,9 @@ void DrawTransformCategory(int category){
  for(auto id:extra)if(auto* rule=TransformById(id)){TransformSlot slot{DescribeCondition(rule->condition),rule->condition};DrawTransformState(slot,id,(int)id+100,category==4);}
 }
 void TransformPanel(){
+ PaperKicker("//  CONDITIONS");
  auto& s=Get();auto& mode=EnsureTransformMode(s.data,outfit);AutomationSwitch("启用变身功能",false);ImGui::SameLine();bool enabled=mode.enabled;
- if(ImGui::Checkbox("当前装备启用变身",&enabled)){mode.enabled=enabled;TransformChanged(enabled?"当前装备的变身已启用":"当前装备的变身已暂停");}
+ if(PanelCheckbox("当前装备启用变身",&enabled)){mode.enabled=enabled;TransformChanged(enabled?"当前装备的变身已启用":"当前装备的变身已暂停");}
  if(Button("复位保持状态")){ResetTransforms();s.notice="保持状态已复位；条件仍满足时会再次触发";}ImGui::SameLine();
  if(ImGui::RadioButton("选择模式",!mode.parallel)){mode.parallel=false;TransformChanged();}ImGui::SameLine();if(ImGui::RadioButton("并行模式",mode.parallel)){mode.parallel=true;TransformChanged();}
  if(!mode.parallel){
@@ -107,7 +108,7 @@ void TransformPanel(){
   ImGui::BeginChild("并行条件选择",ImVec2(0,std::clamp(ImGui::GetContentRegionAvail().y-S(170),S(55),S(175))));
   if(ImGui::BeginTable("并行条件",2,ImGuiTableFlags_SizingStretchProp)){
    ImGui::TableSetupColumn("条件",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("优先级",ImGuiTableColumnFlags_WidthFixed,S(105));
-   for(int i=0;i<kTransformCategories;i++){ImGui::PushID(i);ImGui::TableNextRow();ImGui::TableNextColumn();if(ImGui::Checkbox(TransformCategoryName(i),&mode.categories[i]))TransformChanged();ImGui::TableNextColumn();int priority=mode.priorities[i];ImGui::SetNextItemWidth(-1);if(ImGui::InputInt("##优先级",&priority)&&priority>=1&&priority<=99){mode.priorities[i]=priority;TransformChanged();}ImGui::PopID();}ImGui::EndTable();
+   for(int i=0;i<kTransformCategories;i++){ImGui::PushID(i);ImGui::TableNextRow();ImGui::TableNextColumn();if(PanelCheckbox(TransformCategoryName(i),&mode.categories[i]))TransformChanged();ImGui::TableNextColumn();int priority=mode.priorities[i];ImGui::SetNextItemWidth(-1);if(ImGui::InputInt("##优先级",&priority)&&priority>=1&&priority<=99){mode.priorities[i]=priority;TransformChanged();}ImGui::PopID();}ImGui::EndTable();
   }ImGui::EndChild();
  }
  ImGui::Separator();ImGui::BeginChild("变身状态列表",ImVec2(0,0));

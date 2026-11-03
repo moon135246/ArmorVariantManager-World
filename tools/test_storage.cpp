@@ -32,7 +32,13 @@ static void Follow(const OutfitSnapshot& snapshot){FollowPlayerOutfit(snapshot);
 int main(int argc,char** argv){try{
  unsigned checks=0;auto check=[&](bool good,const char* why){++checks;if(!good)throw std::runtime_error(why);};auto root=fs::temp_directory_path()/(L"WorldDiff117Storage_"+std::to_wstring(GetTickCount64()));Reset(root/L"normal");auto& s=Get();auto a=MakeModel("pl105_0000"),b=MakeModel("pl106_0000");s.models={a,b};auto gid=Configure(a);auto preset=Find(gid)->selected;
  check(Save(),"first canonical save succeeds");auto canonical=s.directory/L"Presets/pl105_0000.wdp";auto settings=Read(s.configPath);auto content=Read(canonical);
- check(settings.find("WorldDiffSettings 122")==0&&settings.find("GROUP")==std::string::npos&&settings.find("MESH")==std::string::npos&&settings.find("BINDING")==std::string::npos,"settings contain no equipment data");
+ check(settings.find("WorldDiffSettings 123")==0&&settings.find("GROUP")==std::string::npos&&settings.find("MESH")==std::string::npos&&settings.find("BINDING")==std::string::npos,"settings contain no equipment data");
+ s.data.theme=UiTheme::ClassicWhite;check(SaveSettings()&&Read(canonical)==content,"theme saved independently of equipment");
+ s.data.theme=UiTheme::Basic;check(LoadSettings()&&s.data.theme==UiTheme::ClassicWhite,"classic white survives reload");
+ Write(s.configPath,"WorldDiffSettings 123\nSET 1 1 0 120 1 0 1 1 1 0 3\n");
+ check(!LoadSettings()&&s.data.theme==UiTheme::ClassicWhite,"unsupported theme cannot partially replace settings");
+ Write(s.configPath,"WorldDiffSettings 122\nSET 1 1 0 120 1 0 1 1 1 0\n");
+ check(LoadSettings()&&s.data.theme==UiTheme::Basic,"pre-theme settings open with the basic UI");Write(s.configPath,settings);
  check(content.find("WorldDiffProfile 122")==0&&content.find("WorldDiffEquipment 122")!=std::string::npos&&content.find("\nSET ")==std::string::npos&&content.find("AUTOFIND")==std::string::npos,"WDP contains only equipment definitions and identity");
  check(content.find("STAMP ")!=std::string::npos&&content.find("MESHVIEW")!=std::string::npos&&content.find("TRANSFORM ")!=std::string::npos,"identity notes order and transformations stored together");
  check(ExportProfile(a.equip,"共享模板"),"explicit export creates template");auto tpl=s.directory/L"Templates/共享模板.wdp";auto source=Read(tpl);auto sourceTime=fs::last_write_time(tpl);

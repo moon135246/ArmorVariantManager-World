@@ -1,18 +1,19 @@
 std::string automationConflict;bool showAutomationConflict=false;
 void AutomationSwitch(const char* label,bool hotkeys){
  auto& s=Get();bool enabled=hotkeys?s.data.hotkeysEnabled:s.data.transformsEnabled;
- if(ImGui::Checkbox(label,&enabled)){if(!SetAutomationEnabled(hotkeys,enabled)){automationConflict=s.notice;showAutomationConflict=true;}else Save();}
+ if(PanelCheckbox(label,&enabled)){if(!SetAutomationEnabled(hotkeys,enabled)){automationConflict=s.notice;showAutomationConflict=true;}else Save();}
 }
 void AutomationConflictPopup(){
  if(showAutomationConflict){ImGui::OpenPopup("功能互斥提示");showAutomationConflict=false;}
  ImGui::SetNextWindowSizeConstraints(ImVec2(S(300),0),ImVec2(std::max(S(300),ImGui::GetIO().DisplaySize.x-S(60)),FLT_MAX));
- if(ImGui::BeginPopupModal("功能互斥提示",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
+ if(PanelModal("功能互斥提示",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
   ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+S(420));ImGui::TextUnformatted(automationConflict.c_str());ImGui::PopTextWrapPos();
   if(Button("知道了"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
  }
 }
 uint64_t hotkeyId=0,hotkeyNameId=0;char hotkeyName[192]{};std::string hotkeyOriginalName;
 void HotkeyPanel(){
+ PaperKicker("//  SHORTCUTS");
  auto& s=Get();AutomationSwitch("启用预设快捷键",true);
  ImGui::TextWrapped("按一次应用整套组合，未列入的分组保持当前选择。此功能与变身总开关二选一。");
  ImGui::BeginChild("快捷键方案编辑区",ImVec2(0,0));
@@ -22,11 +23,11 @@ void HotkeyPanel(){
  if(Button("新建方案")){s.captureHotkey=0;for(int i=1;i<=512;i++){auto name="快捷键方案 "+std::to_string(i);if(std::none_of(s.data.hotkeys.begin(),s.data.hotkeys.end(),[&](auto& h){return h.scope==outfit&&h.name==name;})){hotkeyId=CreateHotkey(outfit,name);break;}}}
  current=FindHotkey(hotkeyId);if(!current){ImGui::TextWrapped("先在左侧保存需要的分组预设，再新建快捷键方案，将它们组合起来。");ImGui::EndChild();return;}
  ImGui::SameLine();if(Button("删除方案"))ImGui::OpenPopup("删除快捷键方案？");
- if(ImGui::BeginPopupModal("删除快捷键方案？",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){ImGui::TextUnformatted("仅删除此快捷键方案，已有分组和预设会保留。");if(Button("删除##快捷键")){DeleteHotkey(hotkeyId);hotkeyId=0;ImGui::CloseCurrentPopup();}ImGui::SameLine();if(Button("取消##快捷键"))ImGui::CloseCurrentPopup();ImGui::EndPopup();}
+ if(PanelModal("删除快捷键方案？",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){ImGui::TextUnformatted("仅删除此快捷键方案，已有分组和预设会保留。");if(Button("删除##快捷键")){DeleteHotkey(hotkeyId);hotkeyId=0;ImGui::CloseCurrentPopup();}ImGui::SameLine();if(Button("取消##快捷键"))ImGui::CloseCurrentPopup();ImGui::EndPopup();}
  current=FindHotkey(hotkeyId);if(!current){ImGui::EndChild();return;}
  if(hotkeyNameId!=hotkeyId||hotkeyOriginalName!=current->name){hotkeyNameId=hotkeyId;hotkeyOriginalName=current->name;strcpy_s(hotkeyName,current->name.c_str());}
  float saveWidth=ImGui::CalcTextSize("保存名称").x+ImGui::GetStyle().FramePadding.x*2;ImGui::SetNextItemWidth(std::max(S(90),ImGui::GetContentRegionAvail().x-saveWidth-ImGui::GetStyle().ItemSpacing.x));TextField("##快捷键名称","方案名称",hotkeyName,sizeof(hotkeyName));if(ImGui::IsItemClicked())s.captureHotkey=0;ImGui::SameLine();if(Button("保存名称"))if(!RenameHotkey(hotkeyId,hotkeyName))s.notice="方案名称为空或重复，未保存";
- if(ImGui::Checkbox("启用此方案",&current->enabled))Changed();ImGui::SameLine();ImGui::BeginDisabled(!s.data.hotkeysEnabled||s.data.transformsEnabled||!s.data.enabled||!current->enabled||!ValidateHotkey(*current,s.data,true));if(Button("立即应用"))ApplyHotkey(hotkeyId);ImGui::EndDisabled();
+ if(PanelCheckbox("启用此方案",&current->enabled))Changed();ImGui::SameLine();ImGui::BeginDisabled(!s.data.hotkeysEnabled||s.data.transformsEnabled||!s.data.enabled||!current->enabled||!ValidateHotkey(*current,s.data,true));if(Button("立即应用"))ApplyHotkey(hotkeyId);ImGui::EndDisabled();
  ImGui::TextWrapped("快捷键：%s",PresetKeyName(current->key,current->modifiers).c_str());
  if(s.captureHotkey==hotkeyId){ImGui::TextColored(accent,"请按快捷键，可带 Ctrl / Shift / Alt；Esc 取消。");if(Button("取消录制"))s.captureHotkey=0;}
  else{if(Button("录制快捷键")){NativeInputClose();s.captureHotkey=hotkeyId;}ImGui::SameLine();if(Button("清除按键")){s.captureHotkey=0;SetHotkeyBinding(hotkeyId,0,0);}}
