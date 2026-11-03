@@ -112,6 +112,43 @@ bool PanelCheckbox(const char* label,bool* value){
  ImGui::PushStyleColor(ImGuiCol_CheckMark,paper::colors->onPrimary);
  bool hit=ImGui::Checkbox(label,value);ImGui::PopStyleColor(4);ImGui::PopStyleVar();return hit;
 }
+bool SidebarCombo(const char* label,const char* preview){
+ if(!paper::active)return ImGui::BeginCombo(label,preview);
+ ImGui::PushStyleColor(ImGuiCol_FrameBg,paper::IsGlass()?paper::glass.input:paper::colors->button);
+ ImGui::PushStyleColor(ImGuiCol_Button,paper::IsGlass()?paper::glass.keycap:paper::colors->hover);
+ ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize,paper::IsGlass()?S(1):0.f);
+ bool open=ImGui::BeginCombo(label,preview);
+ ImGui::PopStyleVar();ImGui::PopStyleColor(2);
+ return open;
+}
+void SidebarInline(float width,float gap){
+ if(!paper::active){ImGui::SameLine();return;}
+ if(ImGui::GetItemRectMax().x+S(gap)+width<=ImGui::GetCurrentWindow()->WorkRect.Max.x)
+  ImGui::SameLine(0,S(gap));
+}
+bool SidebarRadio(const char* label,bool selected){
+ if(!paper::active)return ImGui::RadioButton(label,selected);
+ auto* window=ImGui::GetCurrentWindow();
+ if(window->SkipItems)return false;
+ const ImGuiID id=window->GetID(label);
+ const auto text=ImGui::CalcTextSize(label);
+ const float diameter=S(18),gap=S(8),height=S(31);
+ const auto lo=ImGui::GetCursorScreenPos();
+ ImRect rect(lo,{lo.x+diameter+gap+text.x,lo.y+height});
+ ImGui::ItemSize(rect,(height-text.y)*.5f);
+ if(!ImGui::ItemAdd(rect,id))return false;
+ bool hovered=false,held=false;
+ bool pressed=ImGui::ButtonBehavior(rect,id,&hovered,&held);
+ if(pressed)ImGui::MarkItemEdited(id);
+ ImGui::RenderNavCursor(rect,id);
+ auto* draw=window->DrawList;
+ const ImVec2 center(lo.x+diameter*.5f,rect.GetCenter().y);
+ draw->AddCircleFilled(center,diameter*.5f,ImGui::GetColorU32(hovered?paper::colors->hover:paper::colors->panel));
+ draw->AddCircle(center,diameter*.5f,ImGui::GetColorU32(paper::colors->muted),0,S(1.4f));
+ if(selected)draw->AddCircleFilled(center,S(5),ImGui::GetColorU32(paper::colors->radio));
+ ImGui::RenderText({lo.x+diameter+gap,center.y-text.y*.5f},label);
+ return pressed;
+}
 bool PanelHeader(const char* label,ImGuiTreeNodeFlags flags,bool current=false){
  if(!paper::active)return ImGui::CollapsingHeader(label,flags);
  ImGui::PushStyleColor(ImGuiCol_Header,current?paper::colors->signal:paper::colors->header);

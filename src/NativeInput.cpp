@@ -15,6 +15,7 @@ namespace worlddiff::overlay {
 namespace {
 constexpr UINT kUpdate=WM_APP+0x441,kClose=WM_APP+0x442;
 std::mutex mutex;std::atomic<DWORD> threadId{0};std::atomic<bool> started{false},shown{false};
+const wchar_t* editorFamily=fonts::Family;
 HWND owner=nullptr,host=nullptr,edit=nullptr;WNDPROC editOriginal=nullptr;HIMC ime=nullptr;HFONT font=nullptr;HBRUSH brush=nullptr;
 struct Session {ImGuiID id=0;std::string value,initial;RECT screen{};size_t capacity=0;int height=22;float rounding=6,paddingX=9;COLORREF background=RGB(37,46,58),foreground=RGB(241,244,248);bool focus=false;};
 Session session;bool frameSawActive=false;ImGuiID nativeId=0;
@@ -54,7 +55,7 @@ LRESULT CALLBACK HostProc(HWND hwnd,UINT message,WPARAM w,LPARAM l){
    if(region&&!SetWindowRgn(hwnd,region,TRUE))DeleteObject(region);regionWidth=width;regionHeight=height;regionRadius=radius;
   }
   if(!font||fontHeight!=request.height){
-   auto next=CreateFontW(-request.height,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,fonts::Family);
+   auto next=CreateFontW(-request.height,0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,editorFamily);
    if(next){auto previous=font;font=next;fontHeight=request.height;SendMessageW(edit,WM_SETFONT,(WPARAM)font,FALSE);if(previous)DeleteObject(previous);}
   }
   HDC dc=GetDC(edit);auto previous=SelectObject(dc,font);TEXTMETRICW metrics{};GetTextMetricsW(dc,&metrics);SelectObject(dc,previous);ReleaseDC(edit,dc);
@@ -73,10 +74,13 @@ LRESULT CALLBACK HostProc(HWND hwnd,UINT message,WPARAM w,LPARAM l){
  return DefWindowProcW(hwnd,message,w,l);
 }
 DWORD WINAPI Thread(void*){
- auto regular = fonts::Read(WORLDDIFF_FONT_REGULAR);
- DWORD count = 0;
- HANDLE privateFont = regular.data ? AddFontMemResourceEx(regular.data, regular.size, nullptr, &count) : nullptr;
- if (!privateFont) RuntimeLog("Native editor could not register the embedded font");
+ HANDLE privateFont = nullptr;
+ if (editorFamily == fonts::Family) {
+  const auto regular = fonts::Read(WORLDDIFF_FONT_REGULAR);
+  DWORD count = 0;
+  if (regular.data) privateFont = AddFontMemResourceEx(regular.data, regular.size, nullptr, &count);
+  if (!privateFont) RuntimeLog("Native editor could not register the embedded font");
+ }
  threadId=GetCurrentThreadId();CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);WNDCLASSW wc{};wc.lpfnWndProc=HostProc;wc.hInstance=GetModuleHandleW(nullptr);wc.lpszClassName=L"WorldDiff104NativeText";wc.hCursor=LoadCursorW(nullptr,MAKEINTRESOURCEW(32513));RegisterClassW(&wc);brush=CreateSolidBrush(RGB(37,46,58));
  host=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_TOPMOST,wc.lpszClassName,L"WorldDiff 中文输入",WS_POPUP,0,0,200,30,owner,nullptr,wc.hInstance,nullptr);
  edit=CreateWindowExW(0,L"EDIT",L"",WS_CHILD|WS_VISIBLE|ES_AUTOHSCROLL|ES_LEFT,0,0,200,30,host,(HMENU)1,wc.hInstance,nullptr);
@@ -89,7 +93,7 @@ DWORD WINAPI Thread(void*){
  return 0;
 }
 }
-void NativeInputInitialize(HWND game){owner=game;if(started.exchange(true))return;HANDLE thread=CreateThread(nullptr,0,Thread,nullptr,0,nullptr);if(thread)CloseHandle(thread);}
+void NativeInputInitialize(HWND game,bool useYaHei){owner=game;if(started.exchange(true))return;editorFamily=useYaHei?L"Microsoft YaHei UI":fonts::Family;HANDLE thread=CreateThread(nullptr,0,Thread,nullptr,0,nullptr);if(thread)CloseHandle(thread);}
 bool NativeInputThread(){return GetCurrentThreadId()==threadId.load();}
 bool NativeInputActive(){return shown.load();}
 bool NativeInputOwnWindow(HWND h){return h&&(h==host||h==edit);}

@@ -69,6 +69,10 @@ struct State {
  std::map<std::string,DWORD> profileAttempts;
  std::map<std::string,std::string> loadedFingerprints;
  std::map<std::string,std::string> profileSnapshots;
+ // Player-wide window preference, independent of equipment documents.
+ int panelWidth=0,panelHeight=0;
+ bool panelSizeDirty=false;
+ DWORD panelSizeChangedAt=0;
  bool migrating=false;
  bool trackingPlayer=false,storageReady=true,outfitChanging=false;
  OutfitSnapshot outfit,pendingOutfit;DWORD outfitSince=0;

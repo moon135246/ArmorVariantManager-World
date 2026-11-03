@@ -5,7 +5,7 @@
 #include <windows.h>
 #include <cstddef>
 namespace worlddiff::overlay {
-void NativeInputInitialize(HWND game);
+void NativeInputInitialize(HWND game,bool useYaHei);
 void NativeInputBeginFrame();
 void NativeInputEndFrame();
 void NativeInputClose();

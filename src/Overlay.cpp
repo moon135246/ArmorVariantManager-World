@@ -30,6 +30,7 @@ std::atomic<bool> open{false},deviceLost{false},inputRequested{false},inputInsta
 std::atomic<ID3D12Device*> expectedDevice{nullptr};
 thread_local bool ownInput=false;
 HWND window=nullptr;WNDPROC originalWnd=nullptr;IDXGISwapChain* bound=nullptr;
+fonts::FontChoice panelFont=fonts::Unavailable;
 bool commonReady=false,ready=false,is12=false;DWORD firstTick=0;
 bool autoOpened=false;std::atomic<DWORD> messageToggleAt{0};
 ID3D11Device* device11=nullptr;ID3D11DeviceContext* context11=nullptr;ID3D11RenderTargetView* rtv=nullptr;
@@ -85,7 +86,8 @@ void CreateRtv(IDXGISwapChain* swap){if(rtv){rtv->Release();rtv=nullptr;}ID3D11T
 bool Common(HWND hwnd){
  if(commonReady)return true;
  ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.ConfigFlags|=ImGuiConfigFlags_NavEnableKeyboard;io.ConfigWindowsMoveFromTitleBarOnly=true;
- if(!fonts::LoadPanelFonts(*io.Fonts)){
+ panelFont=fonts::LoadPanelFonts(*io.Fonts);
+ if(panelFont==fonts::Unavailable){
   RuntimeLog("Embedded panel fonts could not be loaded");
   ImGui::DestroyContext();return false;
  }
@@ -104,7 +106,7 @@ bool Initialize(IDXGISwapChain* swap){
  window=desc.OutputWindow;if(!Common(window))return false;
  if(is12){if(!dx12::Init(swap))return false;}else{if(FAILED(swap->GetDevice(IID_PPV_ARGS(&device11))))return false;device11->GetImmediateContext(&context11);if(!ImGui_ImplDX11_Init(device11,context11))return false;CreateRtv(swap);}
  if(!originalWnd)originalWnd=(WNDPROC)SetWindowLongPtrW(window,GWLP_WNDPROC,(LONG_PTR)WndProc);
- ready=true;bound=swap;firstTick=GetTickCount();NativeInputInitialize(window);RuntimeLog("In-game UI ready: %s hwnd=%p",is12?"DX12":"DX11",window);
+ ready=true;bound=swap;firstTick=GetTickCount();NativeInputInitialize(window,panelFont==fonts::YaHei);RuntimeLog("In-game UI ready: %s hwnd=%p",is12?"DX12":"DX11",window);
  return true;
 }
 HRESULT WINAPI Present(IDXGISwapChain* swap,UINT sync,UINT flags){

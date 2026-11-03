@@ -16,7 +16,7 @@ void DrawTransformTarget(uint64_t& id,const TransformSlot& slot,size_t index,Tra
  if(ImGui::BeginTable("目标",3,ImGuiTableFlags_SizingStretchProp)){
   ImGui::TableSetupColumn("分组",ImGuiTableColumnFlags_WidthStretch,1);ImGui::TableSetupColumn("预设",ImGuiTableColumnFlags_WidthStretch,1.3f);ImGui::TableSetupColumn("移除",ImGuiTableColumnFlags_WidthFixed,S(25));ImGui::TableNextRow();ImGui::TableNextColumn();
   auto* group=Find(target.group);ImGui::SetNextItemWidth(-1);
-  if(ImGui::BeginCombo("##选择分组",group?group->name.c_str():"选择分组")){
+  if(SidebarCombo("##选择分组",group?group->name.c_str():"选择分组")){
    for(auto& g:d.groups)if(g.scope==outfit&&!g.presets.empty()){
     auto* rule=TransformById(id);bool duplicate=false;if(rule)for(size_t j=0;j<rule->targets.size();j++)if(j!=index&&rule->targets[j].group==g.id)duplicate=true;
     ImGui::BeginDisabled(duplicate);auto label=(g.global?"[全局] ":"")+g.name;
@@ -24,7 +24,7 @@ void DrawTransformTarget(uint64_t& id,const TransformSlot& slot,size_t index,Tra
    }ImGui::EndCombo();
   }
   ImGui::TableNextColumn();group=Find(target.group);const char* preset="不切换";if(group)for(auto& p:group->presets)if(p.id==target.preset)preset=p.name.c_str();ImGui::SetNextItemWidth(-1);ImGui::BeginDisabled(!group);
-  if(ImGui::BeginCombo("##选择预设",preset)){
+  if(SidebarCombo("##选择预设",preset)){
    if(ImGui::Selectable("不切换",!target.preset)){target.preset=0;if(!placeholder)id=StoreTransformTarget(id,slot,index,target);}
    if(group)for(auto& p:group->presets)if(ImGui::Selectable(p.name.c_str(),p.id==target.preset)){target.preset=p.id;id=StoreTransformTarget(id,slot,index,target);}ImGui::EndCombo();
   }ImGui::EndDisabled();ImGui::TableNextColumn();
@@ -96,13 +96,12 @@ void DrawTransformCategory(int category){
  for(auto id:extra)if(auto* rule=TransformById(id)){TransformSlot slot{DescribeCondition(rule->condition),rule->condition};DrawTransformState(slot,id,(int)id+100,category==4);}
 }
 void TransformPanel(){
- PaperKicker("//  CONDITIONS");
- auto& s=Get();auto& mode=EnsureTransformMode(s.data,outfit);AutomationSwitch("启用变身功能",false);ImGui::SameLine();bool enabled=mode.enabled;
+ auto& s=Get();auto& mode=EnsureTransformMode(s.data,outfit);AutomationSwitch("启用变身功能",false);SidebarInline(S(34)+ImGui::CalcTextSize("当前装备启用变身").x,22);bool enabled=mode.enabled;
  if(PanelCheckbox("当前装备启用变身",&enabled)){mode.enabled=enabled;TransformChanged(enabled?"当前装备的变身已启用":"当前装备的变身已暂停");}
- if(Button("复位保持状态")){ResetTransforms();s.notice="保持状态已复位；条件仍满足时会再次触发";}ImGui::SameLine();
- if(ImGui::RadioButton("选择模式",!mode.parallel)){mode.parallel=false;TransformChanged();}ImGui::SameLine();if(ImGui::RadioButton("并行模式",mode.parallel)){mode.parallel=true;TransformChanged();}
+ if(Button("复位保持状态")){ResetTransforms();s.notice="保持状态已复位；条件仍满足时会再次触发";}SidebarInline(S(26)+ImGui::CalcTextSize("选择模式").x,12);
+ if(SidebarRadio("选择模式",!mode.parallel)){mode.parallel=false;TransformChanged();}SidebarInline(S(26)+ImGui::CalcTextSize("并行模式").x,22);if(SidebarRadio("并行模式",mode.parallel)){mode.parallel=true;TransformChanged();}
  if(!mode.parallel){
-  ImGui::SetNextItemWidth(-1);if(ImGui::BeginCombo("##变身条件类型",TransformCategoryName(mode.selected))){for(int i=0;i<kTransformCategories;i++)if(ImGui::Selectable(TransformCategoryName(i),mode.selected==i)){mode.selected=i;TransformChanged();}ImGui::EndCombo();}
+  ImGui::SetNextItemWidth(-1);if(SidebarCombo("##变身条件类型",TransformCategoryName(mode.selected))){for(int i=0;i<kTransformCategories;i++)if(ImGui::Selectable(TransformCategoryName(i),mode.selected==i)){mode.selected=i;TransformChanged();}ImGui::EndCombo();}
  }else{
   ImGui::TextColored(muted,"勾选同时使用的条件；优先级数字越小越优先。");
   ImGui::BeginChild("并行条件选择",ImVec2(0,std::clamp(ImGui::GetContentRegionAvail().y-S(170),S(55),S(175))));

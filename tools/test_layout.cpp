@@ -70,7 +70,7 @@ int main(int argc,char** argv){
  ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DeltaTime=1.f/60;if(!worlddiff::fonts::LoadPanelFonts(*io.Fonts,io.Fonts->GetGlyphRangesChineseSimplifiedCommon()))return 1;unsigned char* pixels;int width,height;io.Fonts->GetTexDataAsRGBA32(&pixels,&width,&height);
  auto& style=ImGui::GetStyle();style.FramePadding={9,6};style.ItemSpacing={10,8};style.ChildRounding=8;style.ScrollbarSize=14;
  struct Case {float screenX,screenY,scale,windowX,windowY;};
- Case cases[]={{1920,1080,.7f,1022,595},{1920,1080,1,1460,850},{1920,1080,1,1050,620},{1280,720,1,1050,620},{3840,2160,1.5f,2190,1275}};
+ Case cases[]={{1920,1080,.7f,1022,595},{1920,1080,1,1460,850},{1920,1080,1,1050,620},{1280,720,1,1050,620},{3840,2160,1.5f,2190,1275},{2560,1440,1,1460,850},{2560,1080,1,1460,850},{3440,1440,1.5f,2190,1275},{5120,1440,1.5f,2190,1275},{1920,1080,1.5f,1575,930},{1280,720,1.5f,1250,690}};
  unsigned checks=0;
  for(auto theme:{UiTheme::Basic,UiTheme::ClassicWhite,UiTheme::ClassicBlack,UiTheme::Glass})for(auto c:cases)for(bool hidden:{false,true})for(bool editing:{false,true})for(int page=0;page<5;page++){
   state.data.theme=theme;io.DisplaySize={c.screenX,c.screenY};state.data.scale=c.scale;state.data.hideDragHint=hidden;worlddiff::overlay::creating=editing;worlddiff::overlay::tab=page;

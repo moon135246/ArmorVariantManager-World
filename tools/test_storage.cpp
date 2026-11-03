@@ -43,6 +43,14 @@ int main(int argc,char** argv){try{
  Reset(root/L"normal");auto a=MakeModel("pl105_0000"),b=MakeModel("pl106_0000");s.models={a,b};auto gid=Configure(a);auto preset=Find(gid)->selected;
  check(Save(),"first canonical save succeeds");auto canonical=s.directory/L"Presets/pl105_0000.wdp";auto settings=Read(s.configPath);auto content=Read(canonical);
  check(settings.find("WorldDiffSettings 123")==0&&settings.find("GROUP")==std::string::npos&&settings.find("MESH")==std::string::npos&&settings.find("BINDING")==std::string::npos,"settings contain no equipment data");
+ s.panelWidth=2050;s.panelHeight=1100;
+ check(SaveSettings()&&Read(canonical)==content,"window preferences save independently of equipment");
+ auto windowSettings=Read(s.configPath);
+ check(windowSettings.find("WorldDiffSettings 124")==0&&windowSettings.find("WINDOW 2050 1100")!=std::string::npos,"settings record the manual window size");
+ Write(s.configPath,"WorldDiffSettings 124\nSET 1 1 0 120 1 0 1 1 1 0 1\nWINDOW -1 1100\n");
+ check(!LoadSettings()&&s.panelWidth==2050&&s.panelHeight==1100,"invalid size cannot partially replace current settings");
+ Write(s.configPath,settings);
+ check(LoadSettings()&&s.panelWidth==0&&s.panelHeight==0,"old settings load without a saved size");
  check(s.data.theme==UiTheme::ClassicWhite,"new configuration defaults to classic white");
  s.data.theme=UiTheme::Basic;check(SaveSettings(),"explicit basic setting saved");s.data.theme=UiTheme::ClassicWhite;
  check(LoadSettings()&&s.data.theme==UiTheme::Basic,"existing basic preference is respected");

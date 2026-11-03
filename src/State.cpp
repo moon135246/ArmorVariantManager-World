@@ -192,6 +192,9 @@ void Tick(){
  }
  InterlockedExchange(&s.live->enabled,s.data.enabled?1:0);InterlockedExchange(&s.live->heartbeat,(LONG)now);
  if(s.trackingPlayer)sprintf_s(s.live->message,"WorldDiff 1.2.6 local=%llx preview=%d ready=%d peers=%zu matched=%zu modelInstances=%zu",(unsigned long long)s.outfit.entity,s.outfit.savePreview?1:0,s.outfit.ready&&!s.outfitChanging?1:0,s.peerCount,s.matchedPeers,policies?policies->models.size():0);
+ if(s.panelSizeDirty&&(DWORD)(now-s.panelSizeChangedAt)>500){
+  s.panelSizeDirty=!SaveSettings();s.panelSizeChangedAt=now;
+ }
  if(s.dirty&&(DWORD)(now-s.dirtyAt)>450)Save();
 }
 }

@@ -10,14 +10,19 @@ using namespace worlddiff;using namespace worlddiff::app;namespace ui=worlddiff:
 int main(int argc,char** argv){try{
  unsigned checks=0;auto check=[&](bool good,const char* reason){checks++;if(!good)throw std::runtime_error(reason);};
  auto pump=[](){MSG message;while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)){TranslateMessage(&message);DispatchMessageW(&message);}};
- ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={900,500};io.DeltaTime=1.f/60;if(!worlddiff::fonts::LoadPanelFonts(*io.Fonts,io.Fonts->GetGlyphRangesChineseSimplifiedCommon()))return 1;unsigned char* pixels;int width,height;io.Fonts->GetTexDataAsRGBA32(&pixels,&width,&height);
+ ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={900,500};io.DeltaTime=1.f/60;bool simulateMissing=argc>1&&std::string(argv[1])=="--missing-font";
+ auto dir=simulateMissing ? std::filesystem::temp_directory_path()/L"WorldDiffMissingFonts" : fonts::WindowsFontDirectory();
+ auto choice=fonts::LoadPanelFonts(*io.Fonts,io.Fonts->GetGlyphRangesChineseSimplifiedCommon(),dir);
+ check(choice!=fonts::Unavailable,"usable panel font");
+ if(simulateMissing)check(choice==fonts::Embedded,"missing YaHei uses embedded fonts");
+ unsigned char* pixels;int width,height;io.Fonts->GetTexDataAsRGBA32(&pixels,&width,&height);
  auto& style=ImGui::GetStyle();style.WindowRounding=12;style.FrameRounding=6;style.FramePadding={9,6};style.ItemSpacing={10,8};style.Colors[ImGuiCol_WindowBg]={.122f,.149f,.188f,1};style.Colors[ImGuiCol_FrameBg]={.145f,.18f,.227f,1};style.Colors[ImGuiCol_CheckMark]={.33f,.72f,.78f,1};
  Model m;m.equip="pl105_0000";m.relativePath="pl\\f_equip\\pl105_0000\\body\\mod\\f_body105_0000";Target target{m.relativePath,0,true};ImRect row,checkbox,field;ImGuiID fieldId=0;char text[192]{};
  auto draw=[&](bool mesh){ImGui::NewFrame();ImGui::SetNextWindowPos({20,20});ImGui::SetNextWindowSize({600,260});ImGui::Begin("外观检查###Appearance",nullptr,ImGuiWindowFlags_NoSavedSettings);ImGui::PushFont(nullptr,22*Get().data.scale);ui::NativeInputBeginFrame();
   if(mesh){ImGui::TextUnformatted("身体 · f_body105_0000");bool visible=true;ImGui::Checkbox("##可见",&visible);checkbox={ImGui::GetItemRectMin(),ImGui::GetItemRectMax()};ImGui::SameLine();ui::MeshNameRow(m,target,"Meira_3_Antenna",true,nullptr);row={ImGui::GetItemRectMin(),ImGui::GetItemRectMax()};}
   ImGui::SetNextItemWidth(240*Get().data.scale);ui::TextField("##appearance_input","新预设名称",text,sizeof(text));field={ImGui::GetItemRectMin(),ImGui::GetItemRectMax()};fieldId=ImGui::GetItemID();ui::NativeInputEndFrame();ImGui::PopFont();ImGui::End();ImGui::Render();
  };
- auto exportFrame=[&](const char* name){if(argc>1){auto folder=PathUtf8(argv[1])/PathUtf8(name);auto value=Utf8(folder.wstring());SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",value.c_str());SaveCurrentFrame();SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",nullptr);}};
+ auto exportFrame=[&](const char* name){if(argc>1&&!simulateMissing){auto folder=PathUtf8(argv[1])/PathUtf8(name);auto value=Utf8(folder.wstring());SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",value.c_str());SaveCurrentFrame();SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",nullptr);}};
  Get().data.scale=1;draw(true);draw(true);auto rowWidth=row.GetWidth();check(rowWidth>300,"mesh label hover spans the available row, beyond just its text");
  check(row.Min.y==checkbox.Min.y&&row.Max.y==checkbox.Max.y,"rounded hover is vertically aligned with its visibility checkbox");
  io.AddMousePosEvent(row.GetCenter().x,row.GetCenter().y);draw(true);draw(true);size_t hoverVertices=0;
@@ -26,7 +31,7 @@ int main(int argc,char** argv){try{
  io.AddMousePosEvent(-100,-100);draw(false);draw(false);exportFrame("input_idle");
  // Exercise the actual dedicated native editor while keeping its popup hidden;
  // this fixture never focuses a window or sends input to the user's game.
- HWND testOwner=CreateWindowExW(0,L"STATIC",L"WorldDiff appearance owner",WS_POPUP,100,100,900,500,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);check(testOwner!=nullptr,"create hidden native owner fixture");ui::NativeInputInitialize(testOwner);
+ HWND testOwner=CreateWindowExW(0,L"STATIC",L"WorldDiff appearance owner",WS_POPUP,100,100,900,500,nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);check(testOwner!=nullptr,"create hidden native owner fixture");ui::NativeInputInitialize(testOwner,choice==fonts::YaHei);
  for(int i=0;i<200&&!ui::edit;i++){pump();Sleep(5);}check(ui::edit&&ui::host,"real native editor thread initialized");check(!(GetWindowLongPtrW(ui::edit,GWL_EXSTYLE)&WS_EX_CLIENTEDGE)&&!(GetWindowLongPtrW(ui::edit,GWL_STYLE)&WS_BORDER),"native editor has no system rectangular border");
  check(ImmGetContext(ui::edit)!=nullptr,"dedicated IME context remains available");
  ui::shown=true;{std::lock_guard lock(ui::mutex);ui::session.id=fieldId;ui::session.value="圆角中文输入";ui::session.initial="初始名称";ui::session.capacity=sizeof(text);}
@@ -47,8 +52,8 @@ int main(int argc,char** argv){try{
  HDC editDC=GetDC(ui::edit);auto oldFont=SelectObject(editDC,ui::font);
  wchar_t family[LF_FACESIZE]{};GetTextFaceW(editDC,LF_FACESIZE,family);
  WORD glyphs[3]{};DWORD found=GetGlyphIndicesW(editDC,L"猎龍霞",3,glyphs,GGI_MARK_NONEXISTING_GLYPHS);
- check(wcscmp(family,fonts::Family)==0,"native editor selected embedded Noto Sans SC");
- check(found==3&&glyphs[0]!=0xffff&&glyphs[1]!=0xffff&&glyphs[2]!=0xffff,"embedded native font covers Chinese input");
+ check(wcscmp(family,choice==fonts::YaHei?L"Microsoft YaHei UI":fonts::Family)==0,"native editor selected the matching font family");
+ check(found==3&&glyphs[0]!=0xffff&&glyphs[1]!=0xffff&&glyphs[2]!=0xffff,"selected native font covers Chinese input");
  SelectObject(editDC,oldFont);ReleaseDC(ui::edit,editDC);
  Get().data.scale=1;draw(false);SendMessageW(ui::host,ui::kUpdate,0,0);exportFrame("input_active");
  check(std::string(text)=="圆角中文输入","Unicode native value reaches the real TextField buffer");SetWindowTextW(ui::edit,L"提交的中文名称");SendMessageW(ui::edit,WM_KEYDOWN,VK_RETURN,0);draw(false);check(std::string(text)=="提交的中文名称"&&!ui::shown,"Enter commits Unicode text and closes the native session");

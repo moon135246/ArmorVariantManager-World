@@ -1,6 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <initializer_list>
+#include <filesystem>
 #include "imgui.h"
 #include "FontIds.h"
 
@@ -22,15 +23,38 @@ inline Resource Read(int id) {
     return {LockResource(loaded), SizeofResource(module, entry)};
 }
 
-inline bool LoadPanelFonts(ImFontAtlas& atlas, const ImWchar* ranges = nullptr) {
+inline std::filesystem::path WindowsFontDirectory() {
+    wchar_t path[MAX_PATH]{};
+    const UINT length = GetWindowsDirectoryW(path, MAX_PATH);
+    if (!length || length >= MAX_PATH) return {};
+    return std::filesystem::path(path) / L"Fonts";
+}
+
+enum FontChoice { Unavailable, Embedded, YaHei };
+
+inline FontChoice LoadPanelFonts(ImFontAtlas& atlas, const ImWchar* ranges = nullptr,
+                                 const std::filesystem::path& directory = WindowsFontDirectory()) {
+    if (!directory.empty()) {
+        ImFontConfig config;
+        config.Flags |= ImFontFlags_NoLoadError;
+        auto addFile = [&](const wchar_t* name) {
+            const auto path = (directory / name).u8string();
+            return atlas.AddFontFromFileTTF(reinterpret_cast<const char*>(path.c_str()), 22.0f, &config, ranges);
+        };
+        if (addFile(L"msyh.ttc")) {
+            // Version 1.2.5 used the regular face for headings when bold was unavailable.
+            addFile(L"msyhbd.ttc");
+            return YaHei;
+        }
+    }
     for (int id : {WORLDDIFF_FONT_REGULAR, WORLDDIFF_FONT_BOLD}) {
         Resource resource = Read(id);
-        if (!resource.data || !resource.size) return false;
+        if (!resource.data || !resource.size) return Unavailable;
         ImFontConfig config;
         config.FontDataOwnedByAtlas = false; // Module resources outlive the atlas.
         if (!atlas.AddFontFromMemoryTTF(resource.data, static_cast<int>(resource.size),
-                                        22.0f, &config, ranges)) return false;
+                                        22.0f, &config, ranges)) return Unavailable;
     }
-    return true;
+    return Embedded;
 }
 }

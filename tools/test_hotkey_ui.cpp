@@ -74,6 +74,30 @@ int main(int argc,char** argv){try{
  if(std::filesystem::exists(notesFile))std::filesystem::copy_file(notesFile,s.directory/L"更新日志.md",std::filesystem::copy_options::overwrite_existing);
  const char* names[]={"main","conditions","hotkeys","settings","about"};
  for(page=0;page<5;page++){settle();check(ImGui::GetDrawData()->TotalVtxCount>1000,"classic page rendered");capture(names[page]);}
+ const char* nav[]={"部位与材质","变身与条件","预设快捷键","设置","关于"};
+ for(const auto& size:cases){
+  active=size;page=0;settle();
+  std::array<ImRect,5> baseline;
+  for(size_t i=0;i<baseline.size();++i)baseline[i]=keyui::items.at(nav[i]);
+  auto verifyTabs=[&]{
+   for(size_t i=0;i<baseline.size();++i){
+    const auto& box=keyui::items.at(nav[i]);const auto& ref=baseline[i];
+    if(box.Min.x!=ref.Min.x||box.Min.y!=ref.Min.y||box.Max.x!=ref.Max.x||box.Max.y!=ref.Max.y){
+     std::cerr<<"tab geometry changed: "<<nav[i]<<" page="<<page<<" width="<<size.width<<" scale="<<size.scale<<" rect "<<ref.Min.x<<","<<ref.Min.y<<","<<ref.Max.x<<","<<ref.Max.y<<" -> "<<box.Min.x<<","<<box.Min.y<<","<<box.Max.x<<","<<box.Max.y<<"\n";
+     throw std::runtime_error("tab geometry must stay fixed through the click and subsequent frames");
+    }
+   }
+  };
+  for(int next:{1,2,3,4,0}){
+   const auto pt=keyui::items.at(nav[next]).GetCenter();io.AddMousePosEvent(pt.x,pt.y);
+   io.AddMouseButtonEvent(0,true);draw();verifyTabs();
+   io.AddMouseButtonEvent(0,false);draw();page=ui::tab;verifyTabs();
+   check(page==next,"clicked page became active without moving the tab strip");
+   for(int frame=0;frame<3;++frame){draw();verifyTabs();}
+  }
+ }
+ active={1642,1048,1,1602,1008};page=4;settle();
+
  for(auto& partModel:s.models)for(auto& mesh:partModel.meshes){mesh.vertexCount=3;mesh.indexCount=3;}
  page=0;settle();click("导出模板");settle();for(int frame=0;frame<14;++frame)draw();capture("save_file");
  strcpy_s(ui::profileName,"Mei_梅");click("保存文件");
@@ -114,5 +138,35 @@ int main(int argc,char** argv){try{
  s.trackingPlayer=true;s.outfit.ready=false;page=3;settle();click("界面风格");settle();click("基础");settle();
  check(s.data.theme==UiTheme::Basic,"waiting-for-player settings can switch back to basic");
  s.trackingPlayer=false;page=0;settle();verifyFind(true);
+ // Drive a real resize grip, then recreate the ImGui context as on game restart.
+ auto newContext=[&]{
+  ImGui::DestroyContext();ImGui::CreateContext();
+  auto& testIO=ImGui::GetIO();testIO.IniFilename=nullptr;testIO.DisplaySize={3840,2160};
+  testIO.DeltaTime=1.f/60;
+  testIO.Fonts->AddFontDefault();
+  unsigned char* pixels;int w,h;testIO.Fonts->GetTexDataAsRGBA32(&pixels,&w,&h);
+ };
+ newContext();s.data.scale=1;s.data.theme=wanted;ui::tab=0;
+ auto panelFrame=[&]{ImGui::NewFrame();ui::DrawPanel();ImGui::Render();return ImGui::FindWindowByName("###WorldDiffInternal");};
+ auto* manager=panelFrame();panelFrame();panelFrame();
+ auto& input=ImGui::GetIO();
+ ImVec2 grip(manager->Pos.x+manager->Size.x-3,manager->Pos.y+manager->Size.y-3);
+ input.AddMousePosEvent(grip.x,grip.y);panelFrame();panelFrame();
+ input.AddMouseButtonEvent(0,true);panelFrame();
+ input.AddMousePosEvent(grip.x+640,grip.y+390);panelFrame();panelFrame();
+ input.AddMouseButtonEvent(0,false);panelFrame();
+ const int savedWidth=s.panelWidth,savedHeight=s.panelHeight;
+ check(savedWidth>=2050&&savedHeight>=1200&&!s.panelSizeDirty,"manual resize writes the chosen dimensions on release");
+ s.panelWidth=s.panelHeight=0;
+ check(LoadSettings()&&s.panelWidth==savedWidth&&s.panelHeight==savedHeight,"window size round trips through player settings");
+ newContext();manager=panelFrame();
+ check(manager->Size.x==savedWidth&&manager->Size.y==savedHeight,"fresh context restores the chosen pixel size");
+ ImGui::GetIO().DisplaySize={1920,1080};manager=panelFrame();
+ check(manager->Size.x<=1920&&manager->Size.y<=1080&&manager->Pos.x>=0&&manager->Pos.y>=0,"4K preference fits a smaller screen");
+ check(s.panelWidth==savedWidth&&s.panelHeight==savedHeight,"screen constraint does not replace stored preference");
+ ImGui::GetIO().DisplaySize={3840,2160};manager=panelFrame();
+ check(manager->Size.x==savedWidth&&manager->Size.y==savedHeight,"returning to 4K restores the saved size");
+ s.trackingPlayer=true;s.outfit.ready=false;manager=panelFrame();
+ check(manager->Size.x==savedWidth&&manager->Size.y==savedHeight,"waiting panel uses the same remembered size");
  ImGui::DestroyContext();std::cout<<"PASS "<<checks<<" real shortcut-page UI checks\nArtifacts "<<s.directory.string()<<'\n';return 0;
  }catch(const std::exception& e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}
