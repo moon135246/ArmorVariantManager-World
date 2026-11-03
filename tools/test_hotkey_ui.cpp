@@ -6,9 +6,9 @@
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
-namespace keyui {std::map<std::string,ImRect> items;std::vector<std::string> text;}
+namespace keyui {bool applyDisabled=false;std::map<std::string,ImRect> items;std::vector<std::string> text;}
 namespace ImGui {
-bool KeyTrackedButton(const char* label,const ImVec2& size=ImVec2(0,0)){auto hit=Button(label,size);keyui::items[label]={GetItemRectMin(),GetItemRectMax()};return hit;}
+bool KeyTrackedButton(const char* label,const ImVec2& size=ImVec2(0,0)){auto hit=Button(label,size);if(std::strcmp(label,"应用预设")==0)keyui::applyDisabled=(GetCurrentContext()->LastItemData.ItemFlags&ImGuiItemFlags_Disabled)!=0;keyui::items[label]={GetItemRectMin(),GetItemRectMax()};return hit;}
 bool KeyTrackedCheckbox(const char* label,bool* value){auto hit=Checkbox(label,value);keyui::items[label]={GetItemRectMin(),GetItemRectMax()};return hit;}
 bool KeyTrackedCombo(const char* label,const char* preview,ImGuiComboFlags flags=0){auto bounds=ImRect(GetCursorScreenPos(),GetCursorScreenPos());auto hit=BeginCombo(label,preview,flags);if(!hit)bounds={GetItemRectMin(),GetItemRectMax()};else{auto& last=GetCurrentContext()->LastItemData;bounds=last.Rect;}keyui::items[label]=bounds;return hit;}
 bool KeyTrackedSelectable(const char* label,bool selected=false,ImGuiSelectableFlags flags=0,const ImVec2& size=ImVec2(0,0)){auto hit=Selectable(label,selected,flags,size);keyui::items[label]={GetItemRectMin(),GetItemRectMax()};return hit;}
@@ -31,7 +31,7 @@ using namespace worlddiff;using namespace worlddiff::app;namespace ui=worlddiff:
 int main(int argc,char** argv){try{
  unsigned checks=0;auto check=[&](bool yes,const char* reason){checks++;if(!yes)throw std::runtime_error(reason);};auto& s=Get();s.loaded=true;s.directory=std::filesystem::temp_directory_path()/(L"WorldDiff124KeyUI_"+std::to_wstring(GetTickCount64()));s.configPath=s.directory/L"Settings.cfg";std::filesystem::create_directories(s.directory);
  Model model;model.equip="pl105_0000";model.part="body";model.relativePath="pl\\f_equip\\pl105_0000\\body\\mod\\f_body105_0000";s.models={model};auto main=Main(model.equip).id;Preset p;p.id=s.data.nextId++;p.name="隐藏";p.rules.hidden.insert({model.relativePath,0,true});Preset shown;shown.id=s.data.nextId++;shown.name="显示";Find(main)->presets={p,shown};Find(main)->selected=shown.id;ui::outfit=model.equip;ui::groupId=main;s.data.hideDragHint=true;
- ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DeltaTime=1.f/60;ImFontGlyphRangesBuilder range;range.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());range.AddText("编辑明月别枝预设快捷键互斥录制");ImVector<ImWchar> glyphs;range.BuildRanges(&glyphs);io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/msyh.ttc",22,nullptr,glyphs.Data);io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/msyhbd.ttc",22,nullptr,glyphs.Data);unsigned char* atlas;int w,h;io.Fonts->GetTexDataAsRGBA32(&atlas,&w,&h);auto& style=ImGui::GetStyle();style.FramePadding={9,6};style.ItemSpacing={10,8};style.FrameRounding=6;style.ChildRounding=8;style.Colors[ImGuiCol_WindowBg]={.078f,.094f,.125f,.97f};style.Colors[ImGuiCol_ChildBg]={.122f,.149f,.188f,.98f};style.Colors[ImGuiCol_Button]={.13f,.30f,.35f,1};style.Colors[ImGuiCol_Text]={.945f,.957f,.972f,1};style.Colors[ImGuiCol_CheckMark]={.33f,.72f,.78f,1};
+ ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DeltaTime=1.f/60;ImFontGlyphRangesBuilder range;range.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());range.AddText("编辑明月别枝预设快捷键互斥录制黎明巫女");ImVector<ImWchar> glyphs;range.BuildRanges(&glyphs);io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/msyh.ttc",22,nullptr,glyphs.Data);io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/msyhbd.ttc",22,nullptr,glyphs.Data);unsigned char* atlas;int w,h;io.Fonts->GetTexDataAsRGBA32(&atlas,&w,&h);auto& style=ImGui::GetStyle();style.FramePadding={9,6};style.ItemSpacing={10,8};style.FrameRounding=6;style.ChildRounding=8;style.Colors[ImGuiCol_WindowBg]={.078f,.094f,.125f,.97f};style.Colors[ImGuiCol_ChildBg]={.122f,.149f,.188f,.98f};style.Colors[ImGuiCol_Button]={.13f,.30f,.35f,1};style.Colors[ImGuiCol_Text]={.945f,.957f,.972f,1};style.Colors[ImGuiCol_CheckMark]={.33f,.72f,.78f,1};
  struct Case {float x,y,scale,width,height;};Case cases[]={{1920,1080,.7f,1022,595},{1920,1080,1,1460,850},{1920,1080,1,1050,620},{1280,720,1,1050,620},{3840,2160,1.5f,2190,1275}};auto active=cases[1];int page=2;
  auto draw=[&]{io.DisplaySize={active.x,active.y};s.data.scale=active.scale;ui::tab=page;keyui::items.clear();keyui::text.clear();ImGui::NewFrame();ImGui::SetWindowPos("###WorldDiffInternal",{20,20});ImGui::SetWindowSize("###WorldDiffInternal",{active.width,active.height});ui::DrawPanel();ImGui::Render();};
  auto settle=[&]{for(int i=0;i<3;i++)draw();};auto click=[&](const char* label){auto it=keyui::items.find(label);if(it==keyui::items.end())throw std::runtime_error(std::string("missing widget: ")+label);auto point=it->second.GetCenter();io.AddMousePosEvent(point.x,point.y);io.AddMouseButtonEvent(0,true);draw();io.AddMouseButtonEvent(0,false);draw();draw();};
@@ -50,11 +50,10 @@ int main(int argc,char** argv){try{
  page=4;settle();check(std::find(keyui::text.begin(),keyui::text.end(),"插件作者：明月别枝(moon)")!=keyui::text.end(),"About credits the requested author name");// Use the real settings combo, then render every page with the saved theme.
  page=3;settle();click("界面风格");settle();click("经典白");settle();
  check(s.data.theme==UiTheme::ClassicWhite&&LoadSettings()&&s.data.theme==UiTheme::ClassicWhite,"real theme picker saves classic white");
- click("界面风格");settle();click("玻璃态（待推出）");
- check(s.data.theme==UiTheme::ClassicWhite,"planned themes cannot be selected");
- click("基础");settle();check(s.data.theme==UiTheme::Basic,"switching back restores the basic UI");
- bool black=argc>3&&std::string(argv[3])=="black";
- const char* choice=black?"经典黑":"经典白";auto wanted=black?UiTheme::ClassicBlack:UiTheme::ClassicWhite;
+ click("界面风格");settle();click("基础");settle();check(s.data.theme==UiTheme::Basic,"switching back restores the basic UI");
+ std::string variant=argc>3?argv[3]:"white";
+ auto wanted=variant=="glass"?UiTheme::Glass:variant=="black"?UiTheme::ClassicBlack:UiTheme::ClassicWhite;
+ const char* choice=variant=="glass"?"玻璃态":variant=="black"?"经典黑":"经典白";
  click("界面风格");settle();click(choice);settle();
  check(LoadSettings()&&s.data.theme==wanted,"selected classic theme persists");
  auto& body=s.models[0];body.display="f_body105_0000";
@@ -75,41 +74,44 @@ int main(int argc,char** argv){try{
  const char* names[]={"main","conditions","hotkeys","settings","about"};
  for(page=0;page<5;page++){settle();check(ImGui::GetDrawData()->TotalVtxCount>1000,"classic page rendered");capture(names[page]);}
  for(auto& partModel:s.models)for(auto& mesh:partModel.meshes){mesh.vertexCount=3;mesh.indexCount=3;}
- page=0;settle();click("导出模板");settle();capture("save_file");
+ page=0;settle();click("导出模板");settle();for(int frame=0;frame<14;++frame)draw();capture("save_file");
  strcpy_s(ui::profileName,"Mei_梅");click("保存文件");
  check(std::filesystem::exists(s.directory/L"Templates/Mei_梅.wdp"),"save dialog exports the named template");
- click("手动查找");settle();click("刷新列表");settle();
- const char* result="##paperTemplate";
- check(keyui::items.count(result)==1,"classic search shows the exported template");
- auto yellowFlag=[&]{
-  for(auto* w:ImGui::GetCurrentContext()->Windows)if(w->Active&&std::strstr(w->Name,"/预设文件列表_"))
-   for(const auto& v:w->DrawList->VtxBuffer)if(v.col==ui::paper::PaletteFor(wanted).signal)return true;
-  return false;
- };
- io.AddMousePosEvent(-100,-100);settle();check(!yellowFlag(),"idle search row has no yellow flag");capture("find");
- auto hit=keyui::items.at(result).GetCenter();io.AddMousePosEvent(hit.x,hit.y);settle();
- check(yellowFlag(),"hover highlights the classic template");capture("find_selected");click(result);
- auto closed=[] {return !ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId|ImGuiPopupFlags_AnyPopupLevel);};
- check(closed()&&s.data.bindings[model.equip]=="pl105_0000.wdp","single click imports the original template");
+ auto sourceFile=s.directory/L"Templates/Mei_梅.wdp";auto secondFile=s.directory/L"Templates/Z_备用.wdp";
  io.ConfigFlags|=ImGuiConfigFlags_NavEnableKeyboard;
- click("手动查找");io.AddMousePosEvent(-100,-100);settle();
- for(int i=0;i<8&&!yellowFlag();++i){
-  io.AddKeyEvent(ImGuiKey_Tab,true);draw();io.AddKeyEvent(ImGuiKey_Tab,false);settle();
- }
- check(yellowFlag(),"keyboard focus highlights the template with the mouse away");
- io.AddKeyEvent(ImGuiKey_Enter,true);draw();io.AddKeyEvent(ImGuiKey_Enter,false);settle();
- check(closed(),"Enter imports the focused result");
+ auto closed=[] {return !ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId|ImGuiPopupFlags_AnyPopupLevel);};
+ auto press=[&](ImGuiKey key){io.AddKeyEvent(key,true);draw();io.AddKeyEvent(key,false);settle();};
+ auto verifyFind=[&](bool basic){
+  auto rows=basic?"##template":"##paperTemplate";
+  auto firstId=Main(model.equip).id;
+  std::filesystem::copy_file(sourceFile,secondFile,std::filesystem::copy_options::overwrite_existing);
+  click("手动查找");settle();
+  check(keyui::applyDisabled&&ui::profileFiles.size()==2&&ui::selectedProfileFile.empty(),"open with two templates and no selection");
+  auto apply=keyui::items.at("应用预设"),cancel=keyui::items.at("取消##查找"),refresh=keyui::items.at("刷新列表");
+  check(apply.Min.x>cancel.Max.x&&apply.Min.y==refresh.Min.y,"Apply is right of Cancel on the footer");
+  click("应用预设");check(!closed()&&Main(model.equip).id==firstId,"disabled Apply cannot import");
+  io.AddMousePosEvent(-100,-100);settle();capture(basic?"find_basic_idle":"find");
+  press(ImGuiKey_DownArrow);check(ui::selectedProfileFile=="Mei_梅.wdp","Down selects first without clicking");
+  press(ImGuiKey_DownArrow);check(ui::selectedProfileFile=="Z_备用.wdp","Down selects next");
+  press(ImGuiKey_UpArrow);check(ui::selectedProfileFile=="Mei_梅.wdp","Up selects previous");
+  auto lastRow=keyui::items.at(rows).GetCenter();io.AddMousePosEvent(lastRow.x,lastRow.y);settle();
+  check(ui::selectedProfileFile=="Mei_梅.wdp","hover over another row does not replace selection");
+  click(rows);io.AddMousePosEvent(-100,-100);settle();
+  check(!keyui::applyDisabled&&ui::selectedProfileFile=="Z_备用.wdp"&&!closed()&&Main(model.equip).id==firstId,"click selects without importing");
+  click("刷新列表");check(ui::selectedProfileFile=="Z_备用.wdp","refresh retains selected filename");
+  std::filesystem::remove(secondFile);click("刷新列表");
+  check(keyui::applyDisabled&&ui::selectedProfileFile.empty()&&ui::profileFiles.size()==1,"refresh clears missing selection");
+  click(rows);settle();capture(basic?"find_basic":"find_selected");click("取消##查找");
+  check(closed()&&Main(model.equip).id==firstId,"cancel leaves equipment unchanged");
+  click("手动查找");settle();check(ui::selectedProfileFile.empty(),"reopen clears selection");
+  std::filesystem::copy_file(sourceFile,secondFile);click("刷新列表");click(rows);press(ImGuiKey_Enter);check(!closed()&&Main(model.equip).id==firstId,"Enter on a row never imports");
+  click("应用预设");
+  check(closed()&&s.data.bindings[model.equip]=="pl105_0000.wdp"&&s.notice.find("Z_备用.wdp")!=std::string::npos&&Main(model.equip).id!=firstId,"Apply imports selected file and closes");std::filesystem::remove(secondFile);
+ };
+ verifyFind(false);
  page=3;settle();click("界面风格");settle();capture("picker");click(choice);
  s.trackingPlayer=true;s.outfit.ready=false;page=3;settle();click("界面风格");settle();click("基础");settle();
  check(s.data.theme==UiTheme::Basic,"waiting-for-player settings can switch back to basic");
- s.trackingPlayer=false;page=0;settle();click("手动查找");settle();
- auto templateRow=keyui::items.at("##template");
- check(templateRow.GetHeight()>=42,"basic template results use the group-row height");
- auto center=templateRow.GetCenter();io.AddMousePosEvent(center.x,center.y);settle();
- bool stripe=false;for(auto* window:ImGui::GetCurrentContext()->Windows)
-  if(window->Active&&std::strstr(window->Name,"/预设文件列表_"))
-   for(const auto& vertex:window->DrawList->VtxBuffer)if(vertex.col==IM_COL32(82,226,236,255))stripe=true;
- check(stripe,"hovered basic template has the group selection stripe");capture("find_basic");click("##template");
- check(!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId|ImGuiPopupFlags_AnyPopupLevel),"single click imports from the basic rounded row");
+ s.trackingPlayer=false;page=0;settle();verifyFind(true);
  ImGui::DestroyContext();std::cout<<"PASS "<<checks<<" real shortcut-page UI checks\nArtifacts "<<s.directory.string()<<'\n';return 0;
  }catch(const std::exception& e){std::cerr<<"FAIL "<<e.what()<<'\n';return 1;}}
