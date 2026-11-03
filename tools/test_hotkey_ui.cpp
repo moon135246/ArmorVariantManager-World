@@ -29,7 +29,7 @@ void KeyTrackedText(const char* text,const char* end=nullptr){keyui::text.emplac
 namespace worlddiff::overlay {void NativeInputClose(){}void SetVisible(bool){}const char* BackendStatus(){return "shortcut UI verifier";}bool TextField(const char* label,const char* hint,char* value,size_t capacity){return ImGui::InputTextWithHint(label,hint,value,capacity);}}
 using namespace worlddiff;using namespace worlddiff::app;namespace ui=worlddiff::overlay;
 int main(int argc,char** argv){try{
- unsigned checks=0;auto check=[&](bool yes,const char* reason){checks++;if(!yes)throw std::runtime_error(reason);};auto& s=Get();s.loaded=true;s.directory=std::filesystem::temp_directory_path()/(L"WorldDiff122KeyUI_"+std::to_wstring(GetTickCount64()));s.configPath=s.directory/L"Settings.cfg";std::filesystem::create_directories(s.directory);
+ unsigned checks=0;auto check=[&](bool yes,const char* reason){checks++;if(!yes)throw std::runtime_error(reason);};auto& s=Get();s.loaded=true;s.directory=std::filesystem::temp_directory_path()/(L"WorldDiff124KeyUI_"+std::to_wstring(GetTickCount64()));s.configPath=s.directory/L"Settings.cfg";std::filesystem::create_directories(s.directory);
  Model model;model.equip="pl105_0000";model.part="body";model.relativePath="pl\\f_equip\\pl105_0000\\body\\mod\\f_body105_0000";s.models={model};auto main=Main(model.equip).id;Preset p;p.id=s.data.nextId++;p.name="隐藏";p.rules.hidden.insert({model.relativePath,0,true});Preset shown;shown.id=s.data.nextId++;shown.name="显示";Find(main)->presets={p,shown};Find(main)->selected=shown.id;ui::outfit=model.equip;ui::groupId=main;s.data.hideDragHint=true;
  ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DeltaTime=1.f/60;ImFontGlyphRangesBuilder range;range.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());range.AddText("编辑明月别枝预设快捷键互斥录制");ImVector<ImWchar> glyphs;range.BuildRanges(&glyphs);io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/msyh.ttc",22,nullptr,glyphs.Data);io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/msyhbd.ttc",22,nullptr,glyphs.Data);unsigned char* atlas;int w,h;io.Fonts->GetTexDataAsRGBA32(&atlas,&w,&h);auto& style=ImGui::GetStyle();style.FramePadding={9,6};style.ItemSpacing={10,8};style.FrameRounding=6;style.ChildRounding=8;style.Colors[ImGuiCol_WindowBg]={.078f,.094f,.125f,.97f};style.Colors[ImGuiCol_ChildBg]={.122f,.149f,.188f,.98f};style.Colors[ImGuiCol_Button]={.13f,.30f,.35f,1};style.Colors[ImGuiCol_Text]={.945f,.957f,.972f,1};style.Colors[ImGuiCol_CheckMark]={.33f,.72f,.78f,1};
  struct Case {float x,y,scale,width,height;};Case cases[]={{1920,1080,.7f,1022,595},{1920,1080,1,1460,850},{1920,1080,1,1050,620},{1280,720,1,1050,620},{3840,2160,1.5f,2190,1275}};auto active=cases[1];int page=2;
@@ -50,10 +50,13 @@ int main(int argc,char** argv){try{
  page=4;settle();check(std::find(keyui::text.begin(),keyui::text.end(),"插件作者：明月别枝(moon)")!=keyui::text.end(),"About credits the requested author name");// Use the real settings combo, then render every page with the saved theme.
  page=3;settle();click("界面风格");settle();click("经典白");settle();
  check(s.data.theme==UiTheme::ClassicWhite&&LoadSettings()&&s.data.theme==UiTheme::ClassicWhite,"real theme picker saves classic white");
- click("界面风格");settle();click("经典黑（待推出）");
+ click("界面风格");settle();click("玻璃态（待推出）");
  check(s.data.theme==UiTheme::ClassicWhite,"planned themes cannot be selected");
  click("基础");settle();check(s.data.theme==UiTheme::Basic,"switching back restores the basic UI");
- click("界面风格");settle();click("经典白");settle();
+ bool black=argc>3&&std::string(argv[3])=="black";
+ const char* choice=black?"经典黑":"经典白";auto wanted=black?UiTheme::ClassicBlack:UiTheme::ClassicWhite;
+ click("界面风格");settle();click(choice);settle();
+ check(LoadSettings()&&s.data.theme==wanted,"selected classic theme persists");
  auto& body=s.models[0];body.display="f_body105_0000";
  for(auto name:{"Meira_3_Antenna","Meira_3_Back","Meira_3_Front","Meira_3_Ponytail","Meira_3_Head","Meira_4_Hairclip 1","Meira_4_Hairclip 2"}){
   Mesh mesh;mesh.materialId=(uint16_t)body.materials.size();mesh.index=mesh.materialId;body.meshes.push_back(mesh);body.materials.push_back({name,MaterialNameHash(name)});
@@ -63,7 +66,7 @@ int main(int argc,char** argv){try{
  auto* group=Find(main);group->presets={shown};group->presets.front().name="Mei_梅";group->selected=group->defaultPreset=shown.id;
  for(auto name:{"身材","外套","衣服","袖子","黑丝","手套","鞋子"}){Group g;g.id=s.data.nextId++;g.scope=model.equip;g.name=name;g.global=g.name=="身材";s.data.groups.push_back(g);}
  group=Find(main);group->working=shown.rules;s.data.transformsEnabled=true;
- s.data.hotkeysEnabled=false;s.blockedScopes.clear();s.data.hideDragHint=false;s.profileStatus[model.equip]="已载入装备预设  pl105_0000.wdp";s.notice.clear();
+ s.data.hotkeysEnabled=false;s.blockedScopes.clear();s.data.hideDragHint=false;s.profileStatus[model.equip]="已载入装备预设：pl105_0000.wdp";s.notice.clear();
  ui::hotkeyId=CreateHotkey(model.equip,"整备方案");s.notice.clear();
  active={1642,1048,1,1602,1008};io.AddMousePosEvent(-100,-100);
  auto capture=[&](const char* name){if(argc>2){auto dir=std::string(argv[2])+"/"+name;SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",dir.c_str());SaveCurrentFrame();SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",nullptr);}};
@@ -80,7 +83,7 @@ int main(int argc,char** argv){try{
  check(keyui::items.count(result)==1,"classic search shows the exported template");
  auto yellowFlag=[&]{
   for(auto* w:ImGui::GetCurrentContext()->Windows)if(w->Active&&std::strstr(w->Name,"/预设文件列表_"))
-   for(const auto& v:w->DrawList->VtxBuffer)if(v.col==ui::paper::yellow)return true;
+   for(const auto& v:w->DrawList->VtxBuffer)if(v.col==ui::paper::PaletteFor(wanted).signal)return true;
   return false;
  };
  io.AddMousePosEvent(-100,-100);settle();check(!yellowFlag(),"idle search row has no yellow flag");capture("find");
@@ -96,7 +99,7 @@ int main(int argc,char** argv){try{
  check(yellowFlag(),"keyboard focus highlights the template with the mouse away");
  io.AddKeyEvent(ImGuiKey_Enter,true);draw();io.AddKeyEvent(ImGuiKey_Enter,false);settle();
  check(closed(),"Enter imports the focused result");
- page=3;settle();click("界面风格");settle();capture("picker");click("经典白");
+ page=3;settle();click("界面风格");settle();capture("picker");click(choice);
  s.trackingPlayer=true;s.outfit.ready=false;page=3;settle();click("界面风格");settle();click("基础");settle();
  check(s.data.theme==UiTheme::Basic,"waiting-for-player settings can switch back to basic");
  s.trackingPlayer=false;page=0;settle();click("手动查找");settle();

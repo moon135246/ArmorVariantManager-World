@@ -78,15 +78,15 @@ public:
    if(visual){
     auto* draw=ImGui::GetWindowDrawList();layers.SetCurrentChannel(draw,0);ImVec2 min(origin.x+S(2),origin.y+(float)reorderDrag.slot*pitch+S(2)),max(origin.x+width-S(2),min.y+height);
     reorderDrag.placeholderMin=min;reorderDrag.placeholderMax=max;
-    if(paper::active){draw->AddRectFilled(min,max,paper::sheet);DashedRoundedRect(draw,min,max,0,inside?paper::ink:paper::muted);}else{
+    if(paper::active){draw->AddRectFilled(min,max,paper::colors->window);DashedRoundedRect(draw,min,max,0,inside?paper::colors->text:paper::colors->muted);}else{
     draw->AddRectFilled(min,max,IM_COL32(19,124,146,90),S(8));draw->AddRect(min,max,IM_COL32(32,222,238,25),S(8),S(5));DashedRoundedRect(draw,min,max,S(8),IM_COL32(43,225,239,inside?245:140));}
-    auto text=ImGui::CalcTextSize("放置到此处");draw->AddText(ImVec2(min.x+(max.x-min.x-text.x)*.5f,min.y+(max.y-min.y-text.y)*.5f),paper::active?paper::ink:IM_COL32(155,220,230,230),"放置到此处");
+    auto text=ImGui::CalcTextSize("放置到此处");draw->AddText(ImVec2(min.x+(max.x-min.x-text.x)*.5f,min.y+(max.y-min.y-text.y)*.5f),paper::active?paper::colors->text:IM_COL32(155,220,230,230),"放置到此处");
     layers.SetCurrentChannel(draw,1);
     auto* front=ImGui::GetForegroundDrawList();auto mouse=ImGui::GetMousePos();float cardWidth=std::clamp(ImGui::CalcTextSize(reorderDrag.label.c_str()).x+S(32),S(180),std::max(S(180),std::min(S(340),width))),cardHeight=std::max(S(56),height+S(10));
     ImVec2 card(mouse.x-std::min(S(72),cardWidth*.45f),std::min(mouse.y-cardHeight*.75f,min.y-cardHeight+S(8)));auto* viewport=ImGui::GetMainViewport();
     card.x=std::clamp(card.x,viewport->Pos.x+S(4),std::max(viewport->Pos.x+S(4),viewport->Pos.x+viewport->Size.x-cardWidth-S(4)));card.y=std::clamp(card.y,viewport->Pos.y+S(4),std::max(viewport->Pos.y+S(4),viewport->Pos.y+viewport->Size.y-cardHeight-S(4)));
     ImVec2 end(card.x+cardWidth,card.y+cardHeight);reorderDrag.cardMin=card;reorderDrag.cardMax=end;
-    if(paper::active){paper::CutRect(front,card,end,paper::ink,S(7));front->AddRectFilled(card,{card.x+S(6),end.y},paper::yellow);}else{
+    if(paper::active){paper::CutRect(front,card,end,paper::colors->selection,S(7));front->AddRectFilled(card,{card.x+S(6),end.y},paper::colors->signal);}else{
     front->AddRectFilled(ImVec2(card.x+S(3),card.y+S(6)),ImVec2(end.x+S(3),end.y+S(6)),IM_COL32(0,0,0,85),S(10));front->AddRectFilled(card,end,IM_COL32(26,55,70,248),S(10));front->AddRect(card,end,IM_COL32(72,218,234,35),S(10),S(5));front->AddRect(card,end,IM_COL32(109,224,236,235),S(10),S(1.5f));}
     front->PushClipRect(ImVec2(card.x+S(14),card.y),ImVec2(end.x-S(10),end.y),true);front->AddText(ImVec2(card.x+S(16),card.y+(cardHeight-ImGui::GetFontSize())*.5f),IM_COL32(234,250,255,255),reorderDrag.label.c_str());front->PopClipRect();
     if(ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)&&ImGui::IsMouseDown(0)){

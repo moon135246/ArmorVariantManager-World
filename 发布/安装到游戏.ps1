@@ -18,7 +18,7 @@ try {
     $plugins = Join-Path $gameRoot 'nativePC\plugins'
     $dataDir = Join-Path $plugins 'WorldDiff'
     New-Item -ItemType Directory -Path $plugins -Force | Out-Null
-    $backup = Join-Path $gameRoot ('WorldDiff-backups\before-1.2.3-' + [Guid]::NewGuid().ToString('N'))
+    $backup = Join-Path $gameRoot ('WorldDiff-backups\before-1.2.4-' + [Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $backup -Force | Out-Null
     $target = Join-Path $plugins 'WorldDiff.dll'
     if (Test-Path -LiteralPath $target) { Copy-Item -LiteralPath $target -Destination $backup }
@@ -37,7 +37,7 @@ try {
     }
     # The prior official default text is known byte-for-byte. Refresh only that
     # unedited default; keep every manually changed document intact.
-    $legacyDefaultHashes = @('103CE72741F091B8F4BB25FD9063BDE73A471D7725157285BDE4095299FCF9CC','91FBCB3556620B1C902200F8F0F156772D96ED53651A944C4216EE1D863E0CBE','1AE6213DD14BCB11CFA5A51869896C4236479687062CB00594729392F9B83F4A')
+    $legacyDefaultHashes = @('029EE0D6510111336AB87DBC71963D9833C7A305B316FCAAA4A4575F6BF24CC6','103CE72741F091B8F4BB25FD9063BDE73A471D7725157285BDE4095299FCF9CC','91FBCB3556620B1C902200F8F0F156772D96ED53651A944C4216EE1D863E0CBE','1AE6213DD14BCB11CFA5A51869896C4236479687062CB00594729392F9B83F4A')
     $notesUpdated = $false
     if ((Test-Path -LiteralPath $notesTarget) -and $legacyDefaultHashes -contains (Get-FileHash -LiteralPath $notesTarget).Hash) {
         Copy-Item -LiteralPath $notesSource -Destination $notesTarget -Force
@@ -53,7 +53,7 @@ try {
             throw '安装后的更新日志校验不一致，请重新安装。'
         }
     } elseif (-not $notesUpdated) { Write-Host '已保留原有更新日志，未覆盖手动编辑的文字。' }
-    Write-Host '1.2.3 安装完成，启动游戏后按 F9 打开。'
+    Write-Host '1.2.4 安装完成，启动游戏后按 F9 打开。'
     Write-Host ('原文件备份：' + $backup)
     Write-Host '原有配置由插件自动迁移；无需运行外置管理器。'
 } catch {

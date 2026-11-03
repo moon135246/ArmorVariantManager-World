@@ -3,7 +3,7 @@
 #endif
 #define DIRECTINPUT_VERSION 0x0800
 #include "Overlay.h"
-#include "ClassicWhite.h"
+#include "ClassicTheme.h"
 #include "State.h"
 #include "NativeInput.h"
 #include "UpdateNotes.h"
@@ -114,7 +114,7 @@ HRESULT WINAPI Present(IDXGISwapChain* swap,UINT sync,UINT flags){
    if(ready&&swap!=bound){DXGI_SWAP_CHAIN_DESC d{};if(SUCCEEDED(swap->GetDesc(&d))&&d.OutputWindow==window)Teardown();}
    if(!ready)Initialize(swap);
    if(ready&&swap==bound){
-    int key;float uiScale;bool startupNotice,classicWhite;{std::lock_guard stateLock(app::Get().mutex);uiScale=app::Get().data.scale;classicWhite=app::Get().data.theme==app::UiTheme::ClassicWhite;key=app::Get().data.menuKey;startupNotice=app::Get().loaded&&app::Get().data.showStartupNotice;}
+    int key;float uiScale;bool startupNotice;app::UiTheme uiTheme;{std::lock_guard stateLock(app::Get().mutex);uiScale=app::Get().data.scale;uiTheme=app::Get().data.theme;key=app::Get().data.menuKey;startupNotice=app::Get().loaded&&app::Get().data.showStartupNotice;}
     static bool previous=false,panicPrevious=false;bool down=Key(key)&&!Key(VK_CONTROL);if(down&&!previous&&GetForegroundWindow()==window&&(DWORD)(GetTickCount()-messageToggleAt.load())>250){SetVisible(!open);messageToggleAt=GetTickCount();}previous=down;
     if(!autoOpened&&RuntimeState()&&RuntimeState()->rowCount>0){std::lock_guard stateLock(app::Get().mutex);autoOpened=true;if(app::Get().data.autoOpen)SetVisible(true);}
     bool panic=Key(VK_CONTROL)&&Key(VK_F9)&&(GetForegroundWindow()==window||NativeInputOwnWindow(GetForegroundWindow()));if(panic&&!panicPrevious){std::lock_guard stateLock(app::Get().mutex);app::RestoreAll();}panicPrevious=panic;
@@ -128,13 +128,13 @@ HRESULT WINAPI Present(IDXGISwapChain* swap,UINT sync,UINT flags){
     NativeInputBeginFrame();
     if(open)DrawPanel();
     else if(notes::ShowStartupNotice(startupNotice,false,(DWORD)(GetTickCount()-firstTick))){
-     if(classicWhite){
+     if(uiTheme!=app::UiTheme::Basic){
       char menuKey[8];sprintf_s(menuKey,"F%d",key-VK_F1+1);
-      paper::DrawStartupNotice(menuKey,uiScale);
+      paper::DrawStartupNotice(menuKey,uiScale,paper::PaletteFor(uiTheme));
      }else{
       ImGui::SetNextWindowPos({26,28});ImGui::SetNextWindowBgAlpha(.84f);
       ImGui::Begin("##WorldDiffToast",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoSavedSettings);
-      ImGui::TextColored({.33f,.72f,.78f,1},"世界版差分管理器 1.2.3 已加载");
+      ImGui::TextColored({.33f,.72f,.78f,1},"世界版差分管理器 1.2.4 已加载");
       ImGui::Text("F%d 打开面板  |  Ctrl+F9 暂停控制",key-VK_F1+1);ImGui::End();
      }
     }

@@ -5,7 +5,7 @@
 #include "UpdateNotes.h"
 #include "imgui.h"
 #include "imgui_internal.h"
-#include "ClassicWhite.h"
+#include "ClassicTheme.h"
 #include <algorithm>
 #include <cmath>
 #include <cfloat>
@@ -62,7 +62,7 @@ bool ActionButton(const char* label,Icon icon,float width,float height=38){
  draw->AddText(font,fontSize,ImVec2(x,min.y+(max.y-min.y-fontSize)*.5f),color,label);draw->PopClipRect();return pressed;
 }
 constexpr ImGuiWindowFlags FixedPane=ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoScrollWithMouse;
-void BeginActions(const char* name,float height){ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(S(10),S(10)));ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,ImVec2(S(8),S(8)));if(paper::active)ImGui::PushStyleColor(ImGuiCol_ChildBg,paper::sheet);ImGui::BeginChild(name,ImVec2(0,height),(paper::active?ImGuiChildFlags_AlwaysUseWindowPadding:0)|ImGuiChildFlags_Borders,FixedPane);if(paper::active)ImGui::PopStyleColor();PaperRule();}
+void BeginActions(const char* name,float height){ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(S(10),S(10)));ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,ImVec2(S(8),S(8)));if(paper::active)ImGui::PushStyleColor(ImGuiCol_ChildBg,paper::colors->actionArea);ImGui::BeginChild(name,ImVec2(0,height),(paper::active?ImGuiChildFlags_AlwaysUseWindowPadding:0)|ImGuiChildFlags_Borders,FixedPane);if(paper::active)ImGui::PopStyleColor();PaperRule();}
 void EndActions(){ImGui::EndChild();ImGui::PopStyleVar(2);}
 void DragHint(){
  constexpr const char* message="提示：可拖动左侧的【分组列表】和【预设列表】调整顺序。";
@@ -73,17 +73,17 @@ void DragHint(){
  float wrapWidth=std::max(1.f,width-chrome);
  auto textSize=ImGui::CalcTextSize(message,nullptr,false,wrapWidth);float contentHeight=std::max(S(28),textSize.y);
  if(available>width){ImGui::Dummy(ImVec2(available-width,0));ImGui::SameLine(0,0);}
- ImGui::PushStyleColor(ImGuiCol_ChildBg,paper::active?ImGui::ColorConvertU32ToFloat4(paper::white):ImVec4(.025f,.10f,.15f,.95f));ImGui::PushStyleColor(ImGuiCol_Border,paper::active?ImGui::ColorConvertU32ToFloat4(paper::muted):ImVec4(.13f,.59f,.70f,.95f));
+ ImGui::PushStyleColor(ImGuiCol_ChildBg,paper::active?ImGui::ColorConvertU32ToFloat4(paper::colors->panel):ImVec4(.025f,.10f,.15f,.95f));ImGui::PushStyleColor(ImGuiCol_Border,paper::active?ImGui::ColorConvertU32ToFloat4(paper::colors->muted):ImVec4(.13f,.59f,.70f,.95f));
  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(padding,S(9)));ImGui::PushStyleVar(ImGuiStyleVar_CellPadding,ImVec2(gap*.5f,0));ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding,paper::active?0.f:S(8));
  ImGui::BeginChild("拖动提示",ImVec2(width,contentHeight+S(18)),(paper::active?ImGuiChildFlags_AlwaysUseWindowPadding:0)|ImGuiChildFlags_Borders,FixedPane);
- if(paper::active){auto* w=ImGui::GetCurrentWindow();auto* d=w->DrawList;d->PushClipRect(w->OuterRectClipped.Min,w->OuterRectClipped.Max,false);d->AddRect(w->Pos,{w->Pos.x+w->Size.x,w->Pos.y+w->Size.y},paper::muted);d->PopClipRect();}
+ if(paper::active){auto* w=ImGui::GetCurrentWindow();auto* d=w->DrawList;d->PushClipRect(w->OuterRectClipped.Min,w->OuterRectClipped.Max,false);d->AddRect(w->Pos,{w->Pos.x+w->Size.x,w->Pos.y+w->Size.y},paper::colors->muted);d->PopClipRect();}
  if(ImGui::BeginTable("提示内容",3,ImGuiTableFlags_SizingStretchProp|ImGuiTableFlags_NoPadOuterX)){
   ImGui::TableSetupColumn("信息",ImGuiTableColumnFlags_WidthFixed,iconWidth);ImGui::TableSetupColumn("内容",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("关闭",ImGuiTableColumnFlags_WidthFixed,closeWidth);ImGui::TableNextColumn();
   ImGui::Dummy(ImVec2(iconWidth,contentHeight));auto p=ImGui::GetItemRectMin();auto* draw=ImGui::GetWindowDrawList();ImVec2 center(p.x+iconWidth*.5f,p.y+contentHeight*.5f);auto ink=IM_COL32(160,218,242,255),dark=IM_COL32(8,37,52,255);
-  if(paper::active){ink=paper::ink;dark=paper::ink;draw->AddRectFilled({center.x-S(11),center.y-S(11)},{center.x+S(11),center.y+S(11)},paper::yellow);}else draw->AddCircleFilled(center,S(12),ink);draw->AddCircleFilled(ImVec2(center.x,center.y-S(5)),S(1.5f),dark);draw->AddRectFilled(ImVec2(center.x-S(1.4f),center.y-S(1.5f)),ImVec2(center.x+S(1.4f),center.y+S(6)),dark,S(1));
+  if(paper::active){ink=paper::colors->text;dark=paper::colors->onSignal;draw->AddRectFilled({center.x-S(11),center.y-S(11)},{center.x+S(11),center.y+S(11)},paper::colors->signal);}else draw->AddCircleFilled(center,S(12),ink);draw->AddCircleFilled(ImVec2(center.x,center.y-S(5)),S(1.5f),dark);draw->AddRectFilled(ImVec2(center.x-S(1.4f),center.y-S(1.5f)),ImVec2(center.x+S(1.4f),center.y+S(6)),dark,S(1));
   ImGui::TableNextColumn();float textWidth=ImGui::GetContentRegionAvail().x;ImGui::Dummy(ImVec2(textWidth,contentHeight));auto min=ImGui::GetItemRectMin(),max=ImGui::GetItemRectMax();
   draw->PushClipRect(min,max,true);draw->AddText(ImGui::GetFont(),ImGui::GetFontSize(),ImVec2(min.x,min.y+(contentHeight-textSize.y)*.5f),ink,message,nullptr,textWidth);draw->PopClipRect();
-  ImGui::TableNextColumn();bool close=ImGui::InvisibleButton("关闭拖动提示",ImVec2(closeWidth,contentHeight));p=ImGui::GetItemRectMin();center=ImVec2(p.x+closeWidth*.5f,p.y+contentHeight*.5f);auto cross=paper::active?paper::ink:ImGui::IsItemHovered()?IM_COL32(218,248,255,255):ink;float r=S(5),stroke=S(1.8f);
+  ImGui::TableNextColumn();bool close=ImGui::InvisibleButton("关闭拖动提示",ImVec2(closeWidth,contentHeight));p=ImGui::GetItemRectMin();center=ImVec2(p.x+closeWidth*.5f,p.y+contentHeight*.5f);auto cross=paper::active?paper::colors->text:ImGui::IsItemHovered()?IM_COL32(218,248,255,255):ink;float r=S(5),stroke=S(1.8f);
   draw->AddLine(ImVec2(center.x-r,center.y-r),ImVec2(center.x+r,center.y+r),cross,stroke);draw->AddLine(ImVec2(center.x-r,center.y+r),ImVec2(center.x+r,center.y-r),cross,stroke);
   if(close){Get().data.hideDragHint=true;Changed("拖动提示已隐藏，下次启动不再显示");Save();}Tip("关闭此提示，下次启动不再显示");ImGui::EndTable();
  }ImGui::EndChild();ImGui::PopStyleVar(3);ImGui::PopStyleColor(2);
@@ -209,9 +209,9 @@ void MeshNameRow(const Model& model,const Target& target,const std::string& labe
  ImGui::PopStyleColor(5);
  if(ImGui::IsItemVisible()){
   auto min=ImGui::GetItemRectMin(),max=ImGui::GetItemRectMax();auto* draw=ImGui::GetWindowDrawList();
-  if(paper::active)draw->AddLine({min.x,max.y},{max.x,max.y},ImGui::GetColorU32(paper::rule));
-  if(ImGui::IsItemHovered()||ImGui::IsItemActive())draw->AddRectFilled(min,max,paper::active?ImGui::GetColorU32(paper::chip):ImGui::IsItemActive()?IM_COL32(28,65,76,220):IM_COL32(38,64,76,160),paper::active?0:S(8));
-  if(ImGui::IsItemFocused())draw->AddRect(min,max,paper::active?paper::muted:IM_COL32(133,235,242,200),paper::active?0:S(8),S(1));
+  if(paper::active)draw->AddLine({min.x,max.y},{max.x,max.y},ImGui::GetColorU32(paper::colors->rule));
+  if(ImGui::IsItemHovered()||ImGui::IsItemActive())draw->AddRectFilled(min,max,paper::active?ImGui::GetColorU32(paper::colors->button):ImGui::IsItemActive()?IM_COL32(28,65,76,220):IM_COL32(38,64,76,160),paper::active?0:S(8));
+  if(ImGui::IsItemFocused())draw->AddRect(min,max,paper::active?paper::colors->muted:IM_COL32(133,235,242,200),paper::active?0:S(8),S(1));
   ImVec2 textMin(min.x+S(8),min.y),textMax(max.x-S(8),max.y);draw->PushClipRect(textMin,textMax,true);
   draw->AddText(ImVec2(textMin.x,min.y+(max.y-min.y-ImGui::GetFontSize())*.5f),ink,label.c_str());draw->PopClipRect();
  }
@@ -249,7 +249,7 @@ void TargetsPanel(){
    expanded=PanelHeader(title.c_str(),ImGuiTreeNodeFlags_DefaultOpen);
    auto lo=ImGui::GetItemRectMin(),hi=ImGui::GetItemRectMax();
    if(hi.x-lo.x>ImGui::CalcTextSize(title.c_str(),nullptr,true).x+S(105))
-    PaperBadge(ImGui::GetWindowDrawList(),{hi.x-S(8),(hi.y+lo.y)*.5f},S(20),active?"已加载":"待加载",paper::white);
+    PaperBadge(ImGui::GetWindowDrawList(),{hi.x-S(8),(hi.y+lo.y)*.5f},S(20),active?"已加载":"待加载",paper::colors->onSelection);
   }else expanded=PanelHeader(head.c_str(),ImGuiTreeNodeFlags_DefaultOpen);
   if(expanded){
    std::map<uint32_t,std::vector<const Mesh*>> targets;for(auto& m:model.meshes){if(m.materialId>=model.materials.size())continue;targets[meshMode&&!creating?m.index:model.materials[m.materialId].hash].push_back(&m);}
@@ -300,7 +300,7 @@ void PageTabs(bool waiting=false){
 void AboutPanel(){
  auto path=Get().directory/L"更新日志.md";
  if(!updateTabVisible||!updateNotes.loaded||updateNotes.path!=path){updateNotes.Load(path);updateNotice.clear();}updateTabVisible=true;
- PaperKicker("//  ABOUT");SectionTitle("差分管理器 · 世界版 1.2.3");ImGui::TextUnformatted("插件作者：明月别枝(moon)");ImGui::Separator();
+ PaperKicker("//  ABOUT");SectionTitle("差分管理器 · 世界版 1.2.4");ImGui::TextUnformatted("插件作者：明月别枝(moon)");ImGui::Separator();
  if(Button("编辑更新日志")){
   wchar_t folder[MAX_PATH]{};STARTUPINFOW start{sizeof(start)};PROCESS_INFORMATION process{};
   if(GetWindowsDirectoryW(folder,MAX_PATH)){
@@ -328,8 +328,8 @@ void SettingsPanel(){
  ImGui::SetNextItemWidth(std::min(S(210),ImGui::GetContentRegionAvail().x*.55f));
  if(ImGui::BeginCombo("界面风格",themes[static_cast<int>(s.data.theme)])){
   for(int i=0;i<4;i++){
-   bool selected=i==static_cast<int>(s.data.theme);ImGui::BeginDisabled(i>=2||!s.storageReady);
-   std::string label=themes[i];if(i>=2)label+="（待推出）";
+   bool selected=i==static_cast<int>(s.data.theme);ImGui::BeginDisabled(i>=3||!s.storageReady);
+   std::string label=themes[i];if(i>=3)label+="（待推出）";
    if(ImGui::Selectable(label.c_str(),selected)&&!selected){
     auto previous=s.data.theme;s.data.theme=static_cast<UiTheme>(i);
     if(!SaveSettings())s.data.theme=previous;
@@ -365,10 +365,10 @@ void SettingsPanel(){
 }
 void DrawPanel(){
  auto& s=app::Get();std::lock_guard lock(s.mutex);if(!s.loaded)return;
- paper::Scope theme(s.data.theme==UiTheme::ClassicWhite);
- accent=paper::active?ImGui::ColorConvertU32ToFloat4(paper::ink):ImVec4(.33f,.72f,.78f,1);
- muted=paper::active?ImGui::ColorConvertU32ToFloat4(paper::muted):ImVec4(.6f,.66f,.72f,1);
- danger=paper::active?ImGui::ColorConvertU32ToFloat4(paper::red):ImVec4(.91f,.51f,.51f,1);
+ paper::Scope theme(s.data.theme);
+ accent=paper::active?ImGui::ColorConvertU32ToFloat4(paper::colors->text):ImVec4(.33f,.72f,.78f,1);
+ muted=paper::active?ImGui::ColorConvertU32ToFloat4(paper::colors->muted):ImVec4(.6f,.66f,.72f,1);
+ danger=paper::active?ImGui::ColorConvertU32ToFloat4(paper::colors->danger):ImVec4(.91f,.51f,.51f,1);
  if(tab!=4)updateTabVisible=false;if(tab!=2)s.captureHotkey=0;
  std::set<std::string> scopes,active;DWORD now=GetTickCount();for(auto& m:s.models)if(IsCurrentModel(m.relativePath)){scopes.insert(m.equip);if(s.trackingPlayer||s.lastSeen.count(m.relativePath)&&(DWORD)(now-s.lastSeen[m.relativePath])<1800)active.insert(m.equip);}
  std::string identity=outfit;if(s.trackingPlayer){identity=std::to_string(s.outfit.entity)+(s.outfit.savePreview?"/save":"/play");for(size_t i=0;i<5;i++)identity+=s.outfit.paths[i]+std::to_string(s.outfit.resources[i]);}
@@ -396,7 +396,7 @@ void DrawPanel(){
   ImGui::SameLine();if(paper::active){
    auto badge=std::string(s.outfit.savePreview?"存档预览 · ":"")+status;float h=S(25);
    float w=PaperBold()->CalcTextSizeA(S(15),FLT_MAX,0,badge.c_str()).x+S(14);
-   ImGui::Dummy({w,h});auto hi=ImGui::GetItemRectMax();PaperBadge(ImGui::GetWindowDrawList(),{hi.x,hi.y-h*.5f},h,badge.c_str(),paper::ink);
+   ImGui::Dummy({w,h});auto hi=ImGui::GetItemRectMax();PaperBadge(ImGui::GetWindowDrawList(),{hi.x,hi.y-h*.5f},h,badge.c_str(),paper::colors->text);
   }else ImGui::TextColored(muted,"%s%s",s.outfit.savePreview?"存档预览 · ":"",status);
   ImGui::TableNextColumn();if(PanelCheckbox("启用",&s.data.enabled))Changed();ImGui::SameLine();if(Button("暂停并恢复",0,ButtonTone::Primary))RestoreAll();ImGui::EndTable();
   }ImGui::Separator();
@@ -404,7 +404,12 @@ void DrawPanel(){
   if(Button("手动查找",0,ButtonTone::Primary)){profileFiles=FindProfiles(outfit);requestFind=true;}ImGui::SameLine();if(Button("自动查找")){if(AutoFindProfile(outfit)){groupId=Main(outfit).id;creating=false;staged.clear();}}
   ImGui::SameLine();ImGui::BeginDisabled(!CanEditScope(outfit));if(Button("导出模板")){profileName[0]=0;requestExport=true;}ImGui::EndDisabled();ImGui::SameLine();if(PanelCheckbox("换装自动识别",&s.data.autoFind))Changed();
   if(headerTable){ImGui::TableNextColumn();DragHint();ImGui::EndTable();}if(requestFind)ImGui::OpenPopup("手动查找预设文件");if(requestExport)ImGui::OpenPopup("另存预设文件");
-  auto bound=s.data.bindings.find(outfit);ImGui::TextColored(muted,"%s",s.profileStatus.count(outfit)?s.profileStatus[outfit].c_str():(bound==s.data.bindings.end()?"当前装备尚无预设，可查找模板或直接编辑":bound->second.c_str()));
+  auto bound=s.data.bindings.find(outfit);
+  const std::string profileStatus=s.profileStatus.count(outfit)?s.profileStatus[outfit]:(bound==s.data.bindings.end()?"当前装备尚无预设，可查找模板或直接编辑":bound->second);
+  const std::string_view loadedPrefix="已载入装备预设：";
+  if(paper::IsNight()&&profileStatus.starts_with(loadedPrefix)){
+   ImGui::TextColored(muted,"已载入装备预设");ImGui::SameLine();InlineChip(profileStatus.c_str()+loadedPrefix.size());
+  }else ImGui::TextColored(muted,"%s",profileStatus.c_str());
   if(PresetFileModal("手动查找预设文件","//  FIND PRESET",716)){
    auto equipmentName=EquipmentLabel(outfit);
    if(paper::active){
@@ -418,9 +423,10 @@ void DrawPanel(){
    }else ImGui::Text("当前装备：%s · 找到 %zu 份预设文件",equipmentName.c_str(),profileFiles.size());
    auto childFlags=ImGuiChildFlags_Borders|(paper::active?(ImGuiChildFlags_AlwaysUseWindowPadding|ImGuiChildFlags_NavFlattened):0);
    float listHeight=paper::active?std::min(S(340),std::max(S(50),ImGui::GetIO().DisplaySize.y-S(170))):S(340);
-   if(paper::active){ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize,S(1));ImGui::PushStyleColor(ImGuiCol_Border,paper::rule);}
+   if(paper::active){ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize,S(1));ImGui::PushStyleColor(ImGuiCol_Border,paper::colors->rule);}
+   if(paper::active)ImGui::PushStyleColor(ImGuiCol_ChildBg,paper::colors->list);
    ImGui::BeginChild("预设文件列表",{paper::active?0.f:S(680),listHeight},childFlags);
-   if(paper::active){ImGui::PopStyleColor();ImGui::PopStyleVar();}
+   if(paper::active){ImGui::PopStyleColor(2);ImGui::PopStyleVar();}
    PaperRule();
    for(const auto& f:profileFiles){
     ImGui::PushID(f.file.c_str());
@@ -435,7 +441,7 @@ void DrawPanel(){
    const char* hint="保存当前装备的全部分组与预设，可供同款 MOD 的其他装备识别。";
    if(paper::active)ImGui::TextWrapped("%s",hint);else ImGui::TextUnformatted(hint);
    ImGui::SetNextItemWidth(paper::active?std::min(S(400),ImGui::GetContentRegionAvail().x):S(400));
-   if(paper::active)ImGui::PushStyleColor(ImGuiCol_FrameBg,paper::white);
+   if(paper::active)ImGui::PushStyleColor(ImGuiCol_FrameBg,paper::colors->input);
    TextField("##预设文件名","如：黎明巫女 或 pl105_0000",profileName,sizeof(profileName));
    if(paper::active)ImGui::PopStyleColor();
    if(Button("保存文件",0,ButtonTone::Primary)&&ExportProfile(outfit,profileName)){
@@ -448,7 +454,12 @@ void DrawPanel(){
   ImGui::BeginDisabled(!CanEditScope(outfit));GroupsPane(left,height);ImGui::SameLine();PresetsPane(middle,height);ImGui::EndDisabled();ImGui::SameLine();
   ImGui::BeginChild("右侧面板",ImVec2(0,height),ImGuiChildFlags_Borders|(paper::active?ImGuiChildFlags_AlwaysUseWindowPadding:0));
   PaperRule();PageTabs();if(tab==4)AboutPanel();else if(tab==3)SettingsPanel();else if(!CanEditScope(outfit)){ImGui::TextWrapped("当前预设与模型不匹配。可重新匹配当前文件，或使用上方查找按钮导入模板。原文件会先备份。");if(Button("重新匹配当前文件"))if(RebindEquipmentProfile(outfit))groupId=Main(outfit).id;}else if(tab==0)TargetsPanel();else if(tab==2)HotkeyPanel();else TransformPanel();ImGui::EndChild();AutomationConflictPopup();
-  ImGui::Separator();ImGui::TextColored(muted,"%s",s.notice.empty()?"配置自动保存 · F9 开关面板 · Ctrl+F9 紧急恢复":s.notice.c_str());
+  ImGui::Separator();
+  if(paper::IsNight()&&s.notice.empty()){
+   ImGui::TextColored(muted,"配置自动保存   ·");ImGui::SameLine();
+   auto menuKey="F"+std::to_string(s.data.menuKey-VK_F1+1);InlineChip(menuKey.c_str());ImGui::SameLine();
+   ImGui::TextColored(muted,"开关面板   ·");ImGui::SameLine();InlineChip("Ctrl+F9");ImGui::SameLine();ImGui::TextColored(muted,"紧急恢复");
+  }else ImGui::TextColored(muted,"%s",s.notice.empty()?"配置自动保存 · F9 开关面板 · Ctrl+F9 紧急恢复":s.notice.c_str());
  }
  ImGui::End();ImGui::PopStyleVar();ImGui::PopFont();if(!open)SetVisible(false);
 }

@@ -11,7 +11,7 @@
 ### 1. 安装
 
 1. 安装适用于当前游戏版本的 Stracker's Loader。
-2. 从 [Releases](https://github.com/moon135246/ArmorVariantManager-World/releases/latest) 下载安装包 `ArmorVariantManager-World-v1.2.3.zip`，正常退出游戏后解压。
+2. 从 [Releases](https://github.com/moon135246/ArmorVariantManager-World/releases/latest) 下载安装包 `ArmorVariantManager-World-v1.2.4.zip`，正常退出游戏后解压。
 3. 将包内 `nativePC` 合并到游戏根目录，即 `MonsterHunterWorld.exe` 所在目录。覆盖前备份已有插件和 `WorldDiff` 数据目录；保留自己的预设、模板、设置及手动更新日志。
 4. 也可以在安装包目录打开 PowerShell，执行 `& '.\安装到游戏.ps1' -GamePath '你的游戏根目录'`。脚本会先备份已有 DLL 和数据；默认路径未必适合本机，请明确传入自己的路径。
 5. 从 Steam 启动游戏，使用 DX12。
@@ -25,7 +25,7 @@
 - 没有对应预设时，先把分享的 `.wdp` 模板放入 `WorldDiff/Templates`，再通过“手动查找”或“自动查找”匹配当前装备。
 - 日常编辑保存在 `WorldDiff/Presets/装备编号.wdp`，与分享模板分开；换装后读取新装备的文件。
 
-在「设置 → 界面风格」中可以选择基础、经典白。
+在「设置 → 界面风格」中可以选择基础、经典白、经典黑。
 
 ### 3. 预设快捷键
 
@@ -65,6 +65,7 @@
 
 ## 更新日志
 
+- **1.2.4** 新增经典黑主题，覆盖主面板、启动提示和预设文件弹窗。
 - **1.2.3** 新增经典白主题，可在设置中与基础界面切换。
 - **1.2.2**：新增预设快捷键组合，与变身功能互斥；简化页签和作者信息。
 - **1.2.1**：新增启动提示开关，以及可手动编辑的更新日志。
