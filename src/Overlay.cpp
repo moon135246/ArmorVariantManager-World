@@ -137,7 +137,7 @@ HRESULT WINAPI Present(IDXGISwapChain* swap,UINT sync,UINT flags){
      }else{
       ImGui::SetNextWindowPos({26,28});ImGui::SetNextWindowBgAlpha(.84f);
       ImGui::Begin("##WorldDiffToast",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoSavedSettings);
-      ImGui::TextColored({.33f,.72f,.78f,1},"世界版差分管理器 1.2.6 已加载");
+      ImGui::TextColored({.33f,.72f,.78f,1},"世界版差分管理器 1.2.7 已加载");
       ImGui::Text("F%d 打开面板  |  Ctrl+F9 暂停控制",key-VK_F1+1);ImGui::End();
      }
     }

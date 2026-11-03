@@ -64,7 +64,7 @@ std::vector<Target> Remap(const Target& t,const File& file,const std::string& sc
   if(chosen)result.push_back({Normalize(model->relativePath),chosen->index,true});else skipped++;
  }if(result.empty()&&matches.empty())skipped++;return result;
 }
-bool AtomicText(const std::filesystem::path& file,const std::string& data){std::error_code ec;std::filesystem::create_directories(file.parent_path(),ec);if(ec)return false;auto temp=file;temp+=L".tmp";std::ofstream out(temp,std::ios::binary|std::ios::trunc);out.write(data.data(),(std::streamsize)data.size());out.flush();if(!out)return false;out.close();return MoveFileExW(temp.c_str(),file.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)!=FALSE;}
+bool AtomicText(const std::filesystem::path& file,const std::string& data,bool replace=true){std::error_code ec;std::filesystem::create_directories(file.parent_path(),ec);if(ec)return false;auto temp=file;temp+=L".tmp";std::ofstream out(temp,std::ios::binary|std::ios::trunc);out.write(data.data(),(std::streamsize)data.size());out.flush();if(!out)return false;out.close();return MoveFileExW(temp.c_str(),file.c_str(),(replace?MOVEFILE_REPLACE_EXISTING:0)|MOVEFILE_WRITE_THROUGH)!=FALSE;}
 bool ReadText(const std::filesystem::path& path,std::string& text){std::error_code ec;if(!std::filesystem::exists(path,ec))return !ec;auto size=std::filesystem::file_size(path,ec);if(ec||size>16*1024*1024)return false;std::ifstream in(path,std::ios::binary);if(!in)return false;text.assign((std::istreambuf_iterator<char>(in)),{});return !in.bad();}
 std::filesystem::path BackupFolder(const std::string& key){return Get().directory/L"Backups"/PathUtf8(key);}
 bool Backup(const std::string& key,const std::string& text,const char* reason){
@@ -109,17 +109,43 @@ static std::string ProfileText(const std::string& scope){
  for(auto& b:metadata.meshes)text<<"MESH "<<std::quoted(b.model)<<' '<<b.index<<' '<<b.material<<' '<<b.ordinal<<' '<<b.vertices<<' '<<b.indices<<' '<<b.lod<<'\n';text<<"DOCUMENT\n";WriteDocument(text,part,true);
  return text.str();
 }
-bool ExportProfile(const std::string& scope,const std::string& requested){
+std::vector<std::string> ListExportTemplates(){
+ std::vector<std::string> names;
+ std::error_code ec;
+ for(std::filesystem::directory_iterator it(Templates(),ec),end;!ec&&it!=end;it.increment(ec)){
+  if(!it->is_regular_file(ec))continue;
+  auto name=Utf8(it->path().filename().wstring());
+  if(SafeFile(name))names.push_back(name);
+ }
+ std::sort(names.begin(),names.end());
+ return names;
+}
+// Supplying existingFile requests create-only export and returns the conflicting filename.
+bool ExportProfile(const std::string& scope,const std::string& requested,std::string* existingFile){
+ if(existingFile){existingFile->clear();if(requested.empty())return false;}
  auto& s=Get();if(!s.storageReady||!EquipmentId(scope)||(!requested.empty()&&!s.migrating&&!CanEditScope(scope)))return false;std::string name=requested;if(name.empty())name=scope+".wdp";else if(PathUtf8(name).extension().empty())name+=".wdp";
  if(!SafeFile(name)){s.notice="预设文件名无效，请不要使用路径分隔符或 Windows 保留字符";return false;}
  std::string content=ProfileText(scope);if(content.empty())return false;auto fingerprint=Fingerprint(content);
  if(requested.empty()&&s.profileSnapshots[scope]==fingerprint)return true;
- auto path=(requested.empty()?Folder():Templates())/PathUtf8(name);std::string before;if(!ReadText(path,before)){s.notice="预设文件读取失败，已停止保存："+name;return false;}
- if(requested.empty()&&!s.migrating&&before.empty()&&s.loadedFingerprints.count(scope)){s.notice="装备预设已被外部删除，请导出模板保留编辑，或重新读取当前装备文件";return false;}
+ auto path=(requested.empty()?Folder():Templates())/PathUtf8(name);
+ auto reportCollision=[&]{
+  if(!existingFile)return false;
+  WIN32_FIND_DATAW match{};
+  HANDLE search=FindFirstFileW(path.c_str(),&match);
+  if(search==INVALID_HANDLE_VALUE)return false;
+  FindClose(search);
+  *existingFile=Utf8(match.cFileName);
+  return true;
+ };
+ if(reportCollision())return false;
+ std::string before;if(!ReadText(path,before)){s.notice="预设文件读取失败，已停止保存："+name;return false;}
+ if(requested.empty()&&!s.migrating&&before.empty()&&s.loadedFingerprints.count(scope)){s.notice="装备预设已被外部删除，请导出预设保留编辑，或重新读取当前装备文件";return false;}
  if(requested.empty()&&!s.migrating&&!before.empty()&&(!s.loadedFingerprints.count(scope)||s.loadedFingerprints[scope]!=Fingerprint(before))){s.notice="装备预设已被外部修改，请重新载入后再编辑："+name;return false;}
- auto key=requested.empty()?scope:"Template-"+Utf8(path.stem().wstring());bool backup=!before.empty()&&content!=before&&(!requested.empty()||!s.backedUpScopes.count(scope));
+ auto key=requested.empty()?scope:"Template-"+Utf8(path.stem().wstring());bool backup=!existingFile&&!before.empty()&&content!=before&&(!requested.empty()||!s.backedUpScopes.count(scope));
  if(backup&&!Backup(key,before,requested.empty()?"edit":"export")){s.notice="备份失败，未替换预设文件";return false;}
- if(content!=before&&!AtomicText(path,content)){s.notice="预设文件保存失败："+name;return false;}
+ if((existingFile||content!=before)&&!AtomicText(path,content,!existingFile)){
+  if(reportCollision())return false;
+  s.notice="预设文件保存失败："+name;return false;}
  if(backup){TrimBackups(key);if(requested.empty())s.backedUpScopes.insert(scope);}
  if(requested.empty()){s.data.bindings[scope]=name;s.loadedScopes.insert(scope);s.loadedFingerprints[scope]=fingerprint;s.profileSnapshots[scope]=fingerprint;s.profileStatus[scope]="已载入装备预设："+name;}
  return true;

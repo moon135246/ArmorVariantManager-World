@@ -112,12 +112,12 @@ bool PanelCheckbox(const char* label,bool* value){
  ImGui::PushStyleColor(ImGuiCol_CheckMark,paper::colors->onPrimary);
  bool hit=ImGui::Checkbox(label,value);ImGui::PopStyleColor(4);ImGui::PopStyleVar();return hit;
 }
-bool SidebarCombo(const char* label,const char* preview){
- if(!paper::active)return ImGui::BeginCombo(label,preview);
+bool SidebarCombo(const char* label,const char* preview,ImGuiComboFlags flags=0){
+ if(!paper::active)return ImGui::BeginCombo(label,preview,flags);
  ImGui::PushStyleColor(ImGuiCol_FrameBg,paper::IsGlass()?paper::glass.input:paper::colors->button);
  ImGui::PushStyleColor(ImGuiCol_Button,paper::IsGlass()?paper::glass.keycap:paper::colors->hover);
  ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize,paper::IsGlass()?S(1):0.f);
- bool open=ImGui::BeginCombo(label,preview);
+ bool open=ImGui::BeginCombo(label,preview,flags);
  ImGui::PopStyleVar();ImGui::PopStyleColor(2);
  return open;
 }
@@ -203,10 +203,10 @@ bool PresetFileModal(const char* title,const char* caption,float width){
  return open;
 }
 bool BeginManager(bool* open){
- const char* label="差分管理器 · 世界版 1.2.6###WorldDiffInternal";
+ const char* label="差分管理器 · 世界版 1.2.7###WorldDiffInternal";
  if(!paper::active)return ImGui::Begin(label,open,ImGuiWindowFlags_NoCollapse);
  ImGui::PushStyleColor(ImGuiCol_Text,paper::colors->onTitle);ImGui::PushFont(PaperBold(),ImGui::GetFontSize());
- bool shown=ImGui::Begin("    差分管理器  |  世界版  1.2.6###WorldDiffInternal",open,ImGuiWindowFlags_NoCollapse);
+ bool shown=ImGui::Begin("    差分管理器  |  世界版  1.2.7###WorldDiffInternal",open,ImGuiWindowFlags_NoCollapse);
  ImGui::PopFont();ImGui::PopStyleColor();
  if(shown&&paper::IsGlass())GlassWindowTint(false,paper::glass.window);
  else if(shown){

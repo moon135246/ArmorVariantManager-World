@@ -27,7 +27,7 @@ void KeyTrackedText(const char* text,const char* end=nullptr){keyui::text.emplac
 #undef TextUnformatted
 #include "save_imgui_frame.inl"
 #include "../src/EmbeddedFonts.h"
-namespace worlddiff::overlay {void NativeInputClose(){}void SetVisible(bool){}const char* BackendStatus(){return "shortcut UI verifier";}bool TextField(const char* label,const char* hint,char* value,size_t capacity){return ImGui::InputTextWithHint(label,hint,value,capacity);}}
+namespace worlddiff::overlay {void NativeInputClose(){}void SetVisible(bool){}const char* BackendStatus(){return "shortcut UI verifier";}bool TextField(const char* label,const char* hint,char* value,size_t capacity){auto changed=ImGui::InputTextWithHint(label,hint,value,capacity);keyui::items[label]={ImGui::GetItemRectMin(),ImGui::GetItemRectMax()};return changed;}}
 using namespace worlddiff;using namespace worlddiff::app;namespace ui=worlddiff::overlay;
 int main(int argc,char** argv){try{
  unsigned checks=0;auto check=[&](bool yes,const char* reason){checks++;if(!yes)throw std::runtime_error(reason);};auto& s=Get();s.loaded=true;s.directory=std::filesystem::temp_directory_path()/(L"WorldDiff124KeyUI_"+std::to_wstring(GetTickCount64()));s.configPath=s.directory/L"Settings.cfg";std::filesystem::create_directories(s.directory);
@@ -44,6 +44,22 @@ int main(int argc,char** argv){try{
  page=1;settle();click("启用变身功能");check(modalActive()&&s.data.hotkeysEnabled&&!s.data.transformsEnabled,"reverse enable also opens conflict modal and preserves the active mode");click("知道了");page=2;settle();
  strcpy_s(ui::hotkeyName,"月下搭配");click("保存名称");check(FindHotkey(id)->name=="月下搭配","real name action updates only the scheme");std::array<bool,256> keys{};ProcessPresetKeys(keys,false,true);click("录制快捷键");check(s.captureHotkey==id,"real record button arms capture");keys['L']=keys[VK_CONTROL]=true;ProcessPresetKeys(keys,false,true);settle();check(!s.captureHotkey&&FindHotkey(id)->key=='L'&&FindHotkey(id)->modifiers==1,"capture result reaches the real shortcut editor");
  click("添加目标分组");check(FindHotkey(id)->targets.size()==1&&FindHotkey(id)->targets[0].group==main&&!FindHotkey(id)->targets[0].preset,"target editor starts with an existing group and waits for a preset");
+ // Both selectors fill their cell. Repeated frames must not feed their
+ // measured widths back into an increasingly uneven split.
+ auto originalTheme=s.data.theme;
+ for(auto theme:{UiTheme::ClassicWhite,UiTheme::ClassicBlack,UiTheme::Glass,UiTheme::Basic}){
+  s.data.theme=theme;
+  for(auto size:{cases[1],cases[2],cases[4]}){
+   active=size;
+   for(int frame=0;frame<180;++frame)draw();
+   float groupWidth=keyui::items.at("##组合分组").GetWidth();
+   float presetWidth=keyui::items.at("##组合预设").GetWidth();
+   std::cout<<"target widths "<<groupWidth<<" / "<<presetWidth<<"\n";
+   check(groupWidth>60*size.scale&&presetWidth>60*size.scale&&groupWidth>presetWidth*.75f&&presetWidth>groupWidth*.75f,"both target selectors retain usable width after repeated frames and resize");
+  }
+ }
+ active=cases[1];s.data.theme=originalTheme;settle();
+ click("##组合分组");settle();click(Find(main)->name.c_str());settle();
  click("##组合预设");settle();click("隐藏");check(FindHotkey(id)->targets[0].preset==p.id,"real preset picker records the referenced preset ID");settle();click("立即应用");check(Find(main)->selected==p.id&&Find(main)->working.hidden==p.rules.hidden,"real Apply button applies the configured combination");
  for(auto c:cases){active=c;page=2;settle();check(keyui::items.count("启用预设快捷键")&&keyui::items.count("##快捷键方案"),"master and scheme selector exist across supported sizes");bool editor=false;for(auto* window:ImGui::GetCurrentContext()->Windows)if(window->Active&&std::strstr(window->Name,"/快捷键方案编辑区_")){editor=true;check(window->Size.x>100&&window->Size.y>80&&window->ScrollMax.x<.5f,"shortcut editor has usable scroll space with no horizontal clipping");}check(editor,"editor viewport remains present");}
  active=cases[1];settle();if(argc>1){SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",argv[1]);SaveCurrentFrame();SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",nullptr);}
@@ -99,10 +115,36 @@ int main(int argc,char** argv){try{
  active={1642,1048,1,1602,1008};page=4;settle();
 
  for(auto& partModel:s.models)for(auto& mesh:partModel.meshes){mesh.vertexCount=3;mesh.indexCount=3;}
- page=0;settle();click("导出模板");settle();for(int frame=0;frame<14;++frame)draw();capture("save_file");
- strcpy_s(ui::profileName,"Mei_梅");click("保存文件");
- check(std::filesystem::exists(s.directory/L"Templates/Mei_梅.wdp"),"save dialog exports the named template");
+ page=0;settle();
  auto sourceFile=s.directory/L"Templates/Mei_梅.wdp";auto secondFile=s.directory/L"Templates/Z_备用.wdp";
+ auto openExport=[&]{click("导出预设");settle();};
+ auto chooseExport=[&]{
+  auto field=keyui::items.at("##预设文件名"),arrow=keyui::items.at("##已有预设文件");
+  check(std::abs(arrow.Min.x-field.Max.x)<2&&std::abs(arrow.Min.y-field.Min.y)<2&&field.GetWidth()>arrow.GetWidth()*4,"arrow directly adjoins filename on the right");
+  click("##已有预设文件");settle();check(keyui::items.count("Mei_梅.wdp")!=0,"existing Unicode template listed");
+  click("Mei_梅.wdp");settle();check(ui::exportSelection=="Mei_梅.wdp"&&keyui::items.count("覆盖保存"),"selecting a file arms direct overwrite");
+ };
+ for(auto theme:{UiTheme::Basic,wanted}){
+  s.data.theme=theme;settle();openExport();click("另存为");check(keyui::items.count("##已有预设文件"),"empty save keeps dialog open");
+  if(!std::filesystem::exists(sourceFile)){
+   strcpy_s(ui::profileName,"Mei_梅");click("另存为");check(std::filesystem::exists(sourceFile),"save as adds wdp extension");
+   openExport();
+  }
+  capture(theme==UiTheme::Basic?"save_basic":"save_file");chooseExport();click("##预设文件名");
+  io.AddKeyEvent(ImGuiKey_End,true);draw();io.AddKeyEvent(ImGuiKey_End,false);draw();
+  io.AddInputCharactersUTF8("X");settle();
+  check(ui::exportSelection.empty()&&keyui::items.count("另存为"),"typing after selection disarms overwrite");
+  click("另存为");settle();
+  auto renamed=s.directory/L"Templates/Mei_梅X.wdp";
+  check(std::filesystem::exists(renamed)&&std::filesystem::exists(sourceFile),"renaming selected template creates a separate file");
+  std::filesystem::remove(renamed);openExport();chooseExport();
+  {std::ofstream out(sourceFile);out<<"direct-overwrite marker";}
+  click("覆盖保存");check(!keyui::items.count("确认覆盖")&&std::filesystem::file_size(sourceFile)>40,"selected file updated immediately");
+  openExport();strcpy_s(ui::profileName,"mei_梅");{std::ofstream out(sourceFile);out<<"confirmation marker";}
+  click("另存为");settle();check(keyui::items.count("确认覆盖")&&std::filesystem::file_size(sourceFile)==19,"manual same name differing in case and extension requires confirmation");
+  click("返回修改");settle();check(keyui::items.count("另存为")&&std::filesystem::file_size(sourceFile)==19,"back preserves existing bytes");
+  click("另存为");settle();click("确认覆盖");check(std::filesystem::file_size(sourceFile)>40,"explicit confirmation replaces template");
+ }
  io.ConfigFlags|=ImGuiConfigFlags_NavEnableKeyboard;
  auto closed=[] {return !ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId|ImGuiPopupFlags_AnyPopupLevel);};
  auto press=[&](ImGuiKey key){io.AddKeyEvent(key,true);draw();io.AddKeyEvent(key,false);settle();};

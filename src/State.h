@@ -134,7 +134,8 @@ struct ProfileCandidate {
 std::vector<ProfileCandidate> FindProfiles(const std::string& scope);
 bool AutoFindProfile(const std::string& scope,bool automatic=false);
 bool ApplyProfile(const std::string& scope,const std::string& file);
-bool ExportProfile(const std::string& scope,const std::string& name={});
+std::vector<std::string> ListExportTemplates();
+bool ExportProfile(const std::string& scope,const std::string& name={},std::string* existingFile=nullptr);
 void TickProfiles();
 void SaveProfiles();
 void InitializeProfiles();

@@ -35,7 +35,7 @@ void HotkeyPanel(){
  if(std::none_of(s.data.groups.begin(),s.data.groups.end(),[&](auto& g){return g.scope==outfit&&!g.presets.empty();}))ImGui::TextWrapped("当前装备尚无已保存预设，请先在左侧保存预设。");
  if(targets.empty())ImGui::TextWrapped("尚未添加目标。普通分组、全局分组和主列表都可以参与。");
  for(size_t i=0;i<targets.size();i++){
-  auto target=targets[i];ImGui::PushID((int)i);if(ImGui::BeginTable("快捷键目标",3,ImGuiTableFlags_SizingStretchProp)){
+  auto target=targets[i];ImGui::PushID((int)i);if(ImGui::BeginTable("快捷键目标",3,ImGuiTableFlags_SizingStretchSame)){
    ImGui::TableSetupColumn("分组",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("预设",ImGuiTableColumnFlags_WidthStretch);ImGui::TableSetupColumn("移除",ImGuiTableColumnFlags_WidthFixed,S(48));ImGui::TableNextColumn();
    auto* g=Find(target.group);std::string groupLabel=g?(g->global?"[全局] ":"")+g->name:"选择分组";ImGui::SetNextItemWidth(-1);
    if(SidebarCombo("##组合分组",groupLabel.c_str())){for(auto& group:s.data.groups)if(group.scope==outfit&&!group.presets.empty()){

@@ -16,7 +16,10 @@ namespace {
 using namespace app;
 std::string outfit;uint64_t groupId=0;int tab=0,part=-1;bool meshMode=true,creating=false,globalGroup=false;
 char groupName[192]{},presetName[192]{},search[192]{},rename[192]{};std::set<Target> staged;
-char profileName[192]{};std::vector<ProfileCandidate> profileFiles;
+char profileName[256]{};
+std::string exportSelection,exportConflict,exportError;
+std::vector<std::string> exportFiles;
+std::vector<ProfileCandidate> profileFiles;
 std::string selectedProfileFile;
 std::vector<std::string> backupFiles;std::string displayedOutfit;
 uint64_t editingMembers=0,confirmGroup=0,confirmPreset=0,renameGroup=0;
@@ -324,7 +327,7 @@ void PageTabs(bool waiting=false){
 void AboutPanel(){
  auto path=Get().directory/L"更新日志.md";
  if(!updateTabVisible||!updateNotes.loaded||updateNotes.path!=path){updateNotes.Load(path);updateNotice.clear();}updateTabVisible=true;
- SectionTitle("差分管理器 · 世界版 1.2.6");ImGui::TextUnformatted("插件作者：明月别枝(moon)");ImGui::Separator();
+ SectionTitle("差分管理器 · 世界版 1.2.7");ImGui::TextUnformatted("插件作者：明月别枝(moon)");ImGui::Separator();
  if(Button("编辑更新日志")){
   wchar_t folder[MAX_PATH]{};STARTUPINFOW start{sizeof(start)};PROCESS_INFORMATION process{};
   if(GetWindowsDirectoryW(folder,MAX_PATH)){
@@ -460,8 +463,8 @@ void DrawPanel(){
   }ImGui::Separator();
   bool requestFind=false,requestExport=false,headerTable=!s.data.hideDragHint&&ImGui::BeginTable("查找与提示",2,ImGuiTableFlags_SizingStretchProp|ImGuiTableFlags_NoPadOuterX);if(headerTable){ImGui::TableSetupColumn("查找",ImGuiTableColumnFlags_WidthFixed,S(550));ImGui::TableSetupColumn("提示",ImGuiTableColumnFlags_WidthStretch);ImGui::TableNextColumn();}
   if(Button("手动查找",0,ButtonTone::Primary)){profileFiles=FindProfiles(outfit);selectedProfileFile.clear();requestFind=true;}ImGui::SameLine();if(Button("自动查找")){if(AutoFindProfile(outfit)){groupId=Main(outfit).id;creating=false;staged.clear();}}
-  ImGui::SameLine();ImGui::BeginDisabled(!CanEditScope(outfit));if(Button("导出模板")){profileName[0]=0;requestExport=true;}ImGui::EndDisabled();ImGui::SameLine();if(PanelCheckbox("换装自动识别",&s.data.autoFind))Changed();
-  if(headerTable){ImGui::TableNextColumn();DragHint();ImGui::EndTable();}if(requestFind)ImGui::OpenPopup("手动查找预设文件");if(requestExport)ImGui::OpenPopup("另存预设文件");
+  ImGui::SameLine();ImGui::BeginDisabled(!CanEditScope(outfit));if(Button("导出预设")){profileName[0]=0;exportSelection.clear();exportConflict.clear();exportError.clear();requestExport=true;}ImGui::EndDisabled();ImGui::SameLine();if(PanelCheckbox("换装自动识别",&s.data.autoFind))Changed();
+  if(headerTable){ImGui::TableNextColumn();DragHint();ImGui::EndTable();}if(requestFind)ImGui::OpenPopup("手动查找预设文件");if(requestExport)ImGui::OpenPopup("导出预设文件");
   auto bound=s.data.bindings.find(outfit);
   const std::string profileStatus=s.profileStatus.count(outfit)?s.profileStatus[outfit]:(bound==s.data.bindings.end()?"当前装备尚无预设，可查找模板或直接编辑":bound->second);
   const std::string_view loadedPrefix="已载入装备预设：";
@@ -527,17 +530,55 @@ void DrawPanel(){
    }
    ImGui::EndDisabled();ImGui::EndPopup();
   }
-  if(PresetFileModal("另存预设文件","//  SAVE PRESET",540)){
-   const char* hint="保存当前装备的全部分组与预设，可供同款 MOD 的其他装备识别。";
-   if(paper::active)ImGui::TextWrapped("%s",hint);else ImGui::TextUnformatted(hint);
-   ImGui::SetNextItemWidth(paper::active?std::min(S(400),ImGui::GetContentRegionAvail().x):S(400));
-   if(paper::active)ImGui::PushStyleColor(ImGuiCol_FrameBg,paper::colors->input);
-   TextField("##预设文件名","如：黎明巫女 或 pl105_0000",profileName,sizeof(profileName));
-   if(paper::active)ImGui::PopStyleColor();
-   if(Button("保存文件",0,ButtonTone::Primary)&&ExportProfile(outfit,profileName)){
-    Changed("预设文件已另存，换装可通过材质识别复用");ImGui::CloseCurrentPopup();
+  if(PresetFileModal("导出预设文件","//  EXPORT PRESET",540)){
+   bool save=false;
+   if(exportConflict.empty()){
+    const char* hint="输入新文件名，或从右侧列表选择要覆盖的预设文件。";
+    if(paper::active)ImGui::TextWrapped("%s",hint);else ImGui::TextUnformatted(hint);
+    float rowWidth=paper::active?ImGui::GetContentRegionAvail().x:S(470);
+    ImGui::SetNextItemWidth(rowWidth-ImGui::GetFrameHeight());
+    if(paper::active)ImGui::PushStyleColor(ImGuiCol_FrameBg,paper::colors->input);
+    if(TextField("##预设文件名","如：黎明巫女 或 pl105_0000",profileName,sizeof(profileName))){
+     exportSelection.clear();exportError.clear();
+    }
+    if(paper::active)ImGui::PopStyleColor();
+    ImGui::SameLine(0,0);
+    ImGui::SetNextWindowSizeConstraints({rowWidth,0},{FLT_MAX,ImGui::GetTextLineHeightWithSpacing()*10});
+    if(SidebarCombo("##已有预设文件",nullptr,ImGuiComboFlags_NoPreview|ImGuiComboFlags_PopupAlignLeft)){
+     if(ImGui::IsWindowAppearing()){NativeInputClose();exportFiles=ListExportTemplates();}
+     if(exportFiles.empty())ImGui::TextDisabled("暂无预设文件");
+     for(auto& file:exportFiles){
+      if(ImGui::Selectable(file.c_str(),exportSelection==file)){
+       strcpy_s(profileName,Utf8(PathUtf8(file).stem().wstring()).c_str());exportSelection=file;exportError.clear();
+      }
+     }
+     ImGui::EndCombo();
+    }
+    ImGui::BeginDisabled(!profileName[0]);
+    save=Button(exportSelection.empty()?"另存为":"覆盖保存",0,ButtonTone::Primary);
+    ImGui::EndDisabled();ImGui::SameLine();
+    if(Button("取消##导出"))ImGui::CloseCurrentPopup();
+   }else{
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX()+S(460));
+    ImGui::TextWrapped("文件「%s」已存在，是否覆盖？",exportConflict.c_str());
+    ImGui::PopTextWrapPos();
+    save=Button("确认覆盖",0,ButtonTone::Primary);ImGui::SameLine();
+    if(Button("返回修改")){exportConflict.clear();exportError.clear();}
    }
-   ImGui::SameLine();if(Button("取消##另存"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
+   if(save){
+    NativeInputClose();
+    bool createOnly=exportSelection.empty()&&exportConflict.empty();
+    std::string collision;
+    std::string filename=profileName;
+    if(!exportSelection.empty())filename=exportSelection;
+    if(!exportConflict.empty())filename=exportConflict;
+    if(ExportProfile(outfit,filename,createOnly?&collision:nullptr)){
+     Changed(createOnly?"预设文件已另存":"预设文件已覆盖保存");ImGui::CloseCurrentPopup();
+    }else if(!collision.empty()){exportConflict=collision;exportError.clear();}
+    else exportError=s.notice.empty()?"导出失败，请检查文件名和目录。":s.notice;
+   }
+   if(!exportError.empty())ImGui::TextWrapped("%s",exportError.c_str());
+   ImGui::EndPopup();
   }
   ImGui::Separator();
   float height=ImGui::GetContentRegionAvail().y-S(43);float available=ImGui::GetContentRegionAvail().x;float left=std::max(S(240),available*.22f),middle=std::max(S(310),available*.25f);
