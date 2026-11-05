@@ -11,8 +11,10 @@
 ### 1. 安装
 
 1. 安装适用于当前游戏版本的 Stracker's Loader。
-2. 从 [Releases](https://github.com/moon135246/ArmorVariantManager-World/releases/latest) 下载 `ArmorVariantManager-World-v1.2.7.zip`。
-3. 退出游戏，解压安装包，把其中的 `nativePC` 文件夹合并到游戏根目录（`MonsterHunterWorld.exe` 所在目录）。从 Steam 启动游戏，按 **F9** 打开差分管理器。
+2. 从 [Releases](https://github.com/moon135246/ArmorVariantManager-World/releases/latest) 下载 `ArmorVariantManager-World-v1.3.0.zip`。
+3. 退出游戏，解压安装包，把其中的 `nativePC` 文件夹合并到游戏根目录（`MonsterHunterWorld.exe` 所在目录）。从 Steam 启动游戏，按 **F9 或 Home** 打开差分管理器。
+
+压缩包根目录的《第三方署名与许可.txt》供查阅，安装时只需复制 `nativePC`。
 
 首次启动会自动生成 `nativePC/plugins/WorldDiff/Settings.cfg`。升级或重装时保留此文件，就能沿用界面、按键等个人设置。装备预设可由对应的外观 MOD 提供，也可在游戏中自行保存。如果自行编辑过更新日志，请在覆盖前备份。
 
@@ -20,7 +22,7 @@
 
 ### 2. 切换预设
 
-- **F9** 打开或关闭面板；**Ctrl+F9** 暂停控制并恢复游戏显隐。
+- 默认 **F9 或 Home** 打开或关闭面板，自定义后只使用选定的一个键，且不能与预设快捷键相同；**Ctrl+F9** 暂停控制并恢复游戏显隐。
 - 面板跟随本地主角当前实际显示的装备，包括幻化；选择分组后点击其中的预设即可应用。
 - 没有对应预设时，先把分享的 `.wdp` 模板放入 `WorldDiff/Templates`，在「手动查找」中单击或用 ↑ / ↓ 选中模板，再点击右下角「应用预设」。也可使用「自动查找」匹配当前装备。
 - 日常编辑保存在 `WorldDiff/Presets/装备编号.wdp`，与分享模板分开；换装后读取新装备的文件。
@@ -65,6 +67,7 @@
 
 ## 更新日志
 
+- **1.3.0** 材质名优先匹配，唯一对应的网格允许几何与部位变化。面板默认支持 F9 或 Home，自定义后使用单键，并检查预设按键冲突。
 - **1.2.7** 导出预设支持选择已有模板覆盖保存，手动输入同名文件时先确认。修复快捷键目标分组框逐渐变窄的问题。
 - **1.2.6** 支持记忆窗口尺寸并适配不同分辨率，调整三个主题的副栏间距，优先沿用系统的微软雅黑。
 - **1.2.5** 新增玻璃态主题，默认界面调整为经典白。四套主题的手动查找均改为先选中，再点击「应用预设」。

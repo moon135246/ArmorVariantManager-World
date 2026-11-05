@@ -42,16 +42,26 @@ int main(int argc,char** argv){try{
  check(s.storageReady&&s.data.theme==UiTheme::ClassicBlack&&Read(s.configPath)==saved,"startup reuses existing settings byte for byte");
  Reset(root/L"normal");auto a=MakeModel("pl105_0000"),b=MakeModel("pl106_0000");s.models={a,b};auto gid=Configure(a);auto preset=Find(gid)->selected;
  check(Save(),"first canonical save succeeds");auto canonical=s.directory/L"Presets/pl105_0000.wdp";auto settings=Read(s.configPath);auto content=Read(canonical);
- check(settings.find("WorldDiffSettings 123")==0&&settings.find("GROUP")==std::string::npos&&settings.find("MESH")==std::string::npos&&settings.find("BINDING")==std::string::npos,"settings contain no equipment data");
+ check(settings.find("WorldDiffSettings 128")==0&&settings.find("GROUP")==std::string::npos&&settings.find("MESH")==std::string::npos&&settings.find("BINDING")==std::string::npos,"settings contain no equipment data");
  s.panelWidth=2050;s.panelHeight=1100;
  check(SaveSettings()&&Read(canonical)==content,"window preferences save independently of equipment");
  auto windowSettings=Read(s.configPath);
- check(windowSettings.find("WorldDiffSettings 124")==0&&windowSettings.find("WINDOW 2050 1100")!=std::string::npos,"settings record the manual window size");
+ check(windowSettings.find("WorldDiffSettings 128")==0&&windowSettings.find("WINDOW 2050 1100")!=std::string::npos,"settings record the manual window size");
  Write(s.configPath,"WorldDiffSettings 124\nSET 1 1 0 120 1 0 1 1 1 0 1\nWINDOW -1 1100\n");
  check(!LoadSettings()&&s.panelWidth==2050&&s.panelHeight==1100,"invalid size cannot partially replace current settings");
  Write(s.configPath,settings);
  check(LoadSettings()&&s.panelWidth==0&&s.panelHeight==0,"old settings load without a saved size");
  check(s.data.theme==UiTheme::ClassicWhite,"new configuration defaults to classic white");
+ check(s.data.menuKey==0&&IsMenuKey(VK_F9,s.data)&&IsMenuKey(VK_HOME,s.data),"new settings keep both default panel keys");
+ Write(s.configPath,"WorldDiffSettings 123\nSET 1 1 0 120 1 0 1 1 1 0 1\n");
+ check(LoadSettings()&&s.data.menuKey==0,"legacy default F9 migrates to dual keys");
+ Write(s.configPath,"WorldDiffSettings 124\nSET 1 1 0 119 1 0 1 1 1 0 1\nWINDOW 2050 1100\n");
+ check(LoadSettings()&&s.data.menuKey==VK_F8&&!IsMenuKey(VK_HOME,s.data)&&s.panelWidth==2050,"legacy custom key and window dimensions survive migration");
+ for(int key:{VK_F9,VK_HOME,VK_F8,0}){
+  check(SetMenuKey(key)&&SaveSettings(),"custom or default panel key saves");s.data.menuKey=VK_F7;
+  check(LoadSettings()&&s.data.menuKey==key&&IsMenuKey(VK_HOME,s.data)==(key==0||key==VK_HOME),"explicit F9 and Home remain single keys across restart");
+ }
+ Write(s.configPath,settings);check(LoadSettings(),"restore initial preferences after migration checks");
  s.data.theme=UiTheme::Basic;check(SaveSettings(),"explicit basic setting saved");s.data.theme=UiTheme::ClassicWhite;
  check(LoadSettings()&&s.data.theme==UiTheme::Basic,"existing basic preference is respected");
  s.data.theme=UiTheme::ClassicWhite;check(SaveSettings()&&Read(canonical)==content,"theme saved independently of equipment");
@@ -76,9 +86,9 @@ int main(int argc,char** argv){try{
  for(int i=0;i<9;i++){Find(gid)->name="模板版本"+std::to_string(i);check(ExportProfile(a.equip,"共享模板"),"explicit template update succeeds");check(ApplyProfile(b.equip,"共享模板.wdp"),"repeated import succeeds");}
  check(ProfileBackups(b.equip).size()==5,"equipment backup history capped at five distinct revisions");auto names=ProfileBackups(b.equip);check(RestoreProfileBackup(b.equip,names.back()),"restore real equipment WDP backup");check(ProfileBackups(b.equip).size()<=5,"restore also respects history limit");
  auto conflict=Read(canonical);Write(canonical,conflict+"\n");Find(gid)->name="未保存编辑";Changed();check(!Save()&&Read(canonical)==conflict+"\n","external write conflict cannot be overwritten");Write(canonical,conflict);check(LoadEquipmentProfile(a.equip),"explicit reload resolves external conflict");
- auto mismatch=Read(canonical);s.models[0].meshes[0].vertexCount++;check(!LoadEquipmentProfile(a.equip)&&s.blockedScopes.count(a.equip),"same filename with changed mesh structure is blocked");check(Save()&&Read(canonical)==mismatch,"blocked old preset remains byte intact");s.models[0].meshes[0].vertexCount--;check(LoadEquipmentProfile(a.equip),"matching model can load again");
+ auto mismatch=Read(canonical);auto originalMaterial=s.models[0].materials[0];s.models[0].materials[0]={"UnrelatedMaterial",MaterialNameHash("UnrelatedMaterial")};check(!LoadEquipmentProfile(a.equip)&&s.blockedScopes.count(a.equip),"same filename with unrelated material is blocked");check(Save()&&Read(canonical)==mismatch,"blocked old preset remains byte intact");s.models[0].materials[0]=originalMaterial;check(LoadEquipmentProfile(a.equip),"matching model can load again");
  s.models[0].meshes[0].blockType^=0x12345678;s.models[0].meshes[0].raw[72]^=77;s.models[0].signature=MeshOrderSignature(s.models[0]);check(LoadEquipmentProfile(a.equip)&&MeshView(s.models[0],1),"runtime layout handles do not cause false model mismatch or lose notes");
- s.models[0].meshes[0].index=100;s.models[0].signature++;check(!LoadEquipmentProfile(a.equip),"reexported indices require explicit remapping");check(RebindEquipmentProfile(a.equip)&&Hidden(a.relativePath,100,a.materials[0].hash),"existing local file can explicitly remap after reexport without a template");
+ s.models[0].meshes[0].index=100;s.models[0].signature++;check(LoadEquipmentProfile(a.equip)&&Hidden(a.relativePath,100,a.materials[0].hash),"reexported indices remap automatically when uniquely identified");check(RebindEquipmentProfile(a.equip)&&Hidden(a.relativePath,100,a.materials[0].hash),"existing local file can explicitly remap after reexport without a template");
  auto badBefore=Dump();Write(s.configPath,"WorldDiffSettings 117\nSET broken\n");check(!Load()&&Dump()==badBefore,"corrupt settings cannot partially replace equipment state");
  Reset(root/L"migration");s.models={a,b};gid=Configure(a);s.data.scale=1.2f;s.data.hideDragHint=true;check(ExportProfile(a.equip,"旧模板"),"prepare portable legacy fixture");fs::create_directories(s.directory/L"Presets");fs::rename(s.directory/L"Templates/旧模板.wdp",s.directory/L"Presets/旧模板.wdp");s.data.bindings[a.equip]="旧模板.wdp";std::ostringstream legacy;WriteDocument(legacy,s.data);auto old=legacy.str();old.replace(0,std::string("WorldDiffInternal 122").size(),"WorldDiffInternal 115");Write(s.directory/L"WorldDiff115.cfg",old);Write(s.directory/L"Backups/old.cfg",old);auto oldTemplate=Read(s.directory/L"Presets/旧模板.wdp");
  check(MigrateStorage(),"legacy configuration migrates with final settings commit");check(s.data.groups.empty()&&s.data.transforms.empty()&&s.data.meshDisplay.empty(),"historical equipment not retained as active documents");
@@ -86,7 +96,7 @@ int main(int argc,char** argv){try{
  check(!fs::exists(s.directory/L"WorldDiff115.cfg")&&!fs::exists(s.directory/L"Presets/旧模板.wdp")&&!fs::exists(s.directory/L"Backups/old.cfg"),"legacy clutter archived only after migration succeeds");
  auto archive=*fs::directory_iterator(s.directory/L"Archive");check(Read(archive.path()/L"WorldDiff115.cfg")==old&&Read(archive.path()/L"Backups/old.cfg")==old,"original configuration and historical backup preserved byte for byte");
  check(LoadSettings()&&s.data.scale==1.2f&&s.data.hideDragHint,"personal global settings preserved");check(LoadEquipmentProfile(a.equip)&&Find(gid)&&s.data.transforms.size()==1&&s.data.meshDisplay.size()==3,"groups transformations notes and order survive migration");
- Reset(root/L"changedmigration");s.models={a};Configure(a);check(ExportProfile(a.equip,"旧模型"),"prepare older model metadata");fs::create_directories(s.directory/L"Presets");fs::rename(s.directory/L"Templates/旧模型.wdp",s.directory/L"Presets/旧模型.wdp");s.data.bindings[a.equip]="旧模型.wdp";std::ostringstream changedLegacy;WriteDocument(changedLegacy,s.data);Write(s.directory/L"WorldDiff115.cfg",changedLegacy.str());s.models[0].meshes[0].vertexCount++;
+ Reset(root/L"changedmigration");s.models={a};Configure(a);check(ExportProfile(a.equip,"旧模型"),"prepare older model metadata");fs::create_directories(s.directory/L"Presets");fs::rename(s.directory/L"Templates/旧模型.wdp",s.directory/L"Presets/旧模型.wdp");s.data.bindings[a.equip]="旧模型.wdp";std::ostringstream changedLegacy;WriteDocument(changedLegacy,s.data);Write(s.directory/L"WorldDiff115.cfg",changedLegacy.str());s.models[0].materials[0]={"Replacement",MaterialNameHash("Replacement")};
  check(MigrateStorage()&&!LoadEquipmentProfile(a.equip)&&s.blockedScopes.count(a.equip),"migration cannot stamp an unrelated replacement model as compatible");
  Reset(root/L"badmigration");Write(s.directory/L"WorldDiff115.cfg","corrupt");check(!MigrateStorage()&&!fs::exists(s.configPath)&&Read(s.directory/L"WorldDiff115.cfg")=="corrupt","invalid migration cannot create settings or erase source");
  Reset(root/L"live");std::array<Model,5> ma={MakeModel(a.equip,"helm"),MakeModel(a.equip,"body"),MakeModel(a.equip,"arm"),MakeModel(a.equip,"wst"),MakeModel(a.equip,"leg")};LiveFixture live(ma);auto inspected=InspectPlayerOutfit(live.snapshot.entity,Memory);

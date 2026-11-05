@@ -203,10 +203,10 @@ bool PresetFileModal(const char* title,const char* caption,float width){
  return open;
 }
 bool BeginManager(bool* open){
- const char* label="差分管理器 · 世界版 1.2.7###WorldDiffInternal";
+ const char* label="差分管理器 · 世界版 1.3.0###WorldDiffInternal";
  if(!paper::active)return ImGui::Begin(label,open,ImGuiWindowFlags_NoCollapse);
  ImGui::PushStyleColor(ImGuiCol_Text,paper::colors->onTitle);ImGui::PushFont(PaperBold(),ImGui::GetFontSize());
- bool shown=ImGui::Begin("    差分管理器  |  世界版  1.2.7###WorldDiffInternal",open,ImGuiWindowFlags_NoCollapse);
+ bool shown=ImGui::Begin("    差分管理器  |  世界版  1.3.0###WorldDiffInternal",open,ImGuiWindowFlags_NoCollapse);
  ImGui::PopFont();ImGui::PopStyleColor();
  if(shown&&paper::IsGlass())GlassWindowTint(false,paper::glass.window);
  else if(shown){
@@ -301,7 +301,6 @@ bool PaperTemplateRow(const app::ProfileCandidate& file,const std::string& rate,
  else paper::CutRect(d,lo,hi,hovered?paper::colors->hover:paper::colors->fileIdle,S(7));
  ImU32 fg=highlighted?paper::colors->onSelection:paper::colors->text;
  float y=(lo.y+hi.y)*.5f,right=hi.x-S(12);
- if(file.strong)right-=PaperBadge(d,{right,y},S(22),"完整匹配",fg,15)+S(12);
  float x=lo.x+S(39),size=S(22),rateSize=S(17);
  float nameW=PaperBold()->CalcTextSizeA(size,FLT_MAX,0,file.name.c_str()).x;
  float rateW=PaperBold()->CalcTextSizeA(rateSize,FLT_MAX,0,rate.c_str()).x;

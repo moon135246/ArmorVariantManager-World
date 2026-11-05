@@ -22,7 +22,7 @@ if errorlevel 1 exit /b 1
 build\test_hotkeys.exe
 ```
 
-可同样运行 `test-state`、`test-storage`、`test-transforms`、`test-multiplayer`、`test-scene`、`test-mesh-display`、`test-reorder`、`test-hotkey-ui`、`test-layout`、`test-updates`、`test-appearance` 对应脚本和下划线名称的 EXE。各脚本共用 build/*.obj，必须顺序编译，避免同时运行。
+可同样运行 `test-variant-profiles`、`test-state`、`test-storage`、`test-transforms`、`test-multiplayer`、`test-scene`、`test-mesh-display`、`test-reorder`、`test-hotkey-ui`、`test-layout`、`test-updates`、`test-appearance` 对应脚本和下划线名称的 EXE。各脚本共用 build/*.obj，必须顺序编译，避免同时运行。
 
 ImGui／原生输入检查需要可交互 Windows 桌面。原生输入检查会创建临时测试窗口。离线预览渲染脚本另外需要 Python、NumPy 和 Pillow；普通 DLL 编译不依赖 Python。
 
@@ -32,6 +32,7 @@ ImGui／原生输入检查需要可交互 Windows 桌面。原生输入检查会
 
 - `test_profiles.exe <isolated-root>`：历史跨装备测试，需要符合其模型／材质约束的隔离夹具；省略参数时旧测试会使用开发期默认游戏路径，不建议这样运行。
 - `test_mesh_order.exe <isolated-root>`：真实 MOD3／MRL3 顺序与回退检查。
+- `test_variant_profiles.exe [isolated-model-root legacy-mei-wdp]`：不传参数运行合成材质映射检查；可选参数使用本地 Mei 夹具核对全部规则。
 - `test_storage.exe [isolated-model-root legacy-cfg]`：可选的真实旧数据迁移分支。
 - `test_hotkeys.exe [legacy-wdp [chat-fixture-directory]]`：可选旧 WDP 和聊天开闭字段回放；不传参数使用合成数据。
 - `test_layout.exe [isolated-model-root]`：可选真实网格页面交互分支。

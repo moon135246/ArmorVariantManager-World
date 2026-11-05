@@ -180,6 +180,35 @@ int main(int argc,char** argv){try{
  s.trackingPlayer=true;s.outfit.ready=false;page=3;settle();click("界面风格");settle();click("基础");settle();
  check(s.data.theme==UiTheme::Basic,"waiting-for-player settings can switch back to basic");
  s.trackingPlayer=false;page=0;settle();verifyFind(true);
+
+ if(argc>5){
+  s.directory=s.directory/L"MeiUI";s.configPath=s.directory/L"Settings.cfg";s.data={};
+  s.loadedFingerprints.clear();s.profileSnapshots.clear();InitializeProfiles();
+  std::filesystem::copy_file(PathUtf8(argv[5]),s.directory/L"Templates/Mei_梅.wdp");
+  s.models=LoadCatalog(PathUtf8(argv[4]));s.data.hideDragHint=true;
+  for(auto theme:{wanted,UiTheme::Basic}){
+   s.data.theme=theme;page=0;active={1642,1048,1,1602,1008};settle();click("手动查找");settle();
+   check(ui::profileFiles.size()==1&&ui::profileFiles[0].resolved==93&&ui::profileFiles[0].controlled==93,"actual Mei UI uses 93 resolved targets");
+   capture(theme==UiTheme::Basic?"mei_basic":"mei");
+   click("取消##查找");
+   active={1280,720,.7f,1022,595};settle();click("手动查找");settle();
+   auto row=keyui::items.at(theme==UiTheme::Basic?"##template":"##paperTemplate");
+   check(row.GetHeight()>10&&row.GetHeight()<40&&row.GetWidth()>400,"single-line template row fits the compact layout");
+   capture(theme==UiTheme::Basic?"mei_basic_small":"mei_small");click("取消##查找");
+  }
+ }
+ // Exercise the actual settings dropdown and conflict rejection in every theme.
+ for(auto theme:{UiTheme::ClassicWhite,UiTheme::ClassicBlack,UiTheme::Glass,UiTheme::Basic}){
+  s.data.theme=theme;s.data.menuKey=0;page=3;active={1280,720,.7f,1022,595};settle();
+  click("开关面板快捷键");settle();check(keyui::items.count("默认：F9 / Home")&&keyui::items.count("F9")&&keyui::items.count("Home"),"default and single-key options are available");
+  click("F8");check(s.data.menuKey==VK_F8&&!IsMenuKey(VK_F9,s.data)&&!IsMenuKey(VK_HOME,s.data),"settings selection replaces both defaults");
+  PresetHotkey blocker;blocker.id=s.data.nextId++;blocker.name="冲突测试";blocker.scope="pl105_0000";blocker.key=VK_F7;s.data.hotkeys.push_back(blocker);
+  click("开关面板快捷键");settle();click("F7");check(s.data.menuKey==VK_F8&&s.notice.find("冲突")!=std::string::npos,"settings refuses a key already used by a preset");s.data.hotkeys.pop_back();
+  click("开关面板快捷键");settle();click("F9");check(s.data.menuKey==VK_F9&&!IsMenuKey(VK_HOME,s.data),"selecting F9 explicitly makes it a single key");
+  click("开关面板快捷键");settle();click("Home");check(s.data.menuKey==VK_HOME&&!IsMenuKey(VK_F9,s.data),"selecting Home explicitly makes it a single key");
+  click("开关面板快捷键");settle();click("默认：F9 / Home");check(s.data.menuKey==0&&IsMenuKey(VK_HOME,s.data)&&IsMenuKey(VK_F9,s.data),"default option restores both keys");
+  io.AddMousePosEvent(-100,-100);s.notice.clear();settle();capture(theme==UiTheme::Basic?"panel_basic":theme==UiTheme::ClassicWhite?"panel_white":theme==UiTheme::ClassicBlack?"panel_black":"panel_glass");
+ }
  // Drive a real resize grip, then recreate the ImGui context as on game restart.
  auto newContext=[&]{
   ImGui::DestroyContext();ImGui::CreateContext();

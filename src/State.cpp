@@ -102,7 +102,7 @@ static void WriteRules(std::ostream& f,const Rules& r,uint64_t gid,uint64_t pid)
 #include "Hotkeys.inl"
 void WriteDocument(std::ostream& f,const Document& d,bool equipment){
  if(equipment)f<<"WorldDiffEquipment 122\nNEXTID "<<d.nextId<<'\n';
- else{f<<"WorldDiffInternal 122\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.nextId<<' '<<d.hideDragHint<<'\n';
+ else{f<<"WorldDiffInternal 128\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.nextId<<' '<<d.hideDragHint<<'\n';
  f<<"AUTOFIND "<<d.autoFind<<'\n';for(const auto& [scope,file]:d.bindings)f<<"BINDING "<<std::quoted(scope)<<' '<<std::quoted(file)<<'\n';}
  for(const auto& g:d.groups){f<<"GROUP "<<g.id<<' '<<std::quoted(g.name)<<' '<<std::quoted(g.scope)<<' '<<g.main<<' '<<g.global<<' '<<g.selected<<' '<<g.defaultPreset<<'\n';for(const auto& t:g.members)f<<"MEMBER "<<g.id<<' '<<std::quoted(t.model)<<' '<<t.value<<'\n';WriteRules(f,g.working,g.id,0);for(const auto& p:g.presets){f<<"PRESET "<<g.id<<' '<<p.id<<' '<<std::quoted(p.name)<<'\n';WriteRules(f,p.rules,g.id,p.id);}}
  for(auto& [t,v]:d.meshDisplay)f<<"MESHVIEW "<<std::quoted(t.model)<<' '<<t.value<<' '<<v.signature<<' '<<v.material<<' '<<v.order<<' '<<std::quoted(v.note)<<'\n';
@@ -118,7 +118,7 @@ bool Save(){
 }
 bool ReadDocument(std::istream& f,Document& result){
  std::string magic;unsigned version=0;f>>magic>>version;bool equipment=magic=="WorldDiffEquipment";
- if((magic!="WorldDiffInternal"&&!equipment)||(version!=103&&version!=104&&version!=107&&version!=108&&version!=109&&version!=110&&version!=115&&version!=117&&version!=122)||(equipment&&version!=117&&version!=122))return false;
+ if((magic!="WorldDiffInternal"&&!equipment)||(version!=103&&version!=104&&version!=107&&version!=108&&version!=109&&version!=110&&version!=115&&version!=117&&version!=122&&version!=128)||(equipment&&version!=117&&version!=122))return false;
  Document d;std::string line;std::getline(f,line);bool valid=true;size_t records=0;
  while(std::getline(f,line)&&valid){if(++records>200000){valid=false;break;}std::istringstream in(line);std::string tag;in>>tag;if(tag.empty())continue;
   if(equipment&&(tag=="SET"||tag=="AUTOFIND"||tag=="TRANSFORMS"||tag=="HOTKEYS"||tag=="BINDING")){valid=false;break;}
@@ -155,7 +155,8 @@ bool ReadDocument(std::istream& f,Document& result){
   }else valid=false;
   if(in.fail())valid=false;
  }
- if(!valid||d.menuKey<0x70||d.menuKey>0x87||d.scale<0.65f||d.scale>1.7f)return false;
+ if(!equipment&&version<128&&d.menuKey==VK_F9)d.menuKey=0;
+ if(!valid||!ValidMenuKey(d.menuKey)||d.scale<0.65f||d.scale>1.7f)return false;
  uint64_t highest=0;for(auto& g:d.groups){highest=std::max(highest,g.id);for(auto& p:g.presets)highest=std::max(highest,p.id);if(g.defaultPreset)for(auto& p:g.presets)if(p.id==g.defaultPreset){g.working=p.rules;g.selected=p.id;}}
  for(auto& r:d.transforms)highest=std::max(highest,r.id);
  for(auto& h:d.hotkeys){if(!ValidateHotkey(h,d))return false;for(auto& g:d.groups){if(g.id==h.id)return false;for(auto& p:g.presets)if(p.id==h.id)return false;}for(auto& r:d.transforms)if(r.id==h.id)return false;highest=std::max(highest,h.id);}
@@ -191,7 +192,7 @@ void Tick(){
   InterlockedExchange(&r.hide,s.storageReady&&IsCurrentModel(path)&&!s.blockedScopes.count(model.equip)&&Hidden(path,r.meshIndex,r.materialHash)?1:0);
  }
  InterlockedExchange(&s.live->enabled,s.data.enabled?1:0);InterlockedExchange(&s.live->heartbeat,(LONG)now);
- if(s.trackingPlayer)sprintf_s(s.live->message,"WorldDiff 1.2.7 local=%llx preview=%d ready=%d peers=%zu matched=%zu modelInstances=%zu",(unsigned long long)s.outfit.entity,s.outfit.savePreview?1:0,s.outfit.ready&&!s.outfitChanging?1:0,s.peerCount,s.matchedPeers,policies?policies->models.size():0);
+ if(s.trackingPlayer)sprintf_s(s.live->message,"WorldDiff 1.3.0 local=%llx preview=%d ready=%d peers=%zu matched=%zu modelInstances=%zu",(unsigned long long)s.outfit.entity,s.outfit.savePreview?1:0,s.outfit.ready&&!s.outfitChanging?1:0,s.peerCount,s.matchedPeers,policies?policies->models.size():0);
  if(s.panelSizeDirty&&(DWORD)(now-s.panelSizeChangedAt)>500){
   s.panelSizeDirty=!SaveSettings();s.panelSizeChangedAt=now;
  }

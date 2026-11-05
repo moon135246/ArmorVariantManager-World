@@ -29,9 +29,17 @@ struct Group {
  std::set<Target> members;Rules working;std::vector<Preset> presets;
  uint64_t selected=0,defaultPreset=0;
 };
+struct MeshBinding {
+ std::string model;
+ uint32_t index=0,material=0,ordinal=0,vertices=0,indices=0,lod=0;
+};
 struct Document {
+ // Geometry for rules parked on a non-renderable model until a variant returns.
+ std::vector<MeshBinding> inactiveMeshes;
+ std::map<std::pair<std::string,uint32_t>,std::string> materialNames;
  UiTheme theme=UiTheme::ClassicWhite;
- bool enabled=true,autoDefault=true,autoOpen=false,autoFind=true,hideDragHint=false,transformsEnabled=true,showStartupNotice=true,hotkeysEnabled=false;int menuKey=VK_F9;float scale=1.0f;
+ bool enabled=true,autoDefault=true,autoOpen=false,autoFind=true,hideDragHint=false,transformsEnabled=true,showStartupNotice=true,hotkeysEnabled=false;int menuKey=0; // 0: default F9 or Home; otherwise one custom key.
+ float scale=1.0f;
  uint64_t nextId=1;std::vector<Group> groups;
  std::map<std::string,std::string> bindings;
  std::vector<TransformRule> transforms;
@@ -113,6 +121,10 @@ bool ApplyPreset(Group&,uint64_t);
 bool DeletePreset(Group&,uint64_t);
 bool SetDefault(Group&,uint64_t);
 // Modifiers: Ctrl=1, Shift=2, Alt=4. The Win key is never a preset modifier.
+bool ValidMenuKey(int key);
+bool IsMenuKey(int key,const Document&);
+std::string MenuKeyName(const Document&);
+bool SetMenuKey(int key);
 bool ValidPresetKey(int key,int modifiers);
 std::string PresetKeyName(int key,int modifiers);
 bool ValidateHotkey(const PresetHotkey&,const Document&,bool requireTargets=false);
@@ -130,6 +142,10 @@ void Import102(const std::filesystem::path&);
 struct ProfileCandidate {
  std::string file,name;size_t hits=0,total=0,parts=0;bool filenameMatch=false,backup=false;
  bool strong=false;double coverage=0;
+ double materialCoverage=0;
+ size_t currentMaterials=0,missingMaterials=0,addedMaterials=0,unknownMaterials=0;
+ size_t controlled=0,resolved=0;
+ std::vector<std::string> missingNames,addedNames;
 };
 std::vector<ProfileCandidate> FindProfiles(const std::string& scope);
 bool AutoFindProfile(const std::string& scope,bool automatic=false);

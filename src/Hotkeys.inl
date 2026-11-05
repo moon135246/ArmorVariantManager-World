@@ -1,6 +1,14 @@
 // Included by State.cpp. All callers use the State mutex (recursive for UI).
+bool ValidMenuKey(int key){return key==0||(key>=VK_F1&&key<=VK_F24)||key==VK_HOME||key==VK_END||key==VK_INSERT||key==VK_PRIOR||key==VK_NEXT;}
+bool IsMenuKey(int key,const Document& d){return d.menuKey?key==d.menuKey:key==VK_F9||key==VK_HOME;}
+std::string MenuKeyName(const Document& d){return d.menuKey?PresetKeyName(d.menuKey,0):"F9 / Home";}
+bool SetMenuKey(int key){
+ auto& s=Get();if(!ValidMenuKey(key))return false;Document candidate;candidate.menuKey=key;
+ for(auto& h:s.data.hotkeys)if(h.key&&IsMenuKey(h.key,candidate)){s.notice="面板键与预设方案「"+h.name+"」冲突，请先修改该方案的快捷键。";return false;}
+ s.data.menuKey=key;s.captureHotkey=0;s.keysAllowed=false;Changed("面板快捷键已保存："+MenuKeyName(s.data));return true;
+}
 bool ValidPresetKey(int key,int modifiers){
- if(modifiers<0||modifiers>7||key==VK_F9||(key==VK_F4&&(modifiers&4)))return false;
+ if(modifiers<0||modifiers>7||(key==VK_F9&&(modifiers&1))||(key==VK_F4&&(modifiers&4)))return false;
  return (key>='A'&&key<='Z')||(key>='0'&&key<='9')||(key>=VK_F1&&key<=VK_F12)||(key>=VK_NUMPAD0&&key<=VK_DIVIDE)||key==VK_SPACE||key==VK_TAB||(key>=VK_PRIOR&&key<=VK_DOWN)||key==VK_INSERT||key==VK_DELETE||(key>=VK_OEM_1&&key<=VK_OEM_3)||(key>=VK_OEM_4&&key<=VK_OEM_8);
 }
 std::string PresetKeyName(int key,int modifiers){
@@ -15,7 +23,7 @@ bool ValidateHotkey(const PresetHotkey& h,const Document& d,bool requireTargets)
  if(!h.id||h.name.empty()||h.name.size()>160||h.scope.size()!=10||h.scope.rfind("pl",0)!=0||h.scope[5]!='_'||h.targets.size()>64||(!h.key&&h.modifiers)||h.key&&!ValidPresetKey(h.key,h.modifiers))return false;
  for(size_t i=2;i<h.scope.size();i++)if(i!=5&&(h.scope[i]<'0'||h.scope[i]>'9'))return false;
  for(unsigned char c:h.name)if(c<32)return false;
- if(requireTargets&&h.targets.empty())return false;std::set<uint64_t> groups;
+ if(requireTargets&&(h.targets.empty()||(h.key&&IsMenuKey(h.key,d))))return false;std::set<uint64_t> groups;
  for(auto& target:h.targets){if(!target.group||!groups.insert(target.group).second)return false;auto g=std::find_if(d.groups.begin(),d.groups.end(),[&](auto& row){return row.id==target.group&&row.scope==h.scope;});
   if(g==d.groups.end()||(!target.preset&&requireTargets))return false;if(target.preset&&std::none_of(g->presets.begin(),g->presets.end(),[&](auto& p){return p.id==target.preset;}))return false;
  }return true;
@@ -33,7 +41,7 @@ uint64_t CreateHotkey(const std::string& scope,const std::string& name){
  PresetHotkey h;h.id=s.data.nextId;h.scope=scope;h.name=name;if(!ValidateHotkey(h,s.data))return 0;s.data.nextId++;s.data.hotkeys.push_back(h);Changed("快捷键方案已创建");return h.id;
 }
 bool SetHotkeyBinding(uint64_t id,int key,int modifiers){
- auto& s=Get();auto* h=FindHotkey(id);if(!h||!CanEditScope(h->scope)||(!key&&modifiers)||(key&&(!ValidPresetKey(key,modifiers)||key==s.data.menuKey))){s.notice="此按键不可用；面板键、F9、Esc、Enter 与系统组合键不能用于预设。";return false;}
+ auto& s=Get();auto* h=FindHotkey(id);if(!h||!CanEditScope(h->scope)||(!key&&modifiers)||(key&&(!ValidPresetKey(key,modifiers)||IsMenuKey(key,s.data)))){s.notice="此按键不可用；当前面板键、Ctrl+F9、Esc、Enter 与系统组合键不能用于预设。";return false;}
  for(auto& other:s.data.hotkeys)if(other.id!=id&&other.scope==h->scope&&key&&other.key==key&&other.modifiers==modifiers){s.notice="当前装备已有方案使用此快捷键，请换一个按键。";return false;}
  h->key=key;h->modifiers=modifiers;Changed("快捷键已保存："+PresetKeyName(key,modifiers));return true;
 }
@@ -73,6 +81,6 @@ bool ProcessPresetKeys(const std::array<bool,256>& keys,bool allowRuntime,bool a
  }
  if(!allowRuntime||newlyAllowed||!s.data.hotkeysEnabled||s.data.transformsEnabled||!s.data.enabled||s.outfitChanging||(s.trackingPlayer&&(!s.outfit.ready||s.outfit.savePreview)))return false;
  std::vector<uint64_t> matches;
- for(auto& h:s.data.hotkeys)if(h.enabled&&h.key&&h.key!=s.data.menuKey&&keys[h.key]&&!before[h.key]&&h.modifiers==modifiers&&CanEditScope(h.scope))matches.push_back(h.id);
+ for(auto& h:s.data.hotkeys)if(h.enabled&&h.key&&!IsMenuKey(h.key,s.data)&&keys[h.key]&&!before[h.key]&&h.modifiers==modifiers&&CanEditScope(h.scope))matches.push_back(h.id);
  if(matches.empty()||(textInputActive&&textInputActive()))return false;return ApplyHotkeyBatch(matches);
 }

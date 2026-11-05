@@ -68,8 +68,9 @@ void InstallInput(){
 LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l){
  std::lock_guard lock(renderMutex);
  if(msg==WM_KILLFOCUS||(msg==WM_ACTIVATEAPP&&!w)){std::lock_guard stateLock(app::Get().mutex);app::Get().keysAllowed=false;app::Get().keysPrimed=false;}
- int menuKey=VK_F9;{std::lock_guard stateLock(app::Get().mutex);menuKey=app::Get().data.menuKey;}
- if(msg==WM_KEYDOWN&&w==(WPARAM)menuKey&&!(l&(1LL<<30))&&!Key(VK_CONTROL)){
+ bool menuKey=false,capturing=false;{std::lock_guard stateLock(app::Get().mutex);menuKey=app::IsMenuKey((int)w,app::Get().data);capturing=app::Get().captureHotkey!=0;}
+ if(msg==WM_KEYDOWN&&menuKey&&!(l&(1LL<<30))&&!Key(VK_CONTROL)){
+  if(capturing)return 0;
   DWORD now=GetTickCount();if((DWORD)(now-messageToggleAt.load())>250){SetVisible(!open);messageToggleAt=now;}return 0;
  }
  if(open&&msg==WM_KEYDOWN&&w==VK_ESCAPE){std::lock_guard stateLock(app::Get().mutex);if(app::Get().captureHotkey){app::Get().captureHotkey=0;app::Get().notice="已取消快捷键录制";return 0;}}
@@ -117,8 +118,8 @@ HRESULT WINAPI Present(IDXGISwapChain* swap,UINT sync,UINT flags){
    if(ready&&swap!=bound){DXGI_SWAP_CHAIN_DESC d{};if(SUCCEEDED(swap->GetDesc(&d))&&d.OutputWindow==window)Teardown();}
    if(!ready)Initialize(swap);
    if(ready&&swap==bound){
-    int key;float uiScale;bool startupNotice;app::UiTheme uiTheme;{std::lock_guard stateLock(app::Get().mutex);uiScale=app::Get().data.scale;uiTheme=app::Get().data.theme;key=app::Get().data.menuKey;startupNotice=app::Get().loaded&&app::Get().data.showStartupNotice;}
-    static bool previous=false,panicPrevious=false;bool down=Key(key)&&!Key(VK_CONTROL);if(down&&!previous&&GetForegroundWindow()==window&&(DWORD)(GetTickCount()-messageToggleAt.load())>250){SetVisible(!open);messageToggleAt=GetTickCount();}previous=down;
+    int key;std::string menuLabel;float uiScale;bool startupNotice,capturing;app::UiTheme uiTheme;{std::lock_guard stateLock(app::Get().mutex);uiScale=app::Get().data.scale;uiTheme=app::Get().data.theme;key=app::Get().data.menuKey;menuLabel=app::MenuKeyName(app::Get().data);capturing=app::Get().captureHotkey!=0;startupNotice=app::Get().loaded&&app::Get().data.showStartupNotice;}
+    static unsigned previous=0;static bool panicPrevious=false;unsigned down=!Key(VK_CONTROL)?((Key(key?key:VK_F9)?1u:0u)|(!key&&Key(VK_HOME)?2u:0u)):0;if((down&~previous)&&!capturing&&GetForegroundWindow()==window&&(DWORD)(GetTickCount()-messageToggleAt.load())>250){SetVisible(!open);messageToggleAt=GetTickCount();}previous=down;
     if(!autoOpened&&RuntimeState()&&RuntimeState()->rowCount>0){std::lock_guard stateLock(app::Get().mutex);autoOpened=true;if(app::Get().data.autoOpen)SetVisible(true);}
     bool panic=Key(VK_CONTROL)&&Key(VK_F9)&&(GetForegroundWindow()==window||NativeInputOwnWindow(GetForegroundWindow()));if(panic&&!panicPrevious){std::lock_guard stateLock(app::Get().mutex);app::RestoreAll();}panicPrevious=panic;
     ownInput=true;if(is12)dx12::NewFrame();else ImGui_ImplDX11_NewFrame();ImGui_ImplWin32_NewFrame();ownInput=false;
@@ -132,13 +133,12 @@ HRESULT WINAPI Present(IDXGISwapChain* swap,UINT sync,UINT flags){
     if(open)DrawPanel();
     else if(notes::ShowStartupNotice(startupNotice,false,(DWORD)(GetTickCount()-firstTick))){
      if(uiTheme!=app::UiTheme::Basic){
-      char menuKey[8];sprintf_s(menuKey,"F%d",key-VK_F1+1);
-      paper::DrawStartupNotice(menuKey,uiScale,paper::PaletteFor(uiTheme));
+      paper::DrawStartupNotice(menuLabel.c_str(),uiScale,paper::PaletteFor(uiTheme));
      }else{
       ImGui::SetNextWindowPos({26,28});ImGui::SetNextWindowBgAlpha(.84f);
       ImGui::Begin("##WorldDiffToast",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoSavedSettings);
-      ImGui::TextColored({.33f,.72f,.78f,1},"世界版差分管理器 1.2.7 已加载");
-      ImGui::Text("F%d 打开面板  |  Ctrl+F9 暂停控制",key-VK_F1+1);ImGui::End();
+      ImGui::TextColored({.33f,.72f,.78f,1},"世界版差分管理器 1.3.0 已加载");
+      ImGui::Text("%s 打开面板  |  Ctrl+F9 暂停控制",menuLabel.c_str());ImGui::End();
      }
     }
     NativeInputEndFrame();

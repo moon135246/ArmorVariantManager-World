@@ -30,8 +30,8 @@ void Hide(bool cancel){
  shown=false;if(host)ShowWindow(host,SW_HIDE);if(owner&&GetForegroundWindow()==host)SetForegroundWindow(owner);
 }
 LRESULT CALLBACK EditProc(HWND hwnd,UINT message,WPARAM w,LPARAM l){
- if(message==WM_KEYDOWN){int menu;{std::lock_guard lock(app::Get().mutex);menu=app::Get().data.menuKey;}
-  if(w==VK_RETURN){Hide(false);return 0;}if(w==VK_ESCAPE){Hide(true);return 0;}if(w==(WPARAM)menu){Hide(false);SetVisible(false);return 0;}
+ if(message==WM_KEYDOWN){bool menu;{std::lock_guard lock(app::Get().mutex);menu=app::IsMenuKey((int)w,app::Get().data);}
+  if(w==VK_RETURN){Hide(false);return 0;}if(w==VK_ESCAPE){Hide(true);return 0;}if(menu){Hide(false);SetVisible(false);return 0;}
  }
  if(message==WM_KILLFOCUS){LRESULT result=CallWindowProcW(editOriginal,hwnd,message,w,l);Publish();shown=false;ShowWindow(host,SW_HIDE);return result;}
  return CallWindowProcW(editOriginal,hwnd,message,w,l);

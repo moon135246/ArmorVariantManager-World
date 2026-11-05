@@ -327,7 +327,7 @@ void PageTabs(bool waiting=false){
 void AboutPanel(){
  auto path=Get().directory/L"更新日志.md";
  if(!updateTabVisible||!updateNotes.loaded||updateNotes.path!=path){updateNotes.Load(path);updateNotice.clear();}updateTabVisible=true;
- SectionTitle("差分管理器 · 世界版 1.2.7");ImGui::TextUnformatted("插件作者：明月别枝(moon)");ImGui::Separator();
+ SectionTitle("差分管理器 · 世界版 1.3.0");ImGui::TextUnformatted("插件作者：明月别枝(moon)");ImGui::Separator();
  if(Button("编辑更新日志")){
   wchar_t folder[MAX_PATH]{};STARTUPINFOW start{sizeof(start)};PROCESS_INFORMATION process{};
   if(GetWindowsDirectoryW(folder,MAX_PATH)){
@@ -367,7 +367,13 @@ void SettingsPanel(){
  }
  ImGui::Separator();SectionTitle("启动与输入");if(PanelCheckbox("启用差分控制",&s.data.enabled))Changed();if(PanelCheckbox("进入游戏后自动打开面板",&s.data.autoOpen))Changed();
  if(PanelCheckbox("显示启动提示",&s.data.showStartupNotice)){Changed();Save();}Tip("启动时在左上角显示版本与快捷键，约 9 秒后自动消失。");
- const char* keys[]={"F5","F6","F7","F8","F9","F10","F11","F12"};int key=std::clamp(s.data.menuKey-VK_F5,0,7);ImGui::SetNextItemWidth(S(180));if(ImGui::Combo("开关面板快捷键",&key,keys,8)){s.data.menuKey=VK_F5+key;Changed();}
+ ImGui::SetNextItemWidth(S(180));auto panelKey=MenuKeyName(s.data);
+ if(ImGui::BeginCombo("开关面板快捷键",panelKey.c_str(),ImGuiComboFlags_HeightLarge)){
+  if(ImGui::Selectable("默认：F9 / Home",s.data.menuKey==0))SetMenuKey(0);
+  for(int key=VK_F1;key<=VK_F12;key++){auto label=PresetKeyName(key,0);if(ImGui::Selectable(label.c_str(),s.data.menuKey==key))SetMenuKey(key);}
+  for(int key:{VK_HOME,VK_END,VK_INSERT,VK_PRIOR,VK_NEXT}){auto label=PresetKeyName(key,0);if(ImGui::Selectable(label.c_str(),s.data.menuKey==key))SetMenuKey(key);}
+  ImGui::EndCombo();
+ }Tip("默认 F9 或 Home 均可开关面板；选择其他选项后，只使用选定的一个键。不能与预设快捷键相同。");
  ImGui::SetNextItemWidth(S(220));if(ImGui::SliderFloat("界面缩放",&s.data.scale,.7f,1.5f,"%.2f"))Changed();
  ImGui::Separator();SectionTitle("配置与恢复");if(Button("立即保存配置")){if(Save())s.notice="配置已保存";else s.notice="配置保存失败，请检查目录是否可写";}ImGui::SameLine();ImGui::BeginDisabled(!CanEditScope(outfit)||outfit.empty());if(Button("恢复当前组")){if(auto* g=Find(groupId))Restore(*g);}ImGui::EndDisabled();
  if(Button("暂停全部并恢复游戏显隐"))RestoreAll();Tip("不会删除任何已保存预设；重新启用控制后，可选择预设恢复方案。");
@@ -376,7 +382,7 @@ void SettingsPanel(){
  if(PanelCheckbox("换装后自动识别预设文件",&s.data.autoFind))Changed();
  ImGui::Separator();SectionTitle("操作说明");ImGui::TextWrapped("普通分组独占成员，主列表不再管理已分组材质。全局分组可以与其他分组重叠，只叠加隐藏。每个分组保存独立预设和默认预设。列表支持拖动排序。");
  ImGui::TextWrapped("关闭面板后规则仍然生效。Ctrl+F9 可暂停全部控制；Esc 关闭面板。插件随 Stracker's Loader 加载，不需要连接或外置程序。");
- ImGui::TextWrapped("换装时只读取当前主角外观对应的装备文件。手动或自动查找从 Templates 导入独立副本。自动查找要求当前部位完整匹配且候选唯一；混搭时只列出当前实际穿着的装备。");
+ ImGui::TextWrapped("换装时只读取当前主角外观对应的装备文件。手动或自动查找从 Templates 导入独立副本。唯一的高可信模板可自动应用。混搭时只列出当前实际穿着的装备。");
  ImGui::TextColored(accent,"联机队友：%zu 人，已匹配预设：%zu 人",s.peerCount,s.matchedPeers);
  ImGui::TextWrapped("面板始终编辑本地主角。队友按自身装备只读匹配本机预设；同装备复用当前基础选择，变身按每个角色独立计算。未匹配时保留游戏显隐，不生成队友配置。效果只影响本机画面。");
  ImGui::TextWrapped("远端动作缺失或为无效值时不触发动作条件。武器强化等条件取决于游戏同步的数据，各武器仍需实机核对。");
@@ -471,6 +477,12 @@ void DrawPanel(){
   if((paper::IsNight()||paper::IsGlass())&&profileStatus.starts_with(loadedPrefix)){
    ImGui::TextColored(muted,"已载入装备预设");ImGui::SameLine();InlineChip(profileStatus.c_str()+loadedPrefix.size());
   }else ImGui::TextColored(muted,"%s",profileStatus.c_str());
+  if(std::any_of(s.data.inactiveMeshes.begin(),s.data.inactiveMeshes.end(),[&](auto& b){return Equip(b.model)==outfit;})&&ImGui::TreeNode("待匹配网格")){
+   ImGui::TextWrapped("这些网格在当前版本中缺失或无法唯一对应。已保留相关规则，换回匹配模型后可恢复。");
+   ImGui::BeginChild("待匹配列表",{0,S(85)});
+   for(auto& b:s.data.inactiveMeshes)if(Equip(b.model)==outfit)ImGui::Text("%s  ·  #%u  ·  %u 顶点 / %u 索引",PartName(PartIndex(ProfilePart(b.model))),b.index,b.vertices,b.indices);
+   ImGui::EndChild();ImGui::TreePop();
+  }
   if(PresetFileModal("手动查找预设文件","//  FIND PRESET",716)){
    auto equipmentName=EquipmentLabel(outfit);
    if(paper::active){
@@ -503,9 +515,9 @@ void DrawPanel(){
    }
    for(const auto& f:profileFiles){
     ImGui::PushID(f.file.c_str());
-    std::string rate="匹配率 "+std::to_string((int)(f.coverage*100))+"%";
     bool selected=selectedProfileFile==f.file;
-    bool chosen=paper::active?PaperTemplateRow(f,rate,selected):ListRow((f.name+"  · "+rate+(f.strong?"  [完整匹配]":"")).c_str(),selected,false,nullptr,true);
+    std::string rate="匹配率 "+std::to_string((int)(f.materialCoverage*100))+"%";
+    bool chosen=paper::active?PaperTemplateRow(f,rate,selected):ListRow((f.name+"  · "+rate).c_str(),selected,false,nullptr,true);
     if(chosen)selectedProfileFile=f.file;
     if(step&&selected){
      ImGui::SetFocusID(ImGui::GetItemID(),ImGui::GetCurrentWindow());
@@ -613,9 +625,9 @@ void DrawPanel(){
   ImGui::Separator();
   if((paper::IsNight()||paper::IsGlass())&&s.notice.empty()){
    ImGui::TextColored(muted,"配置自动保存   ·");ImGui::SameLine();
-   auto menuKey="F"+std::to_string(s.data.menuKey-VK_F1+1);InlineChip(menuKey.c_str());ImGui::SameLine();
+   auto menuKey=MenuKeyName(s.data);InlineChip(menuKey.c_str());ImGui::SameLine();
    ImGui::TextColored(muted,"开关面板   ·");ImGui::SameLine();InlineChip("Ctrl+F9");ImGui::SameLine();ImGui::TextColored(muted,"紧急恢复");
-  }else ImGui::TextColored(muted,"%s",s.notice.empty()?"配置自动保存 · F9 开关面板 · Ctrl+F9 紧急恢复":s.notice.c_str());
+  }else{auto footer="配置自动保存 · "+MenuKeyName(s.data)+" 开关面板 · Ctrl+F9 紧急恢复";ImGui::TextColored(muted,"%s",s.notice.empty()?footer.c_str():s.notice.c_str());}
  }
  ImGui::End();ImGui::PopStyleVar();ImGui::PopFont();if(!open)SetVisible(false);
 }

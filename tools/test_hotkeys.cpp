@@ -32,7 +32,17 @@ int main(int argc,char** argv){try{
  before=Dump();check(!SetAutomationEnabled(false,true)&&Dump()==before,"enabling transforms while hotkeys run is rejected without mutations");
  check(SetAutomationEnabled(true,false)&&SetAutomationEnabled(false,true)&&!s.data.hotkeysEnabled&&s.data.transformsEnabled,"reverse mode switch also requires explicit off");SetAutomationEnabled(false,false);SetAutomationEnabled(true,true);
  check(!SetHotkeyBinding(h,VK_F9,0)&&!SetHotkeyBinding(h,VK_ESCAPE,0)&&!SetHotkeyBinding(h,VK_RETURN,0)&&!SetHotkeyBinding(h,VK_F4,4),"reserved panel emergency escape enter and system keys are rejected");
- s.data.menuKey=VK_F8;check(!SetHotkeyBinding(h,VK_F8,2),"current custom panel key is reserved for every modifier combination");s.data.menuKey=VK_F9;
+ check(IsMenuKey(VK_F9,s.data)&&IsMenuKey(VK_HOME,s.data)&&!SetHotkeyBinding(h,VK_HOME,0)&&!SetHotkeyBinding(h,VK_HOME,2),"both default panel keys are reserved regardless of modifiers");
+ check(SetMenuKey(VK_F8)&&!IsMenuKey(VK_F9,s.data)&&!IsMenuKey(VK_HOME,s.data)&&!SetHotkeyBinding(h,VK_F8,2),"custom panel key replaces both defaults and is reserved for every modifier combination");
+ check(SetHotkeyBinding(h,VK_HOME,0)&&!SetMenuKey(VK_HOME)&&s.data.menuKey==VK_F8&&!SetMenuKey(0),"reverse conflict check preserves existing panel key");
+ FindHotkey(h)->enabled=false;check(!SetMenuKey(VK_HOME),"disabled preset binding also prevents a future key conflict");FindHotkey(h)->enabled=true;
+ check(SetHotkeyBinding(h,VK_F9,0)&&!SetHotkeyBinding(h,VK_F9,1),"released F9 can bind a preset but Ctrl+F9 remains reserved for emergency pause");
+ check(SetHotkeyBinding(h,0,0)&&SetMenuKey(VK_F9)&&!IsMenuKey(VK_HOME,s.data),"explicitly choosing F9 uses only F9");
+ check(SetMenuKey(VK_HOME)&&!IsMenuKey(VK_F9,s.data)&&SetMenuKey(0),"explicit Home and restoring defaults work");
+ auto originalBinding=*FindHotkey(h);FindHotkey(h)->key=VK_HOME;
+ check(ValidateHotkey(*FindHotkey(h),s.data)&&!ValidateHotkey(*FindHotkey(h),s.data,true)&&!ApplyHotkey(h),"conflicting imported binding stays readable but cannot apply");
+ std::array<bool,256> conflictKeys{};ProcessPresetKeys(conflictKeys,true,false);conflictKeys[VK_HOME]=true;
+ check(!ProcessPresetKeys(conflictKeys,true,false),"conflicting legacy Home binding cannot fire at runtime");*FindHotkey(h)=originalBinding;
  check(SetHotkeyBinding(h,'L',1)&&PresetKeyName('L',1)=="Ctrl+L","letter and modifier binding plus label");
  auto second=CreateHotkey(a.equip,"轻装");check(!SetHotkeyBinding(second,'L',1)&&SetHotkeyBinding(second,'K',0),"duplicate chord within equipment is rejected");
  check(!RenameHotkey(second,"外出搭配")&&RenameHotkey(second,"轻装搭配"),"rename preserves unique plan names");

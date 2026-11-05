@@ -26,8 +26,9 @@ void HotkeyPanel(){
  current=FindHotkey(hotkeyId);if(!current){ImGui::EndChild();return;}
  if(hotkeyNameId!=hotkeyId||hotkeyOriginalName!=current->name){hotkeyNameId=hotkeyId;hotkeyOriginalName=current->name;strcpy_s(hotkeyName,current->name.c_str());}
  float saveWidth=ImGui::CalcTextSize("保存名称").x+ImGui::GetStyle().FramePadding.x*2;ImGui::SetNextItemWidth(std::max(S(90),ImGui::GetContentRegionAvail().x-saveWidth-ImGui::GetStyle().ItemSpacing.x));TextField("##快捷键名称","方案名称",hotkeyName,sizeof(hotkeyName));if(ImGui::IsItemClicked())s.captureHotkey=0;ImGui::SameLine();if(Button("保存名称"))if(!RenameHotkey(hotkeyId,hotkeyName))s.notice="方案名称为空或重复，未保存";
- if(PanelCheckbox("启用此方案",&current->enabled))Changed();ImGui::SameLine();ImGui::BeginDisabled(!s.data.hotkeysEnabled||s.data.transformsEnabled||!s.data.enabled||!current->enabled||!ValidateHotkey(*current,s.data,true));if(Button("立即应用"))ApplyHotkey(hotkeyId);ImGui::EndDisabled();
+ bool keyConflict=current->key&&IsMenuKey(current->key,s.data);bool enabled=current->enabled&&!keyConflict;ImGui::BeginDisabled(keyConflict);if(PanelCheckbox("启用此方案",&enabled)){current->enabled=enabled;Changed();}ImGui::EndDisabled();ImGui::SameLine();ImGui::BeginDisabled(!s.data.hotkeysEnabled||s.data.transformsEnabled||!s.data.enabled||!current->enabled||!ValidateHotkey(*current,s.data,true));if(Button("立即应用"))ApplyHotkey(hotkeyId);ImGui::EndDisabled();
  ImGui::TextWrapped("快捷键：%s",PresetKeyName(current->key,current->modifiers).c_str());
+ if(keyConflict)ImGui::TextWrapped("此键与面板快捷键冲突，方案已暂停。请重新录制或清除按键。");
  if(s.captureHotkey==hotkeyId){ImGui::TextColored(accent,"请按快捷键，可带 Ctrl / Shift / Alt；Esc 取消。");if(Button("取消录制"))s.captureHotkey=0;}
  else{if(Button("录制快捷键")){NativeInputClose();s.captureHotkey=hotkeyId;}ImGui::SameLine();if(Button("清除按键")){s.captureHotkey=0;SetHotkeyBinding(hotkeyId,0,0);}}
  ImGui::Separator();if(Button("添加目标分组")){for(auto& g:s.data.groups)if(g.scope==outfit&&!g.presets.empty()&&std::none_of(current->targets.begin(),current->targets.end(),[&](auto& t){return t.group==g.id;})){SetHotkeyTarget(hotkeyId,current->targets.size(),{g.id,0});break;}}

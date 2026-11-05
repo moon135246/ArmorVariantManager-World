@@ -3,30 +3,29 @@ bool IsCurrentModel(const std::string& path){auto& s=Get();return !s.trackingPla
 bool CanEditScope(const std::string& scope){auto& s=Get();if(!s.storageReady||s.blockedScopes.count(scope)||s.outfitChanging)return false;if(!s.trackingPlayer)return true;return s.outfit.ready&&std::any_of(s.outfit.paths.begin(),s.outfit.paths.end(),[&](auto& p){return !p.empty()&&Equip(p)==scope;});}
 bool SaveSettings(){
  auto& s=Get();if(!s.storageReady)return false;auto& d=s.data;if(d.transformsEnabled&&d.hotkeysEnabled){s.notice="变身与预设快捷键不能同时开启，未保存设置";return false;}std::ostringstream text;
- text<<"WorldDiffSettings "<<(s.panelWidth>0?124:123)<<"\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.hideDragHint<<' '<<d.transformsEnabled<<' '<<d.autoFind<<' '<<d.showStartupNotice<<' '<<d.hotkeysEnabled<<' '<<static_cast<int>(d.theme)<<'\n';
+ text<<"WorldDiffSettings "<<128<<"\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.hideDragHint<<' '<<d.transformsEnabled<<' '<<d.autoFind<<' '<<d.showStartupNotice<<' '<<d.hotkeysEnabled<<' '<<static_cast<int>(d.theme)<<'\n';
  if(s.panelWidth>0)text<<"WINDOW "<<s.panelWidth<<' '<<s.panelHeight<<'\n';
  std::string before;if(!ReadText(s.configPath,before)||(!before.empty()&&before==text.str()))return before==text.str();
  if(!AtomicText(s.configPath,text.str())){s.notice="设置保存失败，尚未保存的编辑仍在内存中";return false;}return true;
 }
 bool LoadSettings(){
  auto& s=Get();std::ifstream in(s.configPath,std::ios::binary);std::string magic,tag;unsigned version=0;Document d;
- if(!(in>>magic>>version)||magic!="WorldDiffSettings"||(version!=117&&version!=121&&version!=122&&version!=123&&version!=124)||!(in>>tag)||tag!="SET"||!(in>>d.enabled>>d.autoDefault>>d.autoOpen>>d.menuKey>>d.scale>>d.hideDragHint>>d.transformsEnabled>>d.autoFind)||(version>=121&&!(in>>d.showStartupNotice))||(version>=122&&!(in>>d.hotkeysEnabled))||(d.hotkeysEnabled&&d.transformsEnabled)||d.menuKey<0x70||d.menuKey>0x87||d.scale<.65f||d.scale>1.7f){s.notice="Settings.cfg 无效，原文件保留";return false;}
+ if(!(in>>magic>>version)||magic!="WorldDiffSettings"||(version!=117&&version!=121&&version!=122&&version!=123&&version!=124&&version!=128)||!(in>>tag)||tag!="SET"||!(in>>d.enabled>>d.autoDefault>>d.autoOpen>>d.menuKey>>d.scale>>d.hideDragHint>>d.transformsEnabled>>d.autoFind)||(version>=121&&!(in>>d.showStartupNotice))||(version>=122&&!(in>>d.hotkeysEnabled))||(d.hotkeysEnabled&&d.transformsEnabled)||!ValidMenuKey(d.menuKey)||(version<128&&(d.menuKey<0x70||d.menuKey>0x87))||d.scale<.65f||d.scale>1.7f){s.notice="Settings.cfg 无效，原文件保留";return false;}
  int theme=static_cast<int>(d.theme);
  if(version>=123&&(!(in>>theme)||theme<0||theme>static_cast<int>(UiTheme::Glass))){s.notice="设置中的界面风格无效，原文件保留";return false;}
  int width=0,height=0;
- if(version==124&&(!(in>>tag>>width>>height)||tag!="WINDOW"||width<=0||height<=0)){
+ in>>std::ws;
+ if((version==124||(version==128&&!in.eof()))&&(!(in>>tag>>width>>height)||tag!="WINDOW"||width<=0||height<=0)){
   s.notice="设置中的窗口尺寸无效，原文件保留";return false;
  }
  in>>std::ws;if(!in.eof()){s.notice="设置文件含有未知内容，已停止读取";return false;}
+ if(version<128&&d.menuKey==VK_F9)d.menuKey=0;
  s.panelWidth=width;s.panelHeight=height;s.panelSizeDirty=false;
  auto& to=s.data;to.theme=static_cast<UiTheme>(theme);to.enabled=d.enabled;to.autoDefault=d.autoDefault;to.autoOpen=d.autoOpen;to.menuKey=d.menuKey;to.scale=d.scale;to.hideDragHint=d.hideDragHint;to.transformsEnabled=d.transformsEnabled;to.autoFind=d.autoFind;to.showStartupNotice=d.showStartupNotice;to.hotkeysEnabled=d.hotkeysEnabled;s.captureHotkey=0;s.keysAllowed=false;return true;
 }
 namespace {
 bool CompleteMapping(const std::string& scope,const File& file){
- auto models=CurrentModels(scope,true);if(models.empty())return false;
- for(auto* model:models)for(auto& mesh:model->meshes){if(mesh.materialId>=model->materials.size()||!mesh.vertexCount||!mesh.indexCount)return false;auto hash=model->materials[mesh.materialId].hash;
-  if(std::none_of(file.meshes.begin(),file.meshes.end(),[&](auto& b){return ProfilePart(b.model)==model->part&&b.material==hash&&b.vertices==mesh.vertexCount&&b.indices==mesh.indexCount;}))return false;
- }return true;
+ return VariantMapping(file,CurrentModels(scope,true)).strong();
 }
 bool MatchesEquipment(const std::string& scope,const File& file){
  if(file.source!=scope)return false;
@@ -37,7 +36,18 @@ bool MatchesEquipment(const std::string& scope,const File& file){
   std::vector<MeshBinding> bindings;for(auto& b:file.meshes)if(b.model==path)bindings.push_back(b);if(bindings.size()!=model->meshes.size())return false;
   for(auto& mesh:model->meshes){if(mesh.materialId>=model->materials.size())return false;auto b=std::find_if(bindings.begin(),bindings.end(),[&](auto& row){return row.index==mesh.index;});if(b==bindings.end()||b->material!=model->materials[mesh.materialId].hash||b->vertices!=mesh.vertexCount||b->indices!=mesh.indexCount||b->lod!=mesh.lod)return false;}
  }
- return !CurrentModels(scope,true).empty();
+ auto models=CurrentModels(scope,true);
+ if(!file.document.inactiveMeshes.empty()){
+  VariantMapping plan(file,models);
+  auto canResume=[&](const Target& t){return InactiveModel(t.model)&&plan.resolve(t).has_value();};
+  auto rulesReady=[&](const Rules& r){return std::any_of(r.hidden.begin(),r.hidden.end(),canResume)||std::any_of(r.shown.begin(),r.shown.end(),canResume);};
+  for(auto& g:file.document.groups){
+   if(std::any_of(g.members.begin(),g.members.end(),canResume)||rulesReady(g.working))return false;
+   for(auto& p:g.presets)if(rulesReady(p.rules))return false;
+  }
+  for(auto& [t,view]:file.document.meshDisplay)if(canResume(t))return false;
+ }
+ return !models.empty();
 }
 void StampCurrentViews(Document& document){auto& s=Get();for(auto& [target,view]:document.meshDisplay){auto model=std::find_if(s.models.begin(),s.models.end(),[&](auto& m){return Normalize(m.relativePath)==target.model;});if(model!=s.models.end()&&IsCurrentModel(target.model))view.signature=model->signature;}}
 }
@@ -45,8 +55,8 @@ bool LoadEquipmentProfile(const std::string& scope){
  auto& s=Get();if(!EquipmentId(scope))return false;auto path=Folder()/PathUtf8(scope+".wdp");std::error_code ec;
  if(!std::filesystem::exists(path,ec)&&!ec){EraseScope(scope);Main(scope);s.loadedScopes.insert(scope);s.blockedScopes.erase(scope);s.loadedFingerprints.erase(scope);s.profileSnapshots.erase(scope);s.profileStatus[scope]="当前装备尚无预设，可手动查找或自动查找模板";return true;}
  File file;bool readable=!ec&&ReadFile(path,file);
- if(readable&&file.source!=scope&&CompleteMapping(scope,file))return ApplyFile(scope,file,scope+".wdp");
  if(!readable||!MatchesEquipment(scope,file)){
+  if(readable&&CompleteMapping(scope,file)&&ApplyFile(scope,file,scope+".wdp"))return true;
   EraseScope(scope);Main(scope);s.loadedScopes.insert(scope);s.blockedScopes.insert(scope);s.profileSnapshots.erase(scope);if(readable)s.loadedFingerprints[scope]=file.fingerprint;else s.loadedFingerprints.erase(scope);s.profileStatus[scope]="预设无效或与当前模型不匹配，请查找模板重新匹配；原文件保留";return false;
  }
  StampCurrentViews(file.document);InstallDocument(scope,std::move(file.document));s.loadedFingerprints[scope]=file.fingerprint;s.profileSnapshots[scope]=Fingerprint(ProfileText(scope));s.profileStatus[scope]="已载入装备预设："+scope+".wdp";return true;
