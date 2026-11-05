@@ -14,7 +14,7 @@
 2. 从 [Releases](https://github.com/moon135246/ArmorVariantManager-World/releases/latest) 下载 `ArmorVariantManager-World-v1.3.0.zip`。
 3. 退出游戏，解压安装包，把其中的 `nativePC` 文件夹合并到游戏根目录（`MonsterHunterWorld.exe` 所在目录）。从 Steam 启动游戏，按 **F9 或 Home** 打开差分管理器。
 
-压缩包根目录的《第三方署名与许可.txt》供查阅，安装时只需复制 `nativePC`。
+第三方署名和许可位于 `nativePC/plugins/WorldDiff/THIRD_PARTY_NOTICES.md` 与同目录的 `licenses` 文件夹，随 `nativePC` 一并安装。
 
 首次启动会自动生成 `nativePC/plugins/WorldDiff/Settings.cfg`。升级或重装时保留此文件，就能沿用界面、按键等个人设置。装备预设可由对应的外观 MOD 提供，也可在游戏中自行保存。如果自行编辑过更新日志，请在覆盖前备份。
 
