@@ -42,6 +42,6 @@ ImGui／原生输入检查需要可交互 Windows 桌面。原生输入检查会
 
 ## 发布
 
-源码使用 `src/`，发布支持文件使用 `发布/`。安装 ZIP 仅包含 `nativePC/`；第三方说明位于 `nativePC/plugins/WorldDiff/THIRD_PARTY_NOTICES.md`，许可原文位于同目录的 `licenses/`，排除 build、测试、个人 CFG／WDP、运行日志和备份。`发布/SHA256.txt` 保留原正式交付记录，重新编译后的 DLL 必须重新计算发布校验值。
+源码使用 `src/`，发布支持文件使用 `发布/`。安装 ZIP 仅包含 `nativePC/`；项目 MIT 许可证位于 `nativePC/plugins/WorldDiff/LICENSE.txt`。第三方说明位于 `nativePC/plugins/WorldDiff/THIRD_PARTY_NOTICES.md`，许可原文位于同目录的 `licenses/`，排除 build、测试、个人 CFG／WDP、运行日志和备份。`发布/SHA256.txt` 保留原正式交付记录，重新编译后的 DLL 必须重新计算发布校验值。
 
 每个发布标签对应一份源码快照；安装包及其 SHA256 校验文件见同版本的 GitHub Release。
