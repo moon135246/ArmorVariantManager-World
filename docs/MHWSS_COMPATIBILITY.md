@@ -1,6 +1,6 @@
 # MHWSS compatibility investigation
 
-This change targets WorldDiff 1.3.0 with the reported MHWSS 1.0.2 interaction on
+WorldDiff 1.3.1 fixes the reported WorldDiff 1.3.0 / MHWSS 1.0.2 interaction on
 Steam MHW 15.23.00 (421810). It does not modify or distribute MHWSS.
 
 ## Findings
@@ -82,6 +82,10 @@ hub. The user confirmed switching to windowed and back to borderless mode, then
 opening/closing both panels, with normal gameplay. The candidate and MHWSS were
 left installed for further testing. NVIDIA hardware, long sessions, all other
 loader combinations and exclusive-fullscreen transitions remain unverified.
+
+The tested candidate initially displayed 1.3.0. Final version 1.3.1 changes the
+version labels and release documentation only; the compatibility implementation
+is unchanged. The 1.3.1 DLL is rebuilt and package-verified separately.
 
 ## Interface and location references
 
