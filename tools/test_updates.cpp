@@ -54,6 +54,30 @@ int main(int argc,char** argv){try{
  std::ostringstream baseline;WriteDocument(baseline,state.data);auto notesBefore=Read(path);
  state.notice.clear();ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DeltaTime=1.f/60;ImFontGlyphRangesBuilder ranges;ranges.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());ranges.AddText("编辑");ranges.AddText(notesBefore.c_str());ImVector<ImWchar> glyphs;ranges.BuildRanges(&glyphs);if(!worlddiff::fonts::LoadPanelFonts(*io.Fonts,glyphs.Data))return 1;unsigned char* pixels;int w,h;io.Fonts->GetTexDataAsRGBA32(&pixels,&w,&h);auto& style=ImGui::GetStyle();style.FramePadding={9,6};style.ItemSpacing={10,8};style.ChildRounding=8;style.FrameRounding=6;
  auto* colors=style.Colors;colors[ImGuiCol_WindowBg]={.078f,.094f,.125f,.97f};colors[ImGuiCol_ChildBg]={.122f,.149f,.188f,.98f};colors[ImGuiCol_Border]={.24f,.29f,.36f,.8f};colors[ImGuiCol_Text]={.945f,.957f,.972f,1};colors[ImGuiCol_TextDisabled]={.60f,.66f,.72f,1};colors[ImGuiCol_FrameBg]={.145f,.18f,.227f,1};colors[ImGuiCol_Button]={.13f,.30f,.35f,1};colors[ImGuiCol_ButtonHovered]={.18f,.45f,.51f,1};colors[ImGuiCol_CheckMark]={.33f,.72f,.78f,1};
+ auto* font=io.Fonts->Fonts[0];const float fontSize=22; // the fixture's prebuilt atlas size
+ auto wrap=[&](const std::string& value,float width){return notes::WrapText(value,width,font,fontSize);};
+ auto measure=[&](const std::string& value){return font->CalcTextSizeA(fontSize,FLT_MAX,0,value.c_str()).x;};
+ auto compact=[](std::string value){std::erase_if(value,[](char c){return c==' '||c=='\n'||c=='\t';});return value;};
+ const std::string regression[]={
+  "修复与 MHWSS 共存时的 DX12 初始化兼容性：直接使用游戏实际交换链与命令队列，不再创建探测用图形设备。",
+  "面板默认由 F9 或 Home 开关，自定义后只使用选定的单键；面板键与预设快捷键双向检查冲突。"};
+ for(const auto& value:regression){
+  for(float width:{300.f,600.f,900.f}){
+   auto result=wrap(value,width);check(notes::ValidUtf8(result)&&compact(result)==compact(value),"mixed-language wrapping preserves text and UTF-8");
+   std::istringstream lines(result);std::string row;while(std::getline(lines,row))check(measure(row)<=width+.1f,"wrapped rows respect actual font metrics");
+   check(result.find("MHWSS")!=std::string::npos||value.find("MHWSS")==std::string::npos,"English product name remains intact");
+   check(result.find("Home")!=std::string::npos||value.find("Home")==std::string::npos,"English key name remains intact");
+  }
+ }
+ auto first=wrap(regression[0],600),second=wrap(regression[1],600);
+ check(first.substr(0,first.find('\n')).find("DX12 初始化")!=std::string::npos,"Chinese continues after DX12 instead of moving the entire span");
+ check(second.substr(0,second.find('\n')).find("Home 开关")!=std::string::npos,"Chinese continues after Home instead of leaving a large gap");
+ check(wrap("alpha beta",measure("alpha beta")-1)=="alpha\nbeta","English words move intact when they fit on the next line");
+ check(wrap("甲乙，丙丁。",measure("甲乙，"))=="甲乙，\n丙丁。","closing Chinese punctuation stays with the preceding character");
+ auto narrow=wrap("Supercalifragilisticexpialidocious",40);check(narrow.find('\n')!=std::string::npos&&compact(narrow)=="Supercalifragilisticexpialidocious","overlong English words can split to avoid overflow");
+ check(notes::ValidUtf8(wrap("汉😀汉字",1))&&compact(wrap("汉😀汉字",1))=="汉😀汉字","narrow wrapping never splits a UTF-8 character");
+ check(wrap("甲\n\n乙",600)=="甲\n\n乙"&&wrap("",600).empty(),"explicit line breaks and empty text are preserved");
+ io.Fonts->GetTexDataAsRGBA32(&pixels,&w,&h);
  struct Case {float x,y,scale,width,height;};Case cases[]={{1920,1080,.7f,1022,595},{1920,1080,1,1460,850},{1920,1080,1,1050,620},{1280,720,1,1050,620},{3840,2160,1.5f,2190,1275}};
  auto draw=[&](Case c,int tab,bool waiting){io.DisplaySize={c.x,c.y};state.data.scale=c.scale;state.trackingPlayer=waiting;ui::tab=tab;updateqa::items.clear();updateqa::texts.clear();ImGui::NewFrame();ImGui::SetNextWindowSize({c.width,c.height});ImGui::SetNextWindowPos({20,20});ui::DrawPanel();ImGui::Render();};
  for(auto c:cases)for(bool waiting:{false,true}){
@@ -69,7 +93,7 @@ int main(int argc,char** argv){try{
  check(!state.data.showStartupNotice,"real settings checkbox disables the startup toast");state.data.showStartupNotice=true;check(LoadSettings()&&!state.data.showStartupNotice,"real checkbox persists the preference immediately");
  for(int i=0;i<3;i++)draw(cases[1],4,false);Write(path,"## V手动编辑\n- 新内容已保存\n");auto reload=updateqa::items.at("重新读取").GetCenter();io.AddMousePosEvent(reload.x,reload.y);io.AddMouseButtonEvent(0,true);draw(cases[1],4,false);io.AddMouseButtonEvent(0,false);draw(cases[1],4,false);
  check(ui::updateNotes.document.lines.back().text=="新内容已保存","real Reload button updates the in-game document");
- Write(path,notesBefore);ui::updateNotes.Load(path);draw(cases[1],4,false);if(argc>2){SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",argv[2]);SaveCurrentFrame();SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",nullptr);}
+ Write(path,notesBefore);ui::updateNotes.Load(path);for(int i=0;i<3;i++)draw(cases[1],4,false);if(argc>2){SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",argv[2]);SaveCurrentFrame();SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",nullptr);}
  std::ostringstream after;WriteDocument(after,state.data);check(after.str()==baseline.str()&&Read(path)==notesBefore,"viewing notes and changing global preference preserve equipment definitions and manual notes");
  ImGui::DestroyContext();std::cout<<"PASS "<<checks<<" update/settings checks\nArtifacts "<<root.string()<<'\n';return 0;
  }catch(const std::exception& error){std::cerr<<"FAIL "<<error.what()<<'\n';return 1;}}
