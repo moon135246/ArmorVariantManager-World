@@ -11,7 +11,7 @@
 ### 1. 安装
 
 1. 安装适用于当前游戏版本的 Stracker's Loader。
-2. 从 [Releases](https://github.com/moon135246/ArmorVariantManager-World/releases/latest) 下载 `ArmorVariantManager-World-v1.3.0.zip`。
+2. 从 [Releases](https://github.com/moon135246/ArmorVariantManager-World/releases/latest) 下载 `ArmorVariantManager-World-v1.3.1.zip`。
 3. 退出游戏，解压安装包，把其中的 `nativePC` 文件夹合并到游戏根目录（`MonsterHunterWorld.exe` 所在目录）。从 Steam 启动游戏，按 **F9 或 Home** 打开差分管理器。
 
 第三方署名和许可位于 `nativePC/plugins/WorldDiff/THIRD_PARTY_NOTICES.md` 与同目录的 `licenses` 文件夹，随 `nativePC` 一并安装。
