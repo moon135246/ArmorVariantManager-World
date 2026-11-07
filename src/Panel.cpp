@@ -3,6 +3,7 @@
 #include "ArmorNames.h"
 #include "NativeInput.h"
 #include "UpdateNotes.h"
+#include "UpdateNotesLayout.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "ClassicTheme.h"
@@ -327,7 +328,7 @@ void PageTabs(bool waiting=false){
 void AboutPanel(){
  auto path=Get().directory/L"更新日志.md";
  if(!updateTabVisible||!updateNotes.loaded||updateNotes.path!=path){updateNotes.Load(path);updateNotice.clear();}updateTabVisible=true;
- SectionTitle("差分管理器 · 世界版 1.3.0");ImGui::TextUnformatted("插件作者：明月别枝(moon)");ImGui::Separator();
+ SectionTitle("差分管理器 · 世界版 1.3.1");ImGui::TextUnformatted("插件作者：明月别枝(moon)");ImGui::Separator();
  if(Button("编辑更新日志")){
   wchar_t folder[MAX_PATH]{};STARTUPINFOW start{sizeof(start)};PROCESS_INFORMATION process{};
   if(GetWindowsDirectoryW(folder,MAX_PATH)){
@@ -339,14 +340,15 @@ void AboutPanel(){
  if(ImGui::GetItemRectMax().x+buttonWidth+ImGui::GetStyle().ItemSpacing.x<=ImGui::GetCursorScreenPos().x+ImGui::GetContentRegionAvail().x)ImGui::SameLine();
  if(Button("重新读取")){updateNotes.Load(path);updateNotice=updateNotes.document.error.empty()?"更新日志已刷新。":"";}
  ImGui::PushTextWrapPos();ImGui::TextColored(muted,"WorldDiff/更新日志.md · UTF-8 文本，可自行修改");if(!updateNotice.empty())ImGui::TextUnformatted(updateNotice.c_str());ImGui::PopTextWrapPos();
- ImGui::Separator();ImGui::BeginChild("更新日志正文",ImVec2(0,0));ImGui::PushTextWrapPos();
+ ImGui::Separator();ImGui::BeginChild("更新日志正文",ImVec2(0,0));ImGui::PushTextWrapPos(-1);
+ auto text=[&](const std::string& value){auto wrapped=notes::WrapText(value,ImGui::GetContentRegionAvail().x,ImGui::GetFont(),ImGui::GetFontSize());ImGui::TextUnformatted(wrapped.c_str());};
  auto& document=updateNotes.document;
- if(!document.error.empty())ImGui::TextUnformatted(document.error.c_str());
+ if(!document.error.empty())text(document.error);
  else if(document.lines.empty())ImGui::TextColored(muted,"尚无更新日志。可点击“编辑更新日志”添加内容。");
  for(auto& line:document.lines){
-  if(line.kind==notes::Kind::Heading){ImGui::Spacing();ImGui::TextColored(accent,"%s",line.text.c_str());}
-  else if(line.kind==notes::Kind::Item){ImGui::Bullet();ImGui::SameLine();ImGui::TextUnformatted(line.text.c_str());}
-  else ImGui::TextUnformatted(line.text.c_str());
+  if(line.kind==notes::Kind::Heading){ImGui::Spacing();ImGui::PushStyleColor(ImGuiCol_Text,accent);text(line.text);ImGui::PopStyleColor();}
+  else if(line.kind==notes::Kind::Item){ImGui::Bullet();ImGui::SameLine();text(line.text);}
+  else text(line.text);
  }
  ImGui::PopTextWrapPos();ImGui::EndChild();
 }
