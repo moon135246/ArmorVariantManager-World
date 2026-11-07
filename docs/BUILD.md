@@ -28,6 +28,8 @@ ImGui／原生输入检查需要可交互 Windows 桌面。原生输入检查会
 
 界面测试和插件通过 Windows SDK 的资源编译器嵌入同一份 Noto Sans SC 正文与粗体，原生输入检查会核对实际选中的 GDI 字体。
 
+DX12 代理对象兼容性可运行 `tools\test-render-compat.cmd`，脚本编译后自动执行。它使用 WARP 和隐藏测试窗口，不读取游戏文件或个人配置。覆盖范围见 [MHWSS 兼容性说明](MHWSS_COMPATIBILITY.md)。
+
 ## 需要自备夹具的检查
 
 - `test_profiles.exe <isolated-root>`：历史跨装备测试，需要符合其模型／材质约束的隔离夹具；省略参数时旧测试会使用开发期默认游戏路径，不建议这样运行。
@@ -42,6 +44,6 @@ ImGui／原生输入检查需要可交互 Windows 桌面。原生输入检查会
 
 ## 发布
 
-源码使用 `src/`，发布支持文件使用 `发布/`。安装 ZIP 仅包含 `nativePC/`；项目 MIT 许可证位于 `nativePC/plugins/WorldDiff/LICENSE.txt`。第三方说明位于 `nativePC/plugins/WorldDiff/THIRD_PARTY_NOTICES.md`，许可原文位于同目录的 `licenses/`，排除 build、测试、个人 CFG／WDP、运行日志和备份。`发布/SHA256.txt` 保留原正式交付记录，重新编译后的 DLL 必须重新计算发布校验值。
+源码使用 `src/`，发布支持文件使用 `发布/`。安装 ZIP 仅包含 `nativePC/`；项目 MIT 许可证位于 `nativePC/plugins/WorldDiff/LICENSE.txt`。第三方说明位于 `nativePC/plugins/WorldDiff/THIRD_PARTY_NOTICES.md`，许可原文位于同目录的 `licenses/`，排除 build、测试、个人 CFG／WDP、运行日志和备份。`发布/SHA256.txt` 记录当前安装文件的校验值，重新编译 DLL 或更新包内文档后必须重新计算；旧记录可从对应 Git 提交获取。
 
 每个发布标签对应一份源码快照；安装包及其 SHA256 校验文件见同版本的 GitHub Release。
