@@ -44,6 +44,6 @@ DX12 代理对象兼容性可运行 `tools\test-render-compat.cmd`，脚本编�
 
 ## 发布
 
-源码使用 `src/`，发布支持文件使用 `发布/`。安装 ZIP 仅包含 `nativePC/`；项目 MIT 许可证位于 `nativePC/plugins/WorldDiff/LICENSE.txt`。第三方说明位于 `nativePC/plugins/WorldDiff/THIRD_PARTY_NOTICES.md`，许可原文位于同目录的 `licenses/`，排除 build、测试、个人 CFG／WDP、运行日志和备份。`发布/SHA256.txt` 保留原正式交付记录，重新编译后的 DLL 必须重新计算发布校验值。
+源码使用 `src/`，发布支持文件使用 `发布/`。安装 ZIP 仅包含 `nativePC/`；项目 MIT 许可证位于 `nativePC/plugins/WorldDiff/LICENSE.txt`。第三方说明位于 `nativePC/plugins/WorldDiff/THIRD_PARTY_NOTICES.md`，许可原文位于同目录的 `licenses/`，排除 build、测试、个人 CFG／WDP、运行日志和备份。`发布/SHA256.txt` 记录当前安装文件的校验值，重新编译 DLL 或更新包内文档后必须重新计算；旧记录可从对应 Git 提交获取。
 
 每个发布标签对应一份源码快照；安装包及其 SHA256 校验文件见同版本的 GitHub Release。

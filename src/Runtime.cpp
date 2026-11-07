@@ -146,7 +146,7 @@ DWORD WINAPI Start(void* arg){
  if(!visibilityHook->enable()){SetMessage("Visibility hook activation failed.",3);return 0;}
  wchar_t gameExe[32768];GetModuleFileNameW(nullptr,gameExe,32768);
  app::Initialize(shared,pluginDirectory,std::filesystem::path(gameExe).parent_path());
- SetMessage("WorldDiff 1.3.0 internal ready; default panel keys: F9 / Home.");InterlockedExchange(&shared->ready,1);
+ SetMessage("WorldDiff 1.3.1 internal ready; default panel keys: F9 / Home.");InterlockedExchange(&shared->ready,1);
  if(!overlay::Install())RuntimeLog("Overlay initialization failed; visibility controls remain available to diagnostics.");
  for(;;){app::Tick();overlay::WorkerTick();Sleep(100);}
 }
