@@ -95,3 +95,7 @@ is unchanged. The 1.3.1 DLL is rebuilt and package-verified separately.
   and [D3DModule](https://github.com/Fexty12573/SharpPluginLoader/blob/master/mhw-cs-plugin-loader/D3DModule.cpp):
   independent references for the game presentation boundaries and renderer fields.
   The implementation here was written for WorldDiff and checked against the local game.
+
+A subsequent 1.3.1 UI-only follow-up improves Chinese/English line wrapping in
+the update-notes viewport. It passes 133 update/settings checks and offline
+visual inspection; no graphics compatibility code changes in that follow-up.
