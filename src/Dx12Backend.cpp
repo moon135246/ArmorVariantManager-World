@@ -31,9 +31,9 @@ constexpr UINT kSrvHeapSize = 128;
 constexpr UINT kMaxBackBuffers = 8;
 
 ID3D12Device* g_device = nullptr;
-ID3D12CommandQueue* g_queue = nullptr;      // 我们自建的（拿虚表 / 兜底）
 ID3D12CommandQueue* g_gameQueue = nullptr;  // 游戏自己的 DIRECT 队列（首选）
 IDXGISwapChain3* g_swap = nullptr;
+IDXGISwapChain* g_sourceSwap = nullptr;
 ID3D12DescriptorHeap* g_rtvHeap = nullptr;
 ID3D12DescriptorHeap* g_srvHeap = nullptr;
 ID3D12GraphicsCommandList* g_cmdList = nullptr;
@@ -52,7 +52,7 @@ DXGI_FORMAT g_format = DXGI_FORMAT_UNKNOWN;
 bool g_ready = false;
 
 // 提交与上传都优先用游戏的队列，避免跨队列无序写后备缓冲
-ID3D12CommandQueue* Queue() { return g_gameQueue ? g_gameQueue : g_queue; }
+ID3D12CommandQueue* Queue() { return g_gameQueue; }
 char g_status[192] = "未初始化";
 
 // SRV 描述符的分配器（给 ImGui 的纹理用）
@@ -96,31 +96,21 @@ bool CreateBackBufferRtvs(IDXGISwapChain* swap) {
 
 }  // namespace
 
-void SetGameQueue(ID3D12CommandQueue* queue) {
-    if (queue && queue->GetDesc().Type==D3D12_COMMAND_LIST_TYPE_DIRECT && !g_gameQueue) {
-        queue->AddRef();
-        g_gameQueue = queue;
-        HostLog("DX12: 已抓到游戏的命令队列 %p，覆盖层将提交到它上面", queue);
-    }
-}
+bool UsesQueue(ID3D12CommandQueue* queue) { return g_ready && queue == g_gameQueue; }
 
-bool QueueReady() { return g_gameQueue != nullptr; }
-
-bool IsDx12Swapchain(IDXGISwapChain* swap) {
-    ID3D12Device* d = nullptr;
-    if (SUCCEEDED(swap->GetDevice(IID_PPV_ARGS(&d))) && d) {
-        d->Release();
-        return true;
-    }
-    return false;
-}
-
-bool Init(IDXGISwapChain* swap) {
-    if (g_ready) return true;
-    if (!g_gameQueue) return false;
-
-    if (FAILED(swap->GetDevice(IID_PPV_ARGS(&g_device))) || !g_device) {
-        HostLog("DX12: 拿不到 ID3D12Device");
+bool Init(IDXGISwapChain* swap, ID3D12CommandQueue* queue) {
+    if (g_ready) return swap == g_sourceSwap && UsesQueue(queue);
+    if (!swap || !queue || queue->GetDesc().Type != D3D12_COMMAND_LIST_TYPE_DIRECT) return false;
+    Shutdown(); // also cleans up partial initialization
+    struct InitGuard { bool ok = false; ~InitGuard() { if (!ok) Shutdown(); } } guard;
+    queue->AddRef();
+    g_gameQueue = queue;
+    swap->AddRef();
+    g_sourceSwap = swap;
+    // Swapchain::GetDevice may expose a raw device while the game's queue is
+    // wrapped. Keep device, allocators and command lists in the queue's domain.
+    if (FAILED(queue->GetDevice(IID_PPV_ARGS(&g_device))) || !g_device) {
+        HostLog("DX12: 游戏队列未提供有效 ID3D12Device");
         return false;
     }
     if (FAILED(swap->QueryInterface(IID_PPV_ARGS(&g_swap))) || !g_swap) {
@@ -134,33 +124,29 @@ bool Init(IDXGISwapChain* swap) {
         return false;
     }
     g_format = desc.BufferDesc.Format;
-    g_bufferCount = desc.BufferCount ? desc.BufferCount : 2;
-    if (g_bufferCount > kMaxBackBuffers) g_bufferCount = kMaxBackBuffers;
-
-    D3D12_COMMAND_QUEUE_DESC qd{};
-    qd.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-    if (FAILED(g_device->CreateCommandQueue(&qd, IID_PPV_ARGS(&g_queue))) || !g_queue) {
-        HostLog("DX12: CreateCommandQueue 失败");
-        return false;
+    g_bufferCount = desc.BufferCount;
+    if (!g_bufferCount || g_bufferCount > kMaxBackBuffers) {
+        HostLog("DX12: 不支持的后备缓冲数量 %u", g_bufferCount); return false;
     }
+
     for (UINT i = 0; i < kFramesInFlight; ++i) {
         if (FAILED(g_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
-                                                    IID_PPV_ARGS(&g_alloc[i])))) {
+                                                    IID_PPV_ARGS(&g_alloc[i]))) || !g_alloc[i]) {
             HostLog("DX12: CreateCommandAllocator 失败");
             return false;
         }
     }
     if (FAILED(g_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, g_alloc[0],
-                                           nullptr, IID_PPV_ARGS(&g_cmdList)))) {
+                                           nullptr, IID_PPV_ARGS(&g_cmdList))) || !g_cmdList) {
         HostLog("DX12: CreateCommandList 失败");
         return false;
     }
-    g_cmdList->Close();
+    if (FAILED(g_cmdList->Close())) return false;
 
     D3D12_DESCRIPTOR_HEAP_DESC rh{};
     rh.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
     rh.NumDescriptors = kMaxBackBuffers;
-    if (FAILED(g_device->CreateDescriptorHeap(&rh, IID_PPV_ARGS(&g_rtvHeap)))) {
+    if (FAILED(g_device->CreateDescriptorHeap(&rh, IID_PPV_ARGS(&g_rtvHeap))) || !g_rtvHeap) {
         HostLog("DX12: RTV 描述符堆创建失败");
         return false;
     }
@@ -177,13 +163,13 @@ bool Init(IDXGISwapChain* swap) {
     sh.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     sh.NumDescriptors = kSrvHeapSize;
     sh.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-    if (FAILED(g_device->CreateDescriptorHeap(&sh, IID_PPV_ARGS(&g_srvHeap)))) {
+    if (FAILED(g_device->CreateDescriptorHeap(&sh, IID_PPV_ARGS(&g_srvHeap))) || !g_srvHeap) {
         HostLog("DX12: SRV 描述符堆创建失败");
         return false;
     }
     g_srvSize = g_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-    if (FAILED(g_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&g_fence)))) {
+    if (FAILED(g_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&g_fence))) || !g_fence) {
         HostLog("DX12: CreateFence 失败");
         return false;
     }
@@ -210,9 +196,10 @@ bool Init(IDXGISwapChain* swap) {
     }
 
     g_ready = true;
+    guard.ok = true;
     snprintf(g_status, sizeof(g_status), "DX12 就绪（%u 个后备缓冲，格式 %d）",
              g_bufferCount, (int)g_format);
-    HostLog("DX12: %s, device=%p queue=%p", g_status, g_device, g_queue);
+    HostLog("DX12: %s, device=%p queue=%p", g_status, g_device, g_gameQueue);
     return true;
 }
 
@@ -225,9 +212,8 @@ void Render(ImDrawData* drawData) {
 
     // 等上一轮我们自己提交的绘制完成，才能复用这个分配器
     if (g_fence->GetCompletedValue() < g_frameFence[g_frameIndex]) {
-        if (SUCCEEDED(g_fence->SetEventOnCompletion(g_frameFence[g_frameIndex], g_fenceEvent))) {
-            if(WaitForSingleObject(g_fenceEvent, 1000)!=WAIT_OBJECT_0)return;
-        }
+        if (FAILED(g_fence->SetEventOnCompletion(g_frameFence[g_frameIndex], g_fenceEvent)) ||
+            WaitForSingleObject(g_fenceEvent, 1000) != WAIT_OBJECT_0) return;
     }
 
     const UINT idx = g_swap->GetCurrentBackBufferIndex();
@@ -290,9 +276,11 @@ bool RecreateBackBuffers(IDXGISwapChain* swap) {
 }
 
 void Shutdown() {
-    if (!g_ready) return;
+    if (g_ready) {
+        ReleaseBackBuffers();
+        ImGui_ImplDX12_Shutdown();
+    }
     g_ready = false;
-    ImGui_ImplDX12_Shutdown();
 
     for (UINT i = 0; i < kMaxBackBuffers; ++i) {
         if (g_backBuffer[i]) { g_backBuffer[i]->Release(); g_backBuffer[i] = nullptr; }
@@ -304,10 +292,9 @@ void Shutdown() {
     if (g_rtvHeap) { g_rtvHeap->Release(); g_rtvHeap = nullptr; }
     if (g_srvHeap) { g_srvHeap->Release(); g_srvHeap = nullptr; }
     if (g_swap) { g_swap->Release(); g_swap = nullptr; }
+    if (g_sourceSwap) { g_sourceSwap->Release(); g_sourceSwap = nullptr; }
     if (g_device) { g_device->Release(); g_device = nullptr; }
-    // 注意：g_queue 与 g_gameQueue 保留不动。
-    // g_queue 我们自建的（拿虚表/兜底），g_gameQueue 是游戏自己的队列，
-    // 换交换链不影响它，而且重新抓一次未必抓得到。
+    if (g_gameQueue) { g_gameQueue->Release(); g_gameQueue = nullptr; }
     if (g_fence) { g_fence->Release(); g_fence = nullptr; }
     if (g_fenceEvent) { CloseHandle(g_fenceEvent); g_fenceEvent = nullptr; }
     g_srvFree.clear();
@@ -316,7 +303,7 @@ void Shutdown() {
     g_fenceValue = 0;
     memset(g_frameFence, 0, sizeof(g_frameFence));
     snprintf(g_status, sizeof(g_status), "已关闭");
-    HostLog("DX12: 后端已关闭");
+    g_bufferCount = 0;
 }
 
 const char* Status() { return g_status; }
