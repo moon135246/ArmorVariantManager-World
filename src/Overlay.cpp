@@ -9,6 +9,7 @@
 #include "EmbeddedFonts.h"
 #include "UpdateNotes.h"
 #include "Dx12Backend.h"
+#include "GamePresentSource.h"
 #include "imgui.h"
 #include "imgui_impl_dx11.h"
 #include "imgui_impl_win32.h"
@@ -27,7 +28,6 @@ namespace worlddiff::overlay {
 namespace {
 std::recursive_mutex renderMutex;
 std::atomic<bool> open{false},deviceLost{false},inputRequested{false},inputInstalled{false};
-std::atomic<ID3D12Device*> expectedDevice{nullptr};
 thread_local bool ownInput=false;
 HWND window=nullptr;WNDPROC originalWnd=nullptr;IDXGISwapChain* bound=nullptr;
 fonts::FontChoice panelFont=fonts::Unavailable;
@@ -36,8 +36,14 @@ bool autoOpened=false;std::atomic<DWORD> messageToggleAt{0};
 ID3D11Device* device11=nullptr;ID3D11DeviceContext* context11=nullptr;ID3D11RenderTargetView* rtv=nullptr;
 using PresentFn=HRESULT(WINAPI*)(IDXGISwapChain*,UINT,UINT);
 using ResizeFn=HRESULT(WINAPI*)(IDXGISwapChain*,UINT,UINT,UINT,DXGI_FORMAT,UINT);
-using ExecuteFn=void(STDMETHODCALLTYPE*)(ID3D12CommandQueue*,UINT,ID3D12CommandList*const*);
-PresentFn originalPresent=nullptr;ResizeFn originalResize=nullptr;ExecuteFn originalExecute=nullptr;
+// Resize hooks are per implementation, so raw and proxy swapchains never
+// overwrite one another's original function. Installed hooks live for process lifetime.
+struct ResizeSlot { void* address=nullptr; ResizeFn original=nullptr; };
+ResizeSlot resizeSlots[8];
+thread_local PresentFn callOriginalPresent=nullptr;
+thread_local ID3D12CommandQueue* callGameQueue=nullptr;
+thread_local bool callIs12=false;
+bool InstallResizeHook(IDXGISwapChain* swap);
 using AsyncFn=SHORT(WINAPI*)(int);using KeyboardFn=BOOL(WINAPI*)(PBYTE);using RawFn=UINT(WINAPI*)(HRAWINPUT,UINT,LPVOID,PUINT,UINT);
 AsyncFn originalAsync=nullptr;KeyboardFn originalKeyboard=nullptr;RawFn originalRaw=nullptr;
 using CursorPosFn=BOOL(WINAPI*)(int,int);using ClipFn=BOOL(WINAPI*)(const RECT*);
@@ -100,23 +106,30 @@ void Teardown(){
  if(ready){if(is12)dx12::Shutdown();else{ImGui_ImplDX11_Shutdown();if(rtv){rtv->Release();rtv=nullptr;}if(context11){context11->Release();context11=nullptr;}if(device11){device11->Release();device11=nullptr;}}}
  if(commonReady){ImGui_ImplWin32_Shutdown();ImGui::DestroyContext();commonReady=false;}ready=false;bound=nullptr;
 }
-bool Initialize(IDXGISwapChain* swap){
+bool Initialize(IDXGISwapChain* swap,ID3D12CommandQueue* queue,bool dx12Call){
  DXGI_SWAP_CHAIN_DESC desc{};if(FAILED(swap->GetDesc(&desc))||!desc.OutputWindow)return false;DWORD pid=0;GetWindowThreadProcessId(desc.OutputWindow,&pid);if(pid!=GetCurrentProcessId()||!IsWindowVisible(desc.OutputWindow))return false;
- ID3D12Device* d12=nullptr;is12=SUCCEEDED(swap->GetDevice(IID_PPV_ARGS(&d12)))&&d12;
- if(is12){if(!expectedDevice.load())expectedDevice=d12;d12->Release();if(!dx12::QueueReady())return false;}
+ is12=dx12Call;
+ if(is12&&!queue)return false;
+ if(!InstallResizeHook(swap))return false;
  window=desc.OutputWindow;if(!Common(window))return false;
- if(is12){if(!dx12::Init(swap))return false;}else{if(FAILED(swap->GetDevice(IID_PPV_ARGS(&device11))))return false;device11->GetImmediateContext(&context11);if(!ImGui_ImplDX11_Init(device11,context11))return false;CreateRtv(swap);}
+ if(is12){if(!dx12::Init(swap,queue))return false;}else{if(FAILED(swap->GetDevice(IID_PPV_ARGS(&device11))))return false;device11->GetImmediateContext(&context11);if(!ImGui_ImplDX11_Init(device11,context11))return false;CreateRtv(swap);}
  if(!originalWnd)originalWnd=(WNDPROC)SetWindowLongPtrW(window,GWLP_WNDPROC,(LONG_PTR)WndProc);
  ready=true;bound=swap;firstTick=GetTickCount();NativeInputInitialize(window,panelFont==fonts::YaHei);RuntimeLog("In-game UI ready: %s hwnd=%p",is12?"DX12":"DX11",window);
  return true;
 }
 HRESULT WINAPI Present(IDXGISwapChain* swap,UINT sync,UINT flags){
+ // Capture before invoking any COM/overlay code; a nested presentation can
+ // update the thread-local handoff but must not change this call's target.
+ const PresentFn originalPresent=callOriginalPresent;
+ ID3D12CommandQueue* const queue=callGameQueue;
+ const bool dx12Call=callIs12;
  if(flags&DXGI_PRESENT_TEST)return originalPresent(swap,sync,flags);
  {
   std::lock_guard lock(renderMutex);
   if(!deviceLost){
    if(ready&&swap!=bound){DXGI_SWAP_CHAIN_DESC d{};if(SUCCEEDED(swap->GetDesc(&d))&&d.OutputWindow==window)Teardown();}
-   if(!ready)Initialize(swap);
+   if(ready&&swap==bound&&is12&&!dx12::UsesQueue(queue))Teardown();
+   if(!ready&&!Initialize(swap,queue,dx12Call))Teardown();
    if(ready&&swap==bound){
     int key;std::string menuLabel;float uiScale;bool startupNotice,capturing;app::UiTheme uiTheme;{std::lock_guard stateLock(app::Get().mutex);uiScale=app::Get().data.scale;uiTheme=app::Get().data.theme;key=app::Get().data.menuKey;menuLabel=app::MenuKeyName(app::Get().data);capturing=app::Get().captureHotkey!=0;startupNotice=app::Get().loaded&&app::Get().data.showStartupNotice;}
     static unsigned previous=0;static bool panicPrevious=false;unsigned down=!Key(VK_CONTROL)?((Key(key?key:VK_F9)?1u:0u)|(!key&&Key(VK_HOME)?2u:0u)):0;if((down&~previous)&&!capturing&&GetForegroundWindow()==window&&(DWORD)(GetTickCount()-messageToggleAt.load())>250){SetVisible(!open);messageToggleAt=GetTickCount();}previous=down;
@@ -148,11 +161,40 @@ HRESULT WINAPI Present(IDXGISwapChain* swap,UINT sync,UINT flags){
  }
  HRESULT hr=originalPresent(swap,sync,flags);if(hr==DXGI_ERROR_DEVICE_REMOVED||hr==DXGI_ERROR_DEVICE_RESET){deviceLost=true;SetVisible(false);RuntimeLog("Device lost: 0x%08X. Overlay stopped safely.",(unsigned)hr);}return hr;
 }
-HRESULT WINAPI Resize(IDXGISwapChain* swap,UINT count,UINT w,UINT h,DXGI_FORMAT fmt,UINT flags){std::lock_guard lock(renderMutex);if(ready&&swap==bound){if(is12)dx12::ReleaseBackBuffers();else if(rtv){rtv->Release();rtv=nullptr;}}HRESULT hr=originalResize(swap,count,w,h,fmt,flags);if(ready&&swap==bound&&SUCCEEDED(hr)){if(is12)dx12::RecreateBackBuffers(swap);else CreateRtv(swap);}return hr;}
-void STDMETHODCALLTYPE Execute(ID3D12CommandQueue* q,UINT n,ID3D12CommandList*const* lists){
- if(q&&!dx12::QueueReady()&&q->GetDesc().Type==D3D12_COMMAND_LIST_TYPE_DIRECT){ID3D12Device* d=nullptr;if(SUCCEEDED(q->GetDevice(IID_PPV_ARGS(&d)))){if(d==expectedDevice.load())dx12::SetGameQueue(q);d->Release();}}
- originalExecute(q,n,lists);
+HRESULT ResizeCore(ResizeFn original,IDXGISwapChain* swap,UINT count,UINT w,UINT h,DXGI_FORMAT fmt,UINT flags){
+ std::lock_guard lock(renderMutex);
+ // Reinitialize from the new descriptor on the next game Present. This also
+ // handles changes to buffer count/format and failed ResizeBuffers calls.
+ if(ready&&swap==bound)Teardown();
+ return original(swap,count,w,h,fmt,flags);
 }
+template<size_t I> HRESULT WINAPI ResizeEntry(IDXGISwapChain* swap,UINT count,UINT w,UINT h,DXGI_FORMAT fmt,UINT flags){
+ return ResizeCore(resizeSlots[I].original,swap,count,w,h,fmt,flags);
+}
+bool InstallResizeHook(IDXGISwapChain* swap){
+ static constexpr ResizeFn entries[]={ResizeEntry<0>,ResizeEntry<1>,ResizeEntry<2>,ResizeEntry<3>,ResizeEntry<4>,ResizeEntry<5>,ResizeEntry<6>,ResizeEntry<7>};
+ void* address=(*(void***)swap)[13];
+ for(const auto& slot:resizeSlots)if(slot.address==address)return true;
+ for(size_t i=0;i<8;++i)if(!resizeSlots[i].address){
+  if(!Hook(address,(void*)entries[i],resizeSlots[i].original))return false;
+  resizeSlots[i].address=address;return true;
+ }
+ return false;
+}
+// Only the game's validated callsites are redirected. The real Present method
+// (including any proxy/other overlay chain) is called exactly once and its HRESULT
+// goes back to the game unchanged. No dummy GPU device, swapchain or queue.
+void* presentDispatchTable[9]={nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,(void*)Present};
+void CapturePresent(safetyhook::Context& ctx,bool dx12Call){
+ auto* swap=(IDXGISwapChain*)ctx.rcx;
+ callOriginalPresent=(PresentFn)((void**)ctx.rax)[8];
+ callIs12=dx12Call;
+ callGameQueue=dx12Call?present_source::QueueForCall(ctx.rbx,ctx.r12,swap):nullptr;
+ ctx.rax=(uintptr_t)presentDispatchTable;
+}
+void Capture12(safetyhook::Context& ctx){CapturePresent(ctx,true);}
+void Capture11(safetyhook::Context& ctx){CapturePresent(ctx,false);}
+
 }
 bool Visible(){return open.load();}
 void SetVisible(bool show){bool old=open.exchange(show);if(!show){std::lock_guard stateLock(app::Get().mutex);app::Get().captureHotkey=0;app::Get().keysAllowed=false;}if(show)inputRequested=true;if(old!=show){if(show){ownInput=true;if(originalClip)originalClip(nullptr);else ClipCursor(nullptr);ownInput=false;}else{NativeInputClose();std::lock_guard lock(clipMutex);if(originalClip)originalClip(hasGameClip&&GetForegroundWindow()==window?&lastGameClip:nullptr);}RuntimeLog("Panel %s (blocked cursor warps=%llu)",show?"opened":"closed",blockedWarps.load());}}
@@ -163,12 +205,18 @@ void WorkerTick(){
  if(command.rfind("open",0)==0)SetVisible(true);else if(command.rfind("close",0)==0)SetVisible(false);else if(command.rfind("reload",0)==0){std::lock_guard lock(app::Get().mutex);app::Load();}else if(command.rfind("save",0)==0){std::lock_guard lock(app::Get().mutex);app::Save();}
 }
 bool Install(){
- WNDCLASSW wc{};wc.lpfnWndProc=DefWindowProcW;wc.hInstance=GetModuleHandleW(nullptr);wc.lpszClassName=L"WorldDiff104Dummy";RegisterClassW(&wc);HWND dummy=CreateWindowW(wc.lpszClassName,L"",WS_OVERLAPPED,0,0,8,8,nullptr,nullptr,wc.hInstance,nullptr);if(!dummy)return false;
- DXGI_SWAP_CHAIN_DESC desc{};desc.BufferCount=2;desc.BufferDesc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;desc.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;desc.OutputWindow=dummy;desc.SampleDesc.Count=1;desc.Windowed=TRUE;desc.SwapEffect=DXGI_SWAP_EFFECT_DISCARD;
- ID3D11Device* dev=nullptr;ID3D11DeviceContext* ctx=nullptr;IDXGISwapChain* swap=nullptr;D3D_FEATURE_LEVEL level{};
- HRESULT hr=D3D11CreateDeviceAndSwapChain(nullptr,D3D_DRIVER_TYPE_HARDWARE,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&desc,&swap,&dev,&level,&ctx);if(FAILED(hr))hr=D3D11CreateDeviceAndSwapChain(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,0,nullptr,0,D3D11_SDK_VERSION,&desc,&swap,&dev,&level,&ctx);
- bool p=false,r=false,e=false;if(SUCCEEDED(hr)&&swap){void** vt=*(void***)swap;p=Hook(vt[8],(void*)Present,originalPresent);r=Hook(vt[13],(void*)Resize,originalResize);}
- ID3D12Device* d12=nullptr;ID3D12CommandQueue* q=nullptr;if(SUCCEEDED(D3D12CreateDevice(nullptr,D3D_FEATURE_LEVEL_11_0,IID_PPV_ARGS(&d12)))){D3D12_COMMAND_QUEUE_DESC qd{};qd.Type=D3D12_COMMAND_LIST_TYPE_DIRECT;if(SUCCEEDED(d12->CreateCommandQueue(&qd,IID_PPV_ARGS(&q)))){void** vt=*(void***)q;e=Hook(vt[10],(void*)Execute,originalExecute);q->Release();}d12->Release();}
- if(swap)swap->Release();if(ctx)ctx->Release();if(dev)dev->Release();DestroyWindow(dummy);RuntimeLog("Overlay hooks: Present=%d Resize=%d Queue=%d",p,r,e);return p&&r;
+ const uintptr_t base=(uintptr_t)GetModuleHandleW(nullptr);
+ void* dx12Call=(void*)(base+present_source::kDx12Call);
+ void* dx11Call=(void*)(base+present_source::kDx11Call);
+ if(!present_source::Matches(dx12Call,present_source::kDx12Signature)||
+    !present_source::Matches(dx11Call,present_source::kDx11Signature)){
+  RuntimeLog("Overlay: game Present signature mismatch; no graphics hook installed.");return false;
+ }
+ auto h12=safetyhook::MidHook::create(dx12Call,Capture12,safetyhook::MidHook::StartDisabled);
+ auto h11=safetyhook::MidHook::create(dx11Call,Capture11,safetyhook::MidHook::StartDisabled);
+ if(!h12||!h11){RuntimeLog("Overlay: game Present hook creation failed.");return false;}
+ if(!h12->enable()||!h11->enable())return false;
+ new safetyhook::MidHook(std::move(*h12));new safetyhook::MidHook(std::move(*h11));
+ RuntimeLog("Overlay: game Present hooks ready (DX12/DX11); no probe device; queue from game renderer.");return true;
 }
 }
