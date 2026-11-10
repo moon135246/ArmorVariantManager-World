@@ -183,7 +183,9 @@ void Tick(){
  for(LONG i=0;i<n;i++){auto& r=s.live->rows[i];if(r.ready!=1)continue;std::string path=Normalize(r.modelPath);if(Equip(path).empty())continue;
   if(s.trackingPlayer){auto context=rowContexts[i].load(std::memory_order_relaxed);auto* policy=policies?policies->Find(context):nullptr;bool current=policy&&policy->local;
    if(current&&(DWORD)(now-(DWORD)r.lastTick)<1500)s.lastSeen[path]=(DWORD)r.lastTick;
-   InterlockedExchange(&r.hide,policy&&PolicyHides(*policy,(uintptr_t)r.resource,r.meshIndex,r.materialId,r.meshCount)?1:0);continue;
+   // The render hook records the applied override after priority arbitration.
+   // Replacing it with the raw mask would misreport controller-priority queries.
+   continue;
   }
   auto at=std::find_if(s.models.begin(),s.models.end(),[&](auto& m){return m.relativePath==path;});if(at==s.models.end()){Model m;m.relativePath=path;m.equip=Equip(path);auto p=path.find('\\',path.find(m.equip)+m.equip.size()+1);auto start=path.find(m.equip)+m.equip.size()+1;m.part=path.substr(start,p-start);m.display=path.substr(path.find_last_of('\\')+1);LoadMaterialOrder(m,s.gameRoot);s.models.push_back(std::move(m));at=s.models.end()-1;}
   auto& model=*at;if(r.materialId>=65536)continue;if(model.materials.size()<=r.materialId)model.materials.resize(r.materialId+1);auto& mat=model.materials[r.materialId];if(mat.name!=r.materialName||mat.hash!=r.materialHash){mat.name=r.materialName;mat.hash=r.materialHash;auto order=std::find(model.materialOrder.begin(),model.materialOrder.end(),mat.hash);mat.mrlIndex=order==model.materialOrder.end()?-1:(int)(order-model.materialOrder.begin());}
@@ -192,7 +194,7 @@ void Tick(){
   InterlockedExchange(&r.hide,s.storageReady&&IsCurrentModel(path)&&!s.blockedScopes.count(model.equip)&&Hidden(path,r.meshIndex,r.materialHash)?1:0);
  }
  InterlockedExchange(&s.live->enabled,s.data.enabled?1:0);InterlockedExchange(&s.live->heartbeat,(LONG)now);
- if(s.trackingPlayer)sprintf_s(s.live->message,"WorldDiff 1.3.1 local=%llx preview=%d ready=%d peers=%zu matched=%zu modelInstances=%zu",(unsigned long long)s.outfit.entity,s.outfit.savePreview?1:0,s.outfit.ready&&!s.outfitChanging?1:0,s.peerCount,s.matchedPeers,policies?policies->models.size():0);
+ if(s.trackingPlayer)sprintf_s(s.live->message,"WorldDiff 1.3.2 local=%llx preview=%d ready=%d peers=%zu matched=%zu modelInstances=%zu",(unsigned long long)s.outfit.entity,s.outfit.savePreview?1:0,s.outfit.ready&&!s.outfitChanging?1:0,s.peerCount,s.matchedPeers,policies?policies->models.size():0);
  if(s.panelSizeDirty&&(DWORD)(now-s.panelSizeChangedAt)>500){
   s.panelSizeDirty=!SaveSettings();s.panelSizeChangedAt=now;
  }

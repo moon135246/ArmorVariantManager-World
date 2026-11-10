@@ -30,6 +30,8 @@ ImGui／原生输入检查需要可交互 Windows 桌面。原生输入检查会
 
 DX12 代理对象兼容性可运行 `tools\test-render-compat.cmd`，脚本编译后自动执行。它使用 WARP 和隐藏测试窗口，不读取游戏文件或个人配置。覆盖范围见 [MHWSS 兼容性说明](MHWSS_COMPATIBILITY.md)。
 
+变身插件优先级可运行 `tools\test-visibility-compat.cmd`，脚本编译后自动执行三种加载顺序。测试使用自行构造的可执行函数和真实 SafetyHook，覆盖直接／虚函数两条路径、只读表页保护恢复、自定义 ID、显隐双向覆盖、未命中与暂停透传、调用者淡出、嵌套查询和并发；不读取游戏或第三方 DLL。设置迁移、实际勾选框和策略发布分别由 `test-storage`、`test-updates`、`test-multiplayer` 覆盖。
+
 ## 需要自备夹具的检查
 
 - `test_profiles.exe <isolated-root>`：历史跨装备测试，需要符合其模型／材质约束的隔离夹具；省略参数时旧测试会使用开发期默认游戏路径，不建议这样运行。
