@@ -91,6 +91,13 @@ int main(int argc,char** argv){try{
  state.trackingPlayer=false;state.data.scale=1;state.data.showStartupNotice=true;for(int i=0;i<3;i++)draw(cases[1],3,false);check(updateqa::items.count("显示启动提示"),"notice toggle is in Settings");
  auto center=updateqa::items.at("显示启动提示").GetCenter();io.AddMousePosEvent(center.x,center.y);io.AddMouseButtonEvent(0,true);draw(cases[1],3,false);io.AddMouseButtonEvent(0,false);draw(cases[1],3,false);
  check(!state.data.showStartupNotice,"real settings checkbox disables the startup toast");state.data.showStartupNotice=true;check(LoadSettings()&&!state.data.showStartupNotice,"real checkbox persists the preference immediately");
+ for(int i=0;i<3;i++)draw(cases[1],3,false);
+ check(updateqa::items.count("差分管理器优先于变身插件")&&state.data.worldDiffPriority,"priority checkbox is present and enabled by default");
+ center=updateqa::items.at("差分管理器优先于变身插件").GetCenter();io.AddMousePosEvent(center.x,center.y);io.AddMouseButtonEvent(0,true);draw(cases[1],3,false);io.AddMouseButtonEvent(0,false);draw(cases[1],3,false);
+ check(!state.data.worldDiffPriority,"real priority checkbox switches to controller priority");state.data.worldDiffPriority=true;check(LoadSettings()&&!state.data.worldDiffPriority,"priority checkbox saves immediately");
+ auto validConfigPath=state.configPath;state.configPath=root;
+ center=updateqa::items.at("差分管理器优先于变身插件").GetCenter();io.AddMousePosEvent(center.x,center.y);io.AddMouseButtonEvent(0,true);draw(cases[1],3,false);io.AddMouseButtonEvent(0,false);draw(cases[1],3,false);
+ check(!state.data.worldDiffPriority,"failed settings save rolls back the priority checkbox");state.configPath=validConfigPath;
  for(int i=0;i<3;i++)draw(cases[1],4,false);Write(path,"## V手动编辑\n- 新内容已保存\n");auto reload=updateqa::items.at("重新读取").GetCenter();io.AddMousePosEvent(reload.x,reload.y);io.AddMouseButtonEvent(0,true);draw(cases[1],4,false);io.AddMouseButtonEvent(0,false);draw(cases[1],4,false);
  check(ui::updateNotes.document.lines.back().text=="新内容已保存","real Reload button updates the in-game document");
  Write(path,notesBefore);ui::updateNotes.Load(path);for(int i=0;i<3;i++)draw(cases[1],4,false);if(argc>2){SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",argv[2]);SaveCurrentFrame();SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",nullptr);}

@@ -6,14 +6,14 @@
 
 已验证环境：Windows x64、Steam 15.23.00（build 421810）、Stracker's Loader、DX12。
 
-当前版本：**1.3.1**，包含 MHWSS 兼容性修复和更新日志中英文折行优化。
+当前版本：**1.3.2**，新增变身插件显隐优先级设置，默认差分管理器优先。
 
 ## 使用方法（MOD 用户）
 
 ### 1. 安装
 
 1. 安装适用于当前游戏版本的 Stracker's Loader。
-2. 从 [Releases](https://github.com/moon135246/ArmorVariantManager-World/releases/latest) 下载 `ArmorVariantManager-World-v1.3.1.zip`。
+2. 从 [Releases](https://github.com/moon135246/ArmorVariantManager-World/releases/latest) 下载 `ArmorVariantManager-World-v1.3.2.zip`。
 3. 退出游戏，解压安装包，把其中的 `nativePC` 文件夹合并到游戏根目录（`MonsterHunterWorld.exe` 所在目录）。从 Steam 启动游戏，按 **F9 或 Home** 打开差分管理器。
 
 第三方署名和许可位于 `nativePC/plugins/WorldDiff/THIRD_PARTY_NOTICES.md` 与同目录的 `licenses` 文件夹，随 `nativePC` 一并安装。
@@ -30,6 +30,8 @@
 - 日常编辑保存在 `WorldDiff/Presets/装备编号.wdp`，与分享模板分开；换装后读取新装备的文件。
 
 在「设置 → 界面风格」中可以选择基础、经典白、经典黑、玻璃态。首次使用默认采用经典白，已有主题设置会保留。
+
+新增「设置 → 插件兼容 → 差分管理器优先于变身插件」，默认开启。开启时，已匹配装备的显示与隐藏以差分管理器为准；关闭时，基础 `visual_controller_v5.dll` 或进阶 `MHWI-VisualControllerExtended 1.4.0` 实际命中的网格以变身插件结果为准，其余继续应用差分规则。暂停差分控制后恢复原有显隐。详见 [变身插件兼容说明](docs/VISUAL_CONTROLLER_COMPATIBILITY.md)。
 
 ### 3. 预设快捷键
 
@@ -69,6 +71,7 @@
 
 ## 更新日志
 
+- **1.3.2** 新增默认开启的变身插件优先级设置，兼容基础及进阶插件的显示／隐藏覆盖、虚函数调用和延迟加载。
 - **1.3.1** 修复 MHWSS / DX12 代理设备与队列兼容性，改进失败清理及交换链重建；更新日志支持中文逐字、英文优先整词折行。
 
 - **1.3.0** 材质名优先匹配，唯一对应的网格允许几何与部位变化。面板默认支持 F9 或 Home，自定义后使用单键，并检查预设按键冲突。

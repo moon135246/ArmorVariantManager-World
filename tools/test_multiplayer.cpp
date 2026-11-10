@@ -65,6 +65,12 @@ int main(){try{
  auto build=[&](std::vector<ActorFrame> frames){return controller.Build(frames,local.instance.outfit,doc,localRuntime,{model->equip},epoch,100);};
  auto mask=[&](const std::shared_ptr<const RenderPolicies>& p,uintptr_t ctx,size_t mesh=0){auto* m=p->Find(ctx);return m&&PolicyHides(*m,10000,(uint32_t)mesh,(uint32_t)mesh,2);};
  auto policy=build({a,local,b});check(controller.peers==2&&controller.matched==2,"both same-equipment peers match local base configuration");check(!mask(policy,1000)&&mask(policy,2000)&&!mask(policy,3000),"shared resource produces independent instance visibility from individual HP");
+ check(policy->worldDiffPriority,"immutable render frame defaults to WorldDiff priority");doc.worldDiffPriority=false;
+ check(!build({a,local,b})->worldDiffPriority,"controller priority reaches all actor policies through the global frame");doc.worldDiffPriority=true;
+ for(bool original:{false,true})for(bool hidden:{false,true})for(bool priority:{false,true}){
+  check(ResolveVisibility(original,hidden,true,priority)==(priority?!hidden:original),"actual controller result and WorldDiff mask each take complete precedence in their selected mode");
+  check(ResolveVisibility(original,hidden,false,priority)==(original&&!hidden),"unhandled queries preserve native visibility plus WorldDiff hiding in either priority mode");
+ }
  check(policy->Find(1000)->resource==policy->Find(2000)->resource,"independent masks are proven on a shared resource");
  auto ambiguous=a;ambiguous.instance.outfit.contexts[1]=1000;check(build({ambiguous,local})->models.empty(),"ambiguous cross-actor context cannot apply a peer mask to local avatar");
  std::vector<ActorFrame> full{local};for(uintptr_t i=0;i<15;i++)full.push_back(Frame(10000+i,5000+i,false,model));check(build(full)->models.size()==16&&controller.peers==15,"full 16-player frame maintains distinct instance policies");
@@ -76,7 +82,8 @@ int main(){try{
  a.player.healthPercent=20;build({local,a});a.player.healthPercent=90;a.player.map++;check(!mask(build({local,a}),2000),"map transition resets actor latch");
  a.player.healthPercent=20;build({local,a});a.player.healthPercent=90;epoch++;check(!mask(build({local,a}),2000),"explicit transform reset reaches all actors");
  a.player.healthPercent=20;build({local,a});a.player.healthPercent=0;check(!mask(build({local,a}),2000),"death clears latched peer state");a.player.healthPercent=90;
- doc.transformsEnabled=false;check(!mask(build({local,a}),2000),"global transform pause affects peers");doc.enabled=false;check(!mask(build({local,a}),2000),"global visibility pause affects peers");doc=HealthDocument(*model);
+ doc.transformsEnabled=false;check(!mask(build({local,a}),2000),"global transform pause affects peers");doc.enabled=false;check(!mask(build({local,a}),2000),"global visibility pause affects peers");
+ check(!build({local,a})->enabled,"pause state is published atomically with masks and priority");doc=HealthDocument(*model);
  auto other=TestModel("pl106_0000");b=Frame(300,3000,false,other);b.player.healthPercent=20;check(!build({local,b})->Find(3000),"unmatched remote equipment follows original visibility");
  auto profile=std::make_shared<PeerProfile>();profile->matched=true;profile->document=HealthDocument(*other);b.profiles[other->equip]=profile;policy=build({local,a,b});check(mask(policy,3000)&&!mask(policy,1000),"different equipment may reuse numeric group IDs without runtime collision");
  auto mismatch=std::make_shared<Model>(*model);mismatch->meshes[0].vertexCount++;b=Frame(300,3000,false,mismatch);check(!build({local,b})->Find(3000),"same equipment with incompatible geometry cannot inherit local configuration");

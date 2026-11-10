@@ -328,7 +328,7 @@ void PageTabs(bool waiting=false){
 void AboutPanel(){
  auto path=Get().directory/L"更新日志.md";
  if(!updateTabVisible||!updateNotes.loaded||updateNotes.path!=path){updateNotes.Load(path);updateNotice.clear();}updateTabVisible=true;
- SectionTitle("差分管理器 · 世界版 1.3.1");ImGui::TextUnformatted("插件作者：明月别枝(moon)");ImGui::Separator();
+ SectionTitle("差分管理器 · 世界版 1.3.2");ImGui::TextUnformatted("插件作者：明月别枝(moon)");ImGui::Separator();
  if(Button("编辑更新日志")){
   wchar_t folder[MAX_PATH]{};STARTUPINFOW start{sizeof(start)};PROCESS_INFORMATION process{};
   if(GetWindowsDirectoryW(folder,MAX_PATH)){
@@ -377,6 +377,13 @@ void SettingsPanel(){
   ImGui::EndCombo();
  }Tip("默认 F9 或 Home 均可开关面板；选择其他选项后，只使用选定的一个键。不能与预设快捷键相同。");
  ImGui::SetNextItemWidth(S(220));if(ImGui::SliderFloat("界面缩放",&s.data.scale,.7f,1.5f,"%.2f"))Changed();
+ ImGui::Separator();SectionTitle("插件兼容");
+ ImGui::BeginDisabled(!s.storageReady);
+ if(PanelCheckbox("差分管理器优先于变身插件",&s.data.worldDiffPriority)){
+  if(!SaveSettings())s.data.worldDiffPriority=!s.data.worldDiffPriority;
+ }
+ ImGui::EndDisabled();
+ Tip("默认开启。开启时，已匹配装备的显示与隐藏以差分管理器为准；关闭时，变身插件实际命中的网格以变身结果为准，其余仍由差分管理器控制。支持基础变身插件和进阶版；暂停差分控制后恢复原有显隐。");
  ImGui::Separator();SectionTitle("配置与恢复");if(Button("立即保存配置")){if(Save())s.notice="配置已保存";else s.notice="配置保存失败，请检查目录是否可写";}ImGui::SameLine();ImGui::BeginDisabled(!CanEditScope(outfit)||outfit.empty());if(Button("恢复当前组")){if(auto* g=Find(groupId))Restore(*g);}ImGui::EndDisabled();
  if(Button("暂停全部并恢复游戏显隐"))RestoreAll();Tip("不会删除任何已保存预设；重新启用控制后，可选择预设恢复方案。");
  ImGui::BeginDisabled(!CanEditScope(outfit)||outfit.empty());if(Button("重新读取当前装备文件")){if(ReloadEquipmentProfile(outfit)){groupId=Main(outfit).id;s.notice="已重新读取当前装备文件";}}ImGui::EndDisabled();
