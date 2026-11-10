@@ -41,7 +41,7 @@ ActorModel RuntimeModel(uintptr_t resource,const std::string& path,DWORD now){
 }
 }
 std::shared_ptr<const RenderPolicies> PlayerPolicyController::Build(const std::vector<ActorFrame>& frames,const OutfitSnapshot& local,const Document& document,const TransformRuntime& localTransform,const std::set<std::string>& allowedScopes,uint64_t generation,DWORD now){
- auto result=std::make_shared<RenderPolicies>();result->tick=now;result->localEntity=local.entity;peers=matched=0;
+ auto result=std::make_shared<RenderPolicies>();result->tick=now;result->localEntity=local.entity;result->enabled=document.enabled;result->worldDiffPriority=document.worldDiffPriority;peers=matched=0;
  if(epoch!=generation){actors.clear();epoch=generation;}
  const ActorFrame* localFrame=nullptr;for(auto& frame:frames)if(frame.instance.local&&frame.instance.outfit.entity==local.entity){localFrame=&frame;break;}
  if(!local.ready||!localFrame){actors.clear();return result;}
@@ -79,9 +79,9 @@ std::shared_ptr<const RenderPolicies> PlayerPolicyController::Build(const std::v
    auto& source=frame.models[part];if(!source.model||!outfit.contexts[part]||owners[outfit.contexts[part]]!=1||!contexts.insert(outfit.contexts[part]).second)continue;
    auto& model=*source.model;auto scope=model.equip;auto doc=documents.find(scope);if(doc==documents.end())continue;
    ModelPolicy policy;policy.context=outfit.contexts[part];policy.resource=outfit.resources[part];policy.actor=outfit.entity;policy.record=instance.record;policy.token=instance.token;policy.container=instance.container;policy.local=isLocal;policy.preview=outfit.savePreview;policy.meshes=source.meshes;policy.names=source.names;policy.materialCount=(uint32_t)model.materials.size();policy.part=(uint32_t)part;policy.path=model.relativePath;
-   policy.materials.resize(model.meshes.size(),UINT16_MAX);policy.hidden.resize(model.meshes.size());
+   policy.materials.resize(model.meshes.size(),UINT16_MAX);policy.groups.resize(model.meshes.size(),UINT16_MAX);policy.hidden.resize(model.meshes.size());
    for(auto& mesh:model.meshes)if(mesh.index<policy.materials.size()&&mesh.materialId<model.materials.size()){
-    policy.materials[mesh.index]=mesh.materialId;policy.hidden[mesh.index]=doc->second.enabled&&ActorHidden(doc->second,*runtimes.at(scope),model.relativePath,mesh.index,model.materials[mesh.materialId].hash)?1:0;
+    policy.materials[mesh.index]=mesh.materialId;policy.groups[mesh.index]=mesh.groupId;policy.hidden[mesh.index]=doc->second.enabled&&ActorHidden(doc->second,*runtimes.at(scope),model.relativePath,mesh.index,model.materials[mesh.materialId].hash)?1:0;
    }
    result->models.push_back(std::move(policy));any=true;
   }
