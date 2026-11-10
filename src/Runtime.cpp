@@ -9,13 +9,12 @@
 #include "RenderPolicy.h"
 #include "State.h"
 #include "Overlay.h"
+#include "VisibilityQueryHook.h"
 #include "safetyhook.hpp"
 
 namespace {
 using namespace worlddiff;
-using QueryFn=bool(__fastcall*)(uintptr_t,uintptr_t,uintptr_t,uintptr_t);
-QueryFn original=nullptr;
-safetyhook::InlineHook* visibilityHook=nullptr;
+std::atomic<bool> visualControllerLoaded=false;
 SharedState* shared=nullptr;
 HANDLE mapping=nullptr;
 std::wstring logPath;
@@ -115,19 +114,39 @@ bool PolicyOwnerMatches(const ModelPolicy& p,uintptr_t localEntity){
   return armor&&*(uintptr_t*)armor==p.actor&&*(uintptr_t*)(armor+offsets[p.part])==p.context&&*(uintptr_t*)(p.context+0x2A0)==p.resource&&*(uintptr_t*)(p.resource+0xC8)==p.meshes&&*(uintptr_t*)(p.resource+0x400)==p.names&&*(uint32_t*)(p.resource+0xE4)==p.materialCount;
  }__except(EXCEPTION_EXECUTE_HANDLER){return false;}
 }
-bool __fastcall Detour(uintptr_t ctx,uintptr_t b,uintptr_t q,uintptr_t d){
- bool visible=original(ctx,b,q,d);
+bool FilterVisibility(uintptr_t ctx,uintptr_t q,bool visible,bool controllerHandled){
  if(!shared||shared->ready!=1)return visible;
  auto policies=renderPolicies.load(std::memory_order_acquire);auto* policy=policies?policies->Find(ctx):nullptr;auto now=GetTickCount();
  if(!policy||(DWORD)(now-policies->tick)>=1500||!PolicyOwnerMatches(*policy,policies->localEntity))return visible;
  Identity id{};if(!ReadIdentity(ctx,q,&id,false))return visible;
- bool hidden=shared->enabled&&(DWORD)(now-(DWORD)shared->heartbeat)<5000&&PolicyHides(*policy,id.resource,id.index,id.material,id.count)&&PathMatches(id.resource,policy->path.c_str());
+ const bool active=policies->enabled&&shared->enabled&&(DWORD)(now-(DWORD)shared->heartbeat)<5000&&PolicyMatches(*policy,id.resource,id.index,id.material,id.count)&&id.index<policy->groups.size()&&policy->groups[id.index]==id.group&&PathMatches(id.resource,policy->path.c_str());
+ const bool hidden=active&&policy->hidden[id.index]!=0;
+ const bool resolved=active?ResolveVisibility(visible,hidden,controllerHandled&&visualControllerLoaded.load(std::memory_order_relaxed),policies->worldDiffPriority):visible;
  // Telemetry exhaustion must never disable visibility control.
- if(auto* r=FindRow(ctx,q)){InterlockedIncrement(&r->hits);InterlockedExchange(&r->lastTick,(LONG)now);InterlockedExchange(&r->originalVisible,visible?1:0);InterlockedExchange(&r->hide,hidden?1:0);if(hidden)InterlockedIncrement(&r->hiddenHits);}
- return hidden?false:visible;
+ if(auto* r=FindRow(ctx,q)){InterlockedIncrement(&r->hits);InterlockedExchange(&r->lastTick,(LONG)now);InterlockedExchange(&r->originalVisible,visible?1:0);InterlockedExchange(&r->hide,visible&&!resolved?1:0);if(visible&&!resolved)InterlockedIncrement(&r->hiddenHits);}
+ return resolved;
 }
 void Log(const char* msg){FILE* f=nullptr;_wfopen_s(&f,logPath.c_str(),L"ab");if(f){fprintf(f,"[%llu] %s\n",GetTickCount64(),msg);fclose(f);}}
 void SetMessage(const char* s,LONG error=0){strcpy_s(shared->message,s);InterlockedExchange(&shared->lastError,error);Log(s);}
+std::vector<uintptr_t*> QueryDispatchSlots(uintptr_t module,uintptr_t target){
+ std::vector<uintptr_t*> result;
+ auto* dos=reinterpret_cast<IMAGE_DOS_HEADER*>(module);
+ auto* nt=reinterpret_cast<IMAGE_NT_HEADERS64*>(module+dos->e_lfanew);
+ if(dos->e_magic!=IMAGE_DOS_SIGNATURE||nt->Signature!=IMAGE_NT_SIGNATURE||nt->FileHeader.NumberOfSections>96)return result;
+ auto* section=IMAGE_FIRST_SECTION(nt);
+ for(unsigned i=0;i<nt->FileHeader.NumberOfSections;i++)if(!memcmp(section[i].Name,".rdata\0\0",8)){
+  const size_t size=section[i].Misc.VirtualSize;
+  if(size<sizeof(uintptr_t)||size>nt->OptionalHeader.SizeOfImage||section[i].VirtualAddress>nt->OptionalHeader.SizeOfImage-size)return {};
+  std::vector<unsigned char> bytes(size);SIZE_T got=0;uintptr_t start=module+section[i].VirtualAddress;
+  if(!ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<void*>(start),bytes.data(),size,&got)||got!=size)return {};
+  for(size_t at=0;at+sizeof(uintptr_t)<=size;at+=sizeof(uintptr_t)){
+   uintptr_t value=0;memcpy(&value,bytes.data()+at,sizeof(value));
+   if(value==target)result.push_back(reinterpret_cast<uintptr_t*>(start+at));
+  }
+ }
+ if(result.size()>4096)return {};
+ return result;
+}
 DWORD WINAPI Start(void* arg){
  wchar_t full[32768];GetModuleFileNameW((HMODULE)arg,full,32768);std::wstring folder=full;folder.resize(folder.find_last_of(L"\\/")+1);pluginDirectory=folder;logPath=folder+L"WorldDiff104.log";
  std::wstring name=std::wstring(kMappingPrefix)+std::to_wstring(GetCurrentProcessId());
@@ -140,15 +159,24 @@ DWORD WINAPI Start(void* arg){
  constexpr unsigned char tail[]={0x18,0x57,0x41,0x56,0x41,0x57,0x48,0x83,0xEC,0x20,0x45,0x0F,0xB7,0x50,0x04};
  unsigned char bytes[sizeof(tail)]{};SIZE_T got=0;
  if(!ReadProcessMemory(GetCurrentProcess(),(void*)(target+14),bytes,sizeof(bytes),&got)||got!=sizeof(bytes)||memcmp(bytes,tail,sizeof(tail))){SetMessage("Unsupported executable: visibility signature mismatch. No hook installed.",1);return 0;}
- auto created=safetyhook::InlineHook::create((void*)target,(void*)Detour,safetyhook::InlineHook::StartDisabled);
- if(!created){SetMessage("Visibility hook creation failed. No visibility overrides are active.",2);return 0;}
- visibilityHook=new safetyhook::InlineHook(std::move(*created));original=visibilityHook->original<QueryFn>();
- if(!visibilityHook->enable()){SetMessage("Visibility hook activation failed.",3);return 0;}
+ const uintptr_t caller=(uintptr_t)GetModuleHandleW(nullptr)+0x26DC304;
+ // Verified caller: save r9/r8/rcx to rbx/rbp/rdi, CALL the shared query, then
+ // movzx esi,al; test al,al. Never patch an unrecognized executable layout.
+ constexpr unsigned char callSignature[]={0x49,0x8B,0xD9,0x49,0x8B,0xE8,0x48,0x8B,0xF9,0xE8,0x7E,0x39,0xB5,0xFF,0x0F,0xB6,0xF0,0x84,0xC0};
+ unsigned char callerBytes[sizeof(callSignature)]{};
+ if(!ReadProcessMemory(GetCurrentProcess(),(void*)caller,callerBytes,sizeof(callerBytes),&got)||got!=sizeof(callerBytes)||memcmp(callerBytes,callSignature,sizeof(callSignature))){SetMessage("Unsupported executable: visibility caller signature mismatch. No hook installed.",2);return 0;}
+ constexpr unsigned char bodySignature[]={0x49,0x8B,0xE9,0x41,0x8B,0xC2,0x45,0x8B,0xDA};
+ unsigned char bodyBytes[sizeof(bodySignature)]{};
+ if(!ReadProcessMemory(GetCurrentProcess(),(void*)(target+29),bodyBytes,sizeof(bodyBytes),&got)||got!=sizeof(bodyBytes)||memcmp(bodyBytes,bodySignature,sizeof(bodySignature))){SetMessage("Unsupported executable: native visibility body signature mismatch. No hook installed.",2);return 0;}
+ visualControllerLoaded.store(GetModuleHandleW(L"visual_controller_v5.dll")||GetModuleHandleW(L"MHWI-VisualControllerExtended.dll"),std::memory_order_relaxed);
+ auto dispatchSlots=QueryDispatchSlots((uintptr_t)GetModuleHandleW(nullptr),target);
+ if(!visibility::Install(caller+9,target,target+29,FilterVisibility,dispatchSlots)){SetMessage("Visibility direct/virtual caller hook installation failed. No visibility overrides are active.",3);return 0;}
+ RuntimeLog("Visibility arbitration installed: direct caller plus %zu virtual dispatch references; original vtable identities preserved.",dispatchSlots.size());
  wchar_t gameExe[32768];GetModuleFileNameW(nullptr,gameExe,32768);
  app::Initialize(shared,pluginDirectory,std::filesystem::path(gameExe).parent_path());
- SetMessage("WorldDiff 1.3.1 internal ready; default panel keys: F9 / Home.");InterlockedExchange(&shared->ready,1);
+ SetMessage("WorldDiff 1.3.2 internal ready; default panel keys: F9 / Home.");InterlockedExchange(&shared->ready,1);
  if(!overlay::Install())RuntimeLog("Overlay initialization failed; visibility controls remain available to diagnostics.");
- for(;;){app::Tick();overlay::WorkerTick();Sleep(100);}
+ for(;;){visualControllerLoaded.store(GetModuleHandleW(L"visual_controller_v5.dll")||GetModuleHandleW(L"MHWI-VisualControllerExtended.dll"),std::memory_order_relaxed);app::Tick();overlay::WorkerTick();Sleep(100);}
 }
 }
 namespace worlddiff {

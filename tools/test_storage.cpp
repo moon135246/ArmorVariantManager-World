@@ -42,11 +42,20 @@ int main(int argc,char** argv){try{
  check(s.storageReady&&s.data.theme==UiTheme::ClassicBlack&&Read(s.configPath)==saved,"startup reuses existing settings byte for byte");
  Reset(root/L"normal");auto a=MakeModel("pl105_0000"),b=MakeModel("pl106_0000");s.models={a,b};auto gid=Configure(a);auto preset=Find(gid)->selected;
  check(Save(),"first canonical save succeeds");auto canonical=s.directory/L"Presets/pl105_0000.wdp";auto settings=Read(s.configPath);auto content=Read(canonical);
- check(settings.find("WorldDiffSettings 128")==0&&settings.find("GROUP")==std::string::npos&&settings.find("MESH")==std::string::npos&&settings.find("BINDING")==std::string::npos,"settings contain no equipment data");
+ check(settings.find("WorldDiffSettings 129")==0&&settings.find("GROUP")==std::string::npos&&settings.find("MESH")==std::string::npos&&settings.find("BINDING")==std::string::npos,"settings contain no equipment data");
+ check(s.data.worldDiffPriority,"new settings default to WorldDiff priority");
  s.panelWidth=2050;s.panelHeight=1100;
  check(SaveSettings()&&Read(canonical)==content,"window preferences save independently of equipment");
  auto windowSettings=Read(s.configPath);
- check(windowSettings.find("WorldDiffSettings 128")==0&&windowSettings.find("WINDOW 2050 1100")!=std::string::npos,"settings record the manual window size");
+ check(windowSettings.find("WorldDiffSettings 129")==0&&windowSettings.find("WINDOW 2050 1100")!=std::string::npos,"settings record the manual window size");
+ s.data.worldDiffPriority=false;check(SaveSettings()&&Read(canonical)==content,"priority saves without rewriting equipment");s.data.worldDiffPriority=true;
+ check(LoadSettings()&&!s.data.worldDiffPriority&&s.panelWidth==2050,"controller priority survives reload with window preferences");
+ const std::string legacy128="WorldDiffSettings 128\nSET 1 1 0 36 1.2 1 0 1 0 1 2\nWINDOW 1354 957\n";
+ Write(s.configPath,legacy128);check(LoadSettings()&&s.data.worldDiffPriority&&s.data.menuKey==VK_HOME&&s.data.hotkeysEnabled&&!s.data.transformsEnabled&&s.data.theme==UiTheme::ClassicBlack&&s.panelWidth==1354&&Read(s.configPath)==legacy128,"128 migration enables priority and preserves personal settings without rewriting");
+ for(auto invalid:{std::string("WorldDiffSettings 129\nSET 1 1 0 36 1 0 0 1 1 0 1\n"),std::string("WorldDiffSettings 129\nSET 1 1 0 36 1 0 0 1 1 0 1 2\n"),windowSettings+"EXTRA 1\n"}){
+  Write(s.configPath,invalid);check(!LoadSettings()&&s.data.worldDiffPriority&&s.panelWidth==1354&&Read(s.configPath)==invalid,"invalid priority or trailing content preserves in-memory preferences and original file");
+ }
+ Write(s.configPath,windowSettings);check(LoadSettings()&&s.data.worldDiffPriority&&s.panelWidth==2050,"restore current window preferences");
  Write(s.configPath,"WorldDiffSettings 124\nSET 1 1 0 120 1 0 1 1 1 0 1\nWINDOW -1 1100\n");
  check(!LoadSettings()&&s.panelWidth==2050&&s.panelHeight==1100,"invalid size cannot partially replace current settings");
  Write(s.configPath,settings);
