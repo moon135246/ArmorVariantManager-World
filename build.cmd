@@ -23,4 +23,4 @@ if errorlevel 1 exit /b 1
 if not exist "发布\nativePC\plugins" mkdir "发布\nativePC\plugins"
 copy /y build\WorldDiff.dll "发布\nativePC\plugins\WorldDiff.dll" >nul
 if errorlevel 1 exit /b 1
-echo [success] WorldDiff 1.3.2 in-game plugin built.
+echo [success] WorldDiff 1.3.3 in-game plugin built.

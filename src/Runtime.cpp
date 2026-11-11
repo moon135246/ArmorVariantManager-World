@@ -174,7 +174,7 @@ DWORD WINAPI Start(void* arg){
  RuntimeLog("Visibility arbitration installed: direct caller plus %zu virtual dispatch references; original vtable identities preserved.",dispatchSlots.size());
  wchar_t gameExe[32768];GetModuleFileNameW(nullptr,gameExe,32768);
  app::Initialize(shared,pluginDirectory,std::filesystem::path(gameExe).parent_path());
- SetMessage("WorldDiff 1.3.2 internal ready; default panel keys: F9 / Home.");InterlockedExchange(&shared->ready,1);
+ SetMessage("WorldDiff 1.3.3 internal ready; default panel keys: F9 / Home.");InterlockedExchange(&shared->ready,1);
  if(!overlay::Install())RuntimeLog("Overlay initialization failed; visibility controls remain available to diagnostics.");
  for(;;){visualControllerLoaded.store(GetModuleHandleW(L"visual_controller_v5.dll")||GetModuleHandleW(L"MHWI-VisualControllerExtended.dll"),std::memory_order_relaxed);app::Tick();overlay::WorkerTick();Sleep(100);}
 }

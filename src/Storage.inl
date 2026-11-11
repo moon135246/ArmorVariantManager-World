@@ -102,7 +102,7 @@ bool MigrateStorage(){
   if(!oldBackups.empty()){std::filesystem::create_directories(archive/L"Backups",ec);for(auto& path:oldBackups)std::filesystem::rename(path,archive/L"Backups"/path.filename(),ec);}
  }
  // No historical equipment documents stay active after migration.
- s.data.groups.clear();s.data.hotkeys.clear();s.captureHotkey=0;s.keysAllowed=false;s.data.transforms.clear();s.data.transformModes.clear();s.data.meshDisplay.clear();s.data.bindings.clear();s.profileSnapshots.clear();s.loadedFingerprints.clear();s.loadedScopes.clear();s.backedUpScopes.clear();s.dirty=false;
+ s.data.groups.clear();s.data.hotkeys.clear();s.hotkeyDraft={};s.captureHotkey=false;s.keysAllowed=false;s.data.transforms.clear();s.data.transformModes.clear();s.data.meshDisplay.clear();s.data.bindings.clear();s.profileSnapshots.clear();s.loadedFingerprints.clear();s.loadedScopes.clear();s.backedUpScopes.clear();s.dirty=false;
  s.notice=existing?"已迁移：装备预设独立保存，原配置与旧预设已归档":"当前装备尚无预设";return true;
 }
 void FollowPlayerOutfit(const OutfitSnapshot& snapshot){
@@ -110,7 +110,7 @@ void FollowPlayerOutfit(const OutfitSnapshot& snapshot){
  if(!snapshot.ready){s.outfit.ready=false;s.pendingOutfit={};s.outfitSince=0;s.outfitChanging=true;return;}
  bool same=s.outfit.ready&&s.outfit.savePreview==snapshot.savePreview&&s.outfit.entity==snapshot.entity&&s.outfit.paths==snapshot.paths&&s.outfit.resources==snapshot.resources&&s.outfit.contexts==snapshot.contexts;
  if(same){s.outfitChanging=false;for(size_t i=0;i<5;i++)localModelContexts[i].store(snapshot.contexts[i],std::memory_order_relaxed);return;}
- s.outfitChanging=true;s.captureHotkey=0;s.keysAllowed=false;
+ s.outfitChanging=true;s.hotkeyDraft={};s.captureHotkey=false;s.keysAllowed=false;
  if(s.pendingOutfit.savePreview!=snapshot.savePreview||s.pendingOutfit.entity!=snapshot.entity||s.pendingOutfit.paths!=snapshot.paths||s.pendingOutfit.resources!=snapshot.resources||s.pendingOutfit.contexts!=snapshot.contexts){s.pendingOutfit=snapshot;s.outfitSince=GetTickCount();return;}
  if((DWORD)(GetTickCount()-s.outfitSince)<300)return;
  // Flush the old model before replacing its metadata or allowing new edits.

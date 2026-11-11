@@ -326,9 +326,10 @@ void PageTabs(bool waiting=false){
  ImGui::Separator();
 }
 void AboutPanel(){
+ PaperKicker("//  ABOUT",14);
  auto path=Get().directory/L"更新日志.md";
  if(!updateTabVisible||!updateNotes.loaded||updateNotes.path!=path){updateNotes.Load(path);updateNotice.clear();}updateTabVisible=true;
- SectionTitle("差分管理器 · 世界版 1.3.2");ImGui::TextUnformatted("插件作者：明月别枝(moon)");ImGui::Separator();
+ SectionTitle("差分管理器 · 世界版 1.3.3");ImGui::TextUnformatted("插件作者：明月别枝(moon)");ImGui::Separator();
  if(Button("编辑更新日志")){
   wchar_t folder[MAX_PATH]{};STARTUPINFOW start{sizeof(start)};PROCESS_INFORMATION process{};
   if(GetWindowsDirectoryW(folder,MAX_PATH)){
@@ -353,6 +354,7 @@ void AboutPanel(){
  ImGui::PopTextWrapPos();ImGui::EndChild();
 }
 void SettingsPanel(){
+ PaperKicker("//  SETTINGS",14);
  auto& s=Get();const char* themes[]={"基础","经典白","经典黑","玻璃态"};
  ImGui::SetNextItemWidth(std::min(S(210),ImGui::GetContentRegionAvail().x*.55f));
  if(SidebarCombo("界面风格",themes[static_cast<int>(s.data.theme)])){
@@ -367,8 +369,8 @@ void SettingsPanel(){
   }
   ImGui::EndCombo();
  }
- ImGui::Separator();SectionTitle("启动与输入");if(PanelCheckbox("启用差分控制",&s.data.enabled))Changed();if(PanelCheckbox("进入游戏后自动打开面板",&s.data.autoOpen))Changed();
- if(PanelCheckbox("显示启动提示",&s.data.showStartupNotice)){Changed();Save();}Tip("启动时在左上角显示版本与快捷键，约 9 秒后自动消失。");
+ ImGui::Separator();SectionTitle("启动与输入");if(SidebarCheckbox("启用差分控制",&s.data.enabled))Changed();if(SidebarCheckbox("进入游戏后自动打开面板",&s.data.autoOpen))Changed();
+ if(SidebarCheckbox("显示启动提示",&s.data.showStartupNotice)){Changed();Save();}Tip("启动时在左上角显示版本与快捷键，约 9 秒后自动消失。");
  ImGui::SetNextItemWidth(S(180));auto panelKey=MenuKeyName(s.data);
  if(ImGui::BeginCombo("开关面板快捷键",panelKey.c_str(),ImGuiComboFlags_HeightLarge)){
   if(ImGui::Selectable("默认：F9 / Home",s.data.menuKey==0))SetMenuKey(0);
@@ -379,7 +381,7 @@ void SettingsPanel(){
  ImGui::SetNextItemWidth(S(220));if(ImGui::SliderFloat("界面缩放",&s.data.scale,.7f,1.5f,"%.2f"))Changed();
  ImGui::Separator();SectionTitle("插件兼容");
  ImGui::BeginDisabled(!s.storageReady);
- if(PanelCheckbox("差分管理器优先于变身插件",&s.data.worldDiffPriority)){
+ if(SidebarCheckbox("差分管理器优先于变身插件",&s.data.worldDiffPriority)){
   if(!SaveSettings())s.data.worldDiffPriority=!s.data.worldDiffPriority;
  }
  ImGui::EndDisabled();
@@ -388,7 +390,7 @@ void SettingsPanel(){
  if(Button("暂停全部并恢复游戏显隐"))RestoreAll();Tip("不会删除任何已保存预设；重新启用控制后，可选择预设恢复方案。");
  ImGui::BeginDisabled(!CanEditScope(outfit)||outfit.empty());if(Button("重新读取当前装备文件")){if(ReloadEquipmentProfile(outfit)){groupId=Main(outfit).id;s.notice="已重新读取当前装备文件";}}ImGui::EndDisabled();
  ImGui::TextWrapped("Settings.cfg 只保存插件设置；当前装备的分组、预设、变身、网格顺序与备注保存在 Presets/装备编号.wdp。Templates 中的模板用于查找与分享，日常编辑不会写回模板。");
- if(PanelCheckbox("换装后自动识别预设文件",&s.data.autoFind))Changed();
+ if(SidebarCheckbox("换装后自动识别预设文件",&s.data.autoFind))Changed();
  ImGui::Separator();SectionTitle("操作说明");ImGui::TextWrapped("普通分组独占成员，主列表不再管理已分组材质。全局分组可以与其他分组重叠，只叠加隐藏。每个分组保存独立预设和默认预设。列表支持拖动排序。");
  ImGui::TextWrapped("关闭面板后规则仍然生效。Ctrl+F9 可暂停全部控制；Esc 关闭面板。插件随 Stracker's Loader 加载，不需要连接或外置程序。");
  ImGui::TextWrapped("换装时只读取当前主角外观对应的装备文件。手动或自动查找从 Templates 导入独立副本。唯一的高可信模板可自动应用。混搭时只列出当前实际穿着的装备。");

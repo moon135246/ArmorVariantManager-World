@@ -12,14 +12,19 @@ bool KeyTrackedButton(const char* label,const ImVec2& size=ImVec2(0,0)){auto hit
 bool KeyTrackedCheckbox(const char* label,bool* value){auto hit=Checkbox(label,value);keyui::items[label]={GetItemRectMin(),GetItemRectMax()};return hit;}
 bool KeyTrackedCombo(const char* label,const char* preview,ImGuiComboFlags flags=0){auto bounds=ImRect(GetCursorScreenPos(),GetCursorScreenPos());auto hit=BeginCombo(label,preview,flags);if(!hit)bounds={GetItemRectMin(),GetItemRectMax()};else{auto& last=GetCurrentContext()->LastItemData;bounds=last.Rect;}keyui::items[label]=bounds;return hit;}
 bool KeyTrackedSelectable(const char* label,bool selected=false,ImGuiSelectableFlags flags=0,const ImVec2& size=ImVec2(0,0)){auto hit=Selectable(label,selected,flags,size);keyui::items[label]={GetItemRectMin(),GetItemRectMax()};return hit;}
-void KeyTrackedText(const char* text,const char* end=nullptr){keyui::text.emplace_back(text,end?end:text+std::strlen(text));TextUnformatted(text,end);}
+void KeyTrackedText(const char* text,const char* end=nullptr){keyui::text.emplace_back(text,end?end:text+std::strlen(text));TextUnformatted(text,end);if(std::strncmp(text,"//",2)==0)keyui::items[text]={GetItemRectMin(),GetItemRectMax()};}
 }
+namespace ImGui {
+void KeyTrackedRenderText(ImVec2 pos,const char* label,const char* end=nullptr,bool hide=true){RenderText(pos,label,end,hide);if(std::strcmp(label,"选择模式")==0||std::strcmp(label,"并行模式")==0)keyui::items[label]={GetItemRectMin(),GetItemRectMax()};}
+}
+#define RenderText KeyTrackedRenderText
 #define Button KeyTrackedButton
 #define Checkbox KeyTrackedCheckbox
 #define BeginCombo KeyTrackedCombo
 #define Selectable KeyTrackedSelectable
 #define TextUnformatted KeyTrackedText
 #include "../src/Panel.cpp"
+#undef RenderText
 #undef Button
 #undef Checkbox
 #undef BeginCombo
@@ -32,18 +37,22 @@ using namespace worlddiff;using namespace worlddiff::app;namespace ui=worlddiff:
 int main(int argc,char** argv){try{
  unsigned checks=0;auto check=[&](bool yes,const char* reason){checks++;if(!yes)throw std::runtime_error(reason);};auto& s=Get();s.loaded=true;s.directory=std::filesystem::temp_directory_path()/(L"WorldDiff124KeyUI_"+std::to_wstring(GetTickCount64()));s.configPath=s.directory/L"Settings.cfg";std::filesystem::create_directories(s.directory);
  Model model;model.equip="pl105_0000";model.part="body";model.relativePath="pl\\f_equip\\pl105_0000\\body\\mod\\f_body105_0000";s.models={model};auto main=Main(model.equip).id;Preset p;p.id=s.data.nextId++;p.name="隐藏";p.rules.hidden.insert({model.relativePath,0,true});Preset shown;shown.id=s.data.nextId++;shown.name="显示";Find(main)->presets={p,shown};Find(main)->selected=shown.id;ui::outfit=model.equip;ui::groupId=main;s.data.hideDragHint=true;
- ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DeltaTime=1.f/60;ImFontGlyphRangesBuilder range;range.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());range.AddText("编辑明月别枝预设快捷键互斥录制黎明巫女");ImVector<ImWchar> glyphs;range.BuildRanges(&glyphs);if(!worlddiff::fonts::LoadPanelFonts(*io.Fonts,glyphs.Data))return 1;unsigned char* atlas;int w,h;io.Fonts->GetTexDataAsRGBA32(&atlas,&w,&h);auto& style=ImGui::GetStyle();style.FramePadding={9,6};style.ItemSpacing={10,8};style.FrameRounding=6;style.ChildRounding=8;style.Colors[ImGuiCol_WindowBg]={.078f,.094f,.125f,.97f};style.Colors[ImGuiCol_ChildBg]={.122f,.149f,.188f,.98f};style.Colors[ImGuiCol_Button]={.13f,.30f,.35f,1};style.Colors[ImGuiCol_Text]={.945f,.957f,.972f,1};style.Colors[ImGuiCol_CheckMark]={.33f,.72f,.78f,1};
+ ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DeltaTime=1.f/60;ImFontGlyphRangesBuilder range;range.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());range.AddText("编辑明月别枝预设快捷键互斥录制黎明巫女↑↓←→");ImVector<ImWchar> glyphs;range.BuildRanges(&glyphs);if(!worlddiff::fonts::LoadPanelFonts(*io.Fonts,glyphs.Data))return 1;unsigned char* atlas;int w,h;io.Fonts->GetTexDataAsRGBA32(&atlas,&w,&h);auto& style=ImGui::GetStyle();style.FramePadding={9,6};style.ItemSpacing={10,8};style.FrameRounding=6;style.ChildRounding=8;style.Colors[ImGuiCol_WindowBg]={.078f,.094f,.125f,.97f};style.Colors[ImGuiCol_ChildBg]={.122f,.149f,.188f,.98f};style.Colors[ImGuiCol_Button]={.13f,.30f,.35f,1};style.Colors[ImGuiCol_Text]={.945f,.957f,.972f,1};style.Colors[ImGuiCol_CheckMark]={.33f,.72f,.78f,1};
  struct Case {float x,y,scale,width,height;};Case cases[]={{1920,1080,.7f,1022,595},{1920,1080,1,1460,850},{1920,1080,1,1050,620},{1280,720,1,1050,620},{3840,2160,1.5f,2190,1275}};auto active=cases[1];int page=2;
  auto draw=[&]{io.DisplaySize={active.x,active.y};s.data.scale=active.scale;ui::tab=page;keyui::items.clear();keyui::text.clear();ImGui::NewFrame();ImGui::SetWindowPos("###WorldDiffInternal",{20,20});ImGui::SetWindowSize("###WorldDiffInternal",{active.width,active.height});ui::DrawPanel();ImGui::Render();};
  auto settle=[&]{for(int i=0;i<3;i++)draw();};auto click=[&](const char* label){auto it=keyui::items.find(label);if(it==keyui::items.end())throw std::runtime_error(std::string("missing widget: ")+label);auto point=it->second.GetCenter();io.AddMousePosEvent(point.x,point.y);io.AddMouseButtonEvent(0,true);draw();io.AddMouseButtonEvent(0,false);draw();draw();};
  auto modalActive=[&]{for(auto* window:ImGui::GetCurrentContext()->Windows)if(window->Active&&std::strstr(window->Name,"功能互斥提示"))return true;return false;};
  settle();check(keyui::items.count("预设快捷键")&&keyui::items.count("设置")&&keyui::items.count("关于"),"five tabs use the requested ordering and abbreviated names");check(keyui::items.at("预设快捷键").Min.x>keyui::items.at("变身与条件").Min.x&&keyui::items.at("设置").Min.x>keyui::items.at("预设快捷键").Min.x,"shortcut tab sits between transformation and settings at standard width");
- click("新建方案");check(s.data.hotkeys.size()==1&&ui::hotkeyId&&FindHotkey(ui::hotkeyId),"real New button creates a scoped scheme");auto id=ui::hotkeyId;
  click("启用预设快捷键");check(modalActive()&&!s.data.hotkeysEnabled&&s.data.transformsEnabled,"conflicting enable opens a real modal and leaves both switches unchanged");click("知道了");check(!modalActive(),"acknowledging conflict closes the modal");
  page=1;settle();click("启用变身功能");check(!s.data.transformsEnabled,"real transform master can be explicitly disabled");page=2;settle();click("启用预设快捷键");check(s.data.hotkeysEnabled&&!s.data.transformsEnabled,"real shortcut master can then be enabled");
  page=1;settle();click("启用变身功能");check(modalActive()&&s.data.hotkeysEnabled&&!s.data.transformsEnabled,"reverse enable also opens conflict modal and preserves the active mode");click("知道了");page=2;settle();
- strcpy_s(ui::hotkeyName,"月下搭配");click("保存名称");check(FindHotkey(id)->name=="月下搭配","real name action updates only the scheme");std::array<bool,256> keys{};ProcessPresetKeys(keys,false,true);click("录制快捷键");check(s.captureHotkey==id,"real record button arms capture");keys['L']=keys[VK_CONTROL]=true;ProcessPresetKeys(keys,false,true);settle();check(!s.captureHotkey&&FindHotkey(id)->key=='L'&&FindHotkey(id)->modifiers==1,"capture result reaches the real shortcut editor");
- click("添加目标分组");check(FindHotkey(id)->targets.size()==1&&FindHotkey(id)->targets[0].group==main&&!FindHotkey(id)->targets[0].preset,"target editor starts with an existing group and waits for a preset");
+ auto snap=[&](const char* suffix){if(argc>1){auto folder=std::string(argv[1])+suffix;SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",folder.c_str());SaveCurrentFrame();SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",nullptr);}};
+ auto nextId=s.data.nextId;
+ click("新建方案");check(s.data.hotkeys.empty()&&s.data.nextId==nextId&&!s.hotkeyDraft.scope.empty(),"New opens a draft without allocating a saved scheme");
+ settle();strcpy_s(ui::hotkeyName,"轻装");std::array<bool,256> keys{};ProcessPresetKeys(keys,false,true);click("录制快捷键");check(s.captureHotkey,"real record button arms draft capture");
+ keys[VK_UP]=true;ProcessPresetKeys(keys,false,true);settle();check(!s.captureHotkey&&s.hotkeyDraft.key==VK_UP&&s.data.hotkeys.empty(),"recording only changes draft");
+ click("添加目标分组");settle();click(Find(main)->name.c_str());
+ check(s.hotkeyDraft.targets.size()==1&&s.hotkeyDraft.targets[0].preset==shown.id,"adding the chosen group starts from its selected preset");
  // Both selectors fill their cell. Repeated frames must not feed their
  // measured widths back into an increasingly uneven split.
  auto originalTheme=s.data.theme;
@@ -60,10 +69,51 @@ int main(int argc,char** argv){try{
  }
  active=cases[1];s.data.theme=originalTheme;settle();
  click("##组合分组");settle();click(Find(main)->name.c_str());settle();
- click("##组合预设");settle();click("隐藏");check(FindHotkey(id)->targets[0].preset==p.id,"real preset picker records the referenced preset ID");settle();click("立即应用");check(Find(main)->selected==p.id&&Find(main)->working.hidden==p.rules.hidden,"real Apply button applies the configured combination");
- for(auto c:cases){active=c;page=2;settle();check(keyui::items.count("启用预设快捷键")&&keyui::items.count("##快捷键方案"),"master and scheme selector exist across supported sizes");bool editor=false;for(auto* window:ImGui::GetCurrentContext()->Windows)if(window->Active&&std::strstr(window->Name,"/快捷键方案编辑区_")){editor=true;check(window->Size.x>100&&window->Size.y>80&&window->ScrollMax.x<.5f,"shortcut editor has usable scroll space with no horizontal clipping");}check(editor,"editor viewport remains present");}
- active=cases[1];settle();if(argc>1){SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",argv[1]);SaveCurrentFrame();SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",nullptr);}
- click("启用此方案");check(!FindHotkey(id)->enabled,"per-scheme enable is independent of the feature master");click("删除方案");click("取消##快捷键");check(FindHotkey(id)!=nullptr,"canceling deletion preserves the scheme");click("删除方案");click("删除##快捷键");check(!FindHotkey(id)&&Find(main)&&Find(main)->presets.size()==2,"deleting a plan leaves its source groups and presets intact");
+ click("##组合预设");settle();click("隐藏");check(s.hotkeyDraft.targets[0].preset==p.id,"preset picker updates the draft");
+ settle();snap("_new");click("创建方案");auto id=ui::recentHotkey;
+ check(id&&FindHotkey(id)->name=="轻装"&&keyui::items.count("新建方案")&&!keyui::items.count("保存修改"),"Create returns to the list");
+ click("应用");check(Find(main)->selected==p.id&&Find(main)->working.hidden==p.rules.hidden&&s.hotkeyDraft.scope.empty(),"Apply changes the outfit from the list");
+ click("新建方案");strcpy_s(ui::hotkeyName,"轻装");click("创建方案");
+ check(s.data.hotkeys.size()==1&&s.notice.find("同名")!=std::string::npos&&keyui::items.count("创建方案"),"duplicate name keeps the new draft and original");
+ strcpy_s(ui::hotkeyName,"全装");click("录制快捷键");keys={};ProcessPresetKeys(keys,false,true);keys[VK_LEFT]=true;ProcessPresetKeys(keys,false,true);settle();
+ click("添加目标分组");settle();click(Find(main)->name.c_str());click("##组合预设");settle();click("显示");click("创建方案");auto second=ui::recentHotkey;
+ check(s.data.hotkeys.size()==2&&FindHotkey(id)->key==VK_UP&&FindHotkey(id)->targets.front().preset==p.id&&FindHotkey(second)->key==VK_LEFT,"creating a second scheme preserves the first");
+ // Distinct presets on the same two groups must be distinguishable before Apply.
+ {
+  const auto saved=s.data;
+  Group coat;coat.id=s.data.nextId++;coat.scope=model.equip;coat.name="外套";
+  Group sleeve=coat;sleeve.id=s.data.nextId++;sleeve.name="袖子";
+  for(auto* g:{&coat,&sleeve}){
+   Preset hide;hide.id=s.data.nextId++;hide.name="隐藏"+g->name;
+   Preset show;show.id=s.data.nextId++;show.name="显示"+g->name;
+   g->presets={hide,show};s.data.groups.push_back(*g);
+  }
+  auto* light=FindHotkey(id);auto* full=FindHotkey(second);
+  light->targets={{coat.id,coat.presets[0].id},{sleeve.id,sleeve.presets[0].id}};
+  full->targets={{coat.id,coat.presets[1].id},{sleeve.id,sleeve.presets[1].id}};
+  full->key=VK_DOWN;
+  auto pending=CreateHotkey(model.equip,"快捷键方案 1");FindHotkey(pending)->targets={{main,0}};
+  FindHotkey(pending)->key=VK_LEFT;
+  settle();
+  auto displayed=[&](const char* t){return std::find(keyui::text.begin(),keyui::text.end(),t)!=keyui::text.end();};
+  check(displayed("外套 → 隐藏外套　　袖子 → 隐藏袖子")&&displayed("外套 → 显示外套　　袖子 → 显示袖子"),"list renders the selected plans' exact group-to-preset mappings");
+  check(displayed("主列表 → 未选预设"),"incomplete scheme has a truthful summary");
+  snap("_effects");ui::OpenHotkeyDraft(FindHotkey(second));settle();snap("_effects_edit");click("取消");
+  auto& preview=FindHotkey(pending)->targets;
+  preview={{main,0},{coat.id,coat.presets[0].id},{sleeve.id,sleeve.presets[0].id}};
+  settle();check(displayed("主列表 → 未选预设　　外套 → 隐藏外套　另有 1 组"),"only first two mappings shown with exact remainder");
+  check(FindHotkey(pending)->targets.size()==3,"summary folding retains hidden targets");
+  s.data=saved;settle();
+ }
+ click("应用");check(Find(main)->selected==shown.id&&s.hotkeyDraft.scope.empty(),"second row applies its own targets");
+ click("编辑");check(s.hotkeyDraft.id==second,"second row edits its own scheme");strcpy_s(ui::hotkeyName,"改名");click("清除按键");click("启用此方案");click("移除");click("取消");
+ check(FindHotkey(second)->name=="全装"&&FindHotkey(second)->enabled&&FindHotkey(second)->key==VK_LEFT&&FindHotkey(second)->targets.size()==1,"cancel discards name, binding, enable and target changes");
+ click("新建方案");click("取消");check(s.data.hotkeys.size()==2,"cancel new draft leaves no phantom scheme");
+ for(auto c:cases){active=c;page=2;settle();check(keyui::items.count("启用预设快捷键")&&keyui::items.count("新建方案"),"list actions at all supported scales");}
+ active=cases[1];settle();snap("");click("编辑");settle();snap("_edit");click("启用此方案");click("保存修改");check(!FindHotkey(second)->enabled&&FindHotkey(id)->enabled,"saving edits changes only the chosen scheme");
+ click("编辑");click("删除方案");click("取消##快捷键");check(FindHotkey(second)!=nullptr,"cancel delete preserves scheme");
+ click("删除方案");click("删除##快捷键");check(!FindHotkey(second)&&FindHotkey(id)&&Find(main)->presets.size()==2,"deleting second scheme preserves first and presets");
+ click("编辑");click("删除方案");click("删除##快捷键");check(s.data.hotkeys.empty(),"last deletion returns to empty list");
  page=4;settle();check(std::find(keyui::text.begin(),keyui::text.end(),"插件作者：明月别枝(moon)")!=keyui::text.end(),"About credits the requested author name");// Use the real settings combo, then render every page with the saved theme.
  page=3;settle();click("界面风格");settle();click("经典白");settle();
  check(s.data.theme==UiTheme::ClassicWhite&&LoadSettings()&&s.data.theme==UiTheme::ClassicWhite,"real theme picker saves classic white");
@@ -83,13 +133,35 @@ int main(int argc,char** argv){try{
  for(auto name:{"身材","外套","衣服","袖子","黑丝","手套","鞋子"}){Group g;g.id=s.data.nextId++;g.scope=model.equip;g.name=name;g.global=g.name=="身材";s.data.groups.push_back(g);}
  group=Find(main);group->working=shown.rules;s.data.transformsEnabled=true;
  s.data.hotkeysEnabled=false;s.blockedScopes.clear();s.data.hideDragHint=false;s.profileStatus[model.equip]="已载入装备预设：pl105_0000.wdp";s.notice.clear();
- ui::hotkeyId=CreateHotkey(model.equip,"整备方案");s.notice.clear();
+ CreateHotkey(model.equip,"整备方案");s.notice.clear();
  active={1642,1048,1,1602,1008};io.AddMousePosEvent(-100,-100);
  auto capture=[&](const char* name){if(argc>2){auto dir=std::string(argv[2])+"/"+name;SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",dir.c_str());SaveCurrentFrame();SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",nullptr);}};
  auto notesFile=std::filesystem::path(L"发布/nativePC/plugins/WorldDiff/更新日志.md");
  if(std::filesystem::exists(notesFile))std::filesystem::copy_file(notesFile,s.directory/L"更新日志.md",std::filesystem::copy_options::overwrite_existing);
  const char* names[]={"main","conditions","hotkeys","settings","about"};
  for(page=0;page<5;page++){settle();check(ImGui::GetDrawData()->TotalVtxCount>1000,"classic page rendered");capture(names[page]);}
+ const char* captions[]={"","//  CONDITIONS","//  SHORTCUTS","//  SETTINGS","//  ABOUT"};
+ for(auto theme:{UiTheme::ClassicWhite,UiTheme::ClassicBlack,UiTheme::Glass}){
+  s.data.theme=theme;
+  const char* themeName=theme==UiTheme::ClassicWhite?"white":theme==UiTheme::ClassicBlack?"black":"glass";
+  for(page=1;page<=4;++page){
+   settle();check(keyui::items.count(captions[page])!=0,"secondary page displays its historical caption");
+   snap((std::string("_")+themeName+"_"+names[page]).c_str());
+  }
+  page=1;
+  for(auto size:{cases[0],cases[1],cases[2],cases[4]}){
+   active=size;settle();
+   const auto caption=keyui::items.at(captions[page]),master=keyui::items.at("启用变身功能"),local=keyui::items.at("当前装备启用变身");
+   const auto reset=keyui::items.at("复位保持状态"),select=keyui::items.at("选择模式"),parallel=keyui::items.at("并行模式");
+   check(master.Min.y-caption.Max.y>=size.scale*12&&master.GetHeight()>=size.scale*24-1,"caption clearance and full size checkbox");
+   auto aligned=[](ImRect a,ImRect b){return b.Min.y>=a.Max.y||(b.Min.x>=a.Max.x&&std::abs(b.GetCenter().y-a.GetCenter().y)<=1.f);};
+   check(select.GetHeight()>=size.scale*30-1&&aligned(reset,select)&&aligned(select,parallel)&&aligned(master,local),"large mode controls align with adjacent controls or wrap");
+  }
+  active=cases[1];settle();
+  click("并行模式");check(EnsureTransformMode(s.data,model.equip).parallel,"parallel radio still changes mode");
+  click("选择模式");check(!EnsureTransformMode(s.data,model.equip).parallel,"select radio restores mode");
+ }
+ s.data.theme=wanted;
  const char* nav[]={"部位与材质","变身与条件","预设快捷键","设置","关于"};
  for(const auto& size:cases){
   active=size;page=0;settle();

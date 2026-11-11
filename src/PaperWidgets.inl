@@ -81,10 +81,10 @@ void InlineChip(const char* label){
  else d->AddRectFilled(lo,hi,paper::colors->keycap);
  d->AddText(font,size,{lo.x+pad,lo.y+(hi.y-lo.y-size)*.5f},paper::colors->text,label);
 }
-bool PanelCheckbox(const char* label,bool* value){
+bool PanelCheckbox(const char* label,bool* value,bool sidebar=false){
  if(!paper::active)return ImGui::Checkbox(label,value);
- ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,ImVec2(ImGui::GetStyle().FramePadding.x,S(3)));
- if(paper::IsNight()||paper::IsGlass()){
+ ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,ImVec2(ImGui::GetStyle().FramePadding.x,sidebar?std::max(0.f,(S(25)-ImGui::GetFontSize())*.5f):S(3)));
+ if(sidebar||paper::IsNight()||paper::IsGlass()){
   // Keep the native checkbox hit target, label and keyboard navigation.
   for(auto col:{ImGuiCol_FrameBg,ImGuiCol_FrameBgHovered,ImGuiCol_FrameBgActive,ImGuiCol_CheckboxSelectedBg,ImGuiCol_CheckMark})
    ImGui::PushStyleColor(col,ImU32(0));
@@ -96,8 +96,12 @@ bool PanelCheckbox(const char* label,bool* value){
    float side=ImGui::GetFrameHeight();ImVec2 hi(lo.x+side,lo.y+side);
    if(*value){
     if(paper::IsGlass())GlassButtonFace(draw,lo,hi,true,ImGui::IsItemHovered(),ImGui::IsItemActive(),S(7));
-    else paper::CutRect(draw,lo,hi,ImGui::IsItemHovered()?paper::colors->primaryHover:paper::colors->primary,S(5));
-    ImGui::RenderCheckMark(draw,{lo.x+side*.22f,lo.y+side*.22f},ImGui::GetColorU32(paper::colors->onPrimary),side*.56f);
+    else if(paper::IsNight())paper::CutRect(draw,lo,hi,ImGui::IsItemHovered()?paper::colors->primaryHover:paper::colors->primary,S(5));
+    else draw->AddRectFilled(lo,hi,ImGui::GetColorU32(ImGui::IsItemHovered()?paper::colors->primaryHover:paper::colors->primary));
+    if(sidebar){
+     const ImVec2 points[]={{lo.x+side*.18f,lo.y+side*.50f},{lo.x+side*.40f,lo.y+side*.72f},{lo.x+side*.83f,lo.y+side*.27f}};
+     draw->AddPolyline(points,3,ImGui::GetColorU32(paper::colors->onPrimary),0,side*.15f);
+    }else ImGui::RenderCheckMark(draw,{lo.x+side*.22f,lo.y+side*.22f},ImGui::GetColorU32(paper::colors->onPrimary),side*.56f);
    }else{
     draw->AddRectFilled(lo,hi,ImGui::GetColorU32(ImGui::IsItemHovered()?paper::colors->hover:paper::colors->field),paper::IsGlass()?S(7):0);
     draw->AddRect(lo,hi,ImGui::GetColorU32(paper::colors->muted),paper::IsGlass()?S(7):0);
@@ -112,6 +116,7 @@ bool PanelCheckbox(const char* label,bool* value){
  ImGui::PushStyleColor(ImGuiCol_CheckMark,paper::colors->onPrimary);
  bool hit=ImGui::Checkbox(label,value);ImGui::PopStyleColor(4);ImGui::PopStyleVar();return hit;
 }
+bool SidebarCheckbox(const char* label,bool* value){return PanelCheckbox(label,value,true);}
 bool SidebarCombo(const char* label,const char* preview,ImGuiComboFlags flags=0){
  if(!paper::active)return ImGui::BeginCombo(label,preview,flags);
  ImGui::PushStyleColor(ImGuiCol_FrameBg,paper::IsGlass()?paper::glass.input:paper::colors->button);
@@ -126,13 +131,15 @@ void SidebarInline(float width,float gap){
  if(ImGui::GetItemRectMax().x+S(gap)+width<=ImGui::GetCurrentWindow()->WorkRect.Max.x)
   ImGui::SameLine(0,S(gap));
 }
+constexpr float sidebarRadioDiameter=30.f,sidebarRadioGap=8.f;
+float SidebarRadioWidth(const char* label){return S(sidebarRadioDiameter+sidebarRadioGap)+ImGui::CalcTextSize(label).x;}
 bool SidebarRadio(const char* label,bool selected){
  if(!paper::active)return ImGui::RadioButton(label,selected);
  auto* window=ImGui::GetCurrentWindow();
  if(window->SkipItems)return false;
  const ImGuiID id=window->GetID(label);
  const auto text=ImGui::CalcTextSize(label);
- const float diameter=S(18),gap=S(8),height=S(31);
+ const float diameter=S(sidebarRadioDiameter),gap=S(sidebarRadioGap),height=S(30);
  const auto lo=ImGui::GetCursorScreenPos();
  ImRect rect(lo,{lo.x+diameter+gap+text.x,lo.y+height});
  ImGui::ItemSize(rect,(height-text.y)*.5f);
@@ -145,7 +152,7 @@ bool SidebarRadio(const char* label,bool selected){
  const ImVec2 center(lo.x+diameter*.5f,rect.GetCenter().y);
  draw->AddCircleFilled(center,diameter*.5f,ImGui::GetColorU32(hovered?paper::colors->hover:paper::colors->panel));
  draw->AddCircle(center,diameter*.5f,ImGui::GetColorU32(paper::colors->muted),0,S(1.4f));
- if(selected)draw->AddCircleFilled(center,S(5),ImGui::GetColorU32(paper::colors->radio));
+ if(selected)draw->AddCircleFilled(center,diameter*.34f,ImGui::GetColorU32(paper::colors->radio));
  ImGui::RenderText({lo.x+diameter+gap,center.y-text.y*.5f},label);
  return pressed;
 }
@@ -203,10 +210,10 @@ bool PresetFileModal(const char* title,const char* caption,float width){
  return open;
 }
 bool BeginManager(bool* open){
- const char* label="差分管理器 · 世界版 1.3.2###WorldDiffInternal";
+ const char* label="差分管理器 · 世界版 1.3.3###WorldDiffInternal";
  if(!paper::active)return ImGui::Begin(label,open,ImGuiWindowFlags_NoCollapse);
  ImGui::PushStyleColor(ImGuiCol_Text,paper::colors->onTitle);ImGui::PushFont(PaperBold(),ImGui::GetFontSize());
- bool shown=ImGui::Begin("    差分管理器  |  世界版  1.3.2###WorldDiffInternal",open,ImGuiWindowFlags_NoCollapse);
+ bool shown=ImGui::Begin("    差分管理器  |  世界版  1.3.3###WorldDiffInternal",open,ImGuiWindowFlags_NoCollapse);
  ImGui::PopFont();ImGui::PopStyleColor();
  if(shown&&paper::IsGlass())GlassWindowTint(false,paper::glass.window);
  else if(shown){
@@ -238,10 +245,11 @@ void PaperRule(PaneSurface surface=PaneSurface::List){
  }else draw->AddRectFilled(w->Pos,{w->Pos.x+w->Size.x,w->Pos.y+S(2)},paper::colors->topRule);
  draw->PopClipRect();
 }
-void PaperKicker(const char* label){
+void PaperKicker(const char* label,float gap=0){
  if(!paper::active)return;
- ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,{0,0});
- ImGui::PushFont(PaperBold(),S(11));ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(paper::colors->muted),"%s",label);
+ ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,{0,S(gap)});
+ ImGui::PushFont(PaperBold(),S(11));ImGui::PushStyleColor(ImGuiCol_Text,paper::colors->muted);
+ ImGui::TextUnformatted(label);ImGui::PopStyleColor();
  ImGui::PopFont();ImGui::PopStyleVar();
 }
 float PaperBadge(ImDrawList* draw,ImVec2 right,float height,const char* text,ImU32 color,float fontSize=12){

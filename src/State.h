@@ -90,7 +90,8 @@ struct State {
  std::map<std::string,uintptr_t> modelResources;
  TransformRuntime transform;
  uint64_t transformEpoch=0;size_t peerCount=0,matchedPeers=0;
- uint64_t captureHotkey=0;std::array<bool,256> previousKeys{};bool keysPrimed=false,keysAllowed=false;
+ PresetHotkey hotkeyDraft; // Empty scope means the scheme list is open.
+ bool captureHotkey=false;std::array<bool,256> previousKeys{};bool keysPrimed=false,keysAllowed=false;
 };
 State& Get();
 void Initialize(SharedState*,const std::filesystem::path& pluginDir,const std::filesystem::path& gameRoot);
@@ -132,6 +133,7 @@ bool ValidateHotkey(const PresetHotkey&,const Document&,bool requireTargets=fals
 bool SetAutomationEnabled(bool hotkeys,bool enabled);
 PresetHotkey* FindHotkey(uint64_t);
 uint64_t CreateHotkey(const std::string& scope,const std::string& name);
+uint64_t CommitHotkeyDraft();
 bool SetHotkeyBinding(uint64_t,int key,int modifiers);
 bool SetHotkeyTarget(uint64_t,size_t,TransformTarget);
 bool DeleteHotkey(uint64_t);

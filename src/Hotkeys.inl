@@ -40,17 +40,51 @@ uint64_t CreateHotkey(const std::string& scope,const std::string& name){
  for(auto& h:s.data.hotkeys)if(h.scope==scope&&h.name==name)return 0;
  PresetHotkey h;h.id=s.data.nextId;h.scope=scope;h.name=name;if(!ValidateHotkey(h,s.data))return 0;s.data.nextId++;s.data.hotkeys.push_back(h);Changed("快捷键方案已创建");return h.id;
 }
+static bool BindingAvailable(const PresetHotkey& scheme,int key,int modifiers){
+ auto& s=Get();
+ if((!key&&modifiers)||(key&&(!ValidPresetKey(key,modifiers)||IsMenuKey(key,s.data)))){
+  s.notice="此按键不可用，请避开面板键、保留键和系统组合键。";return false;
+ }
+ for(const auto& other:s.data.hotkeys){
+  if(other.id!=scheme.id&&other.scope==scheme.scope&&key&&other.key==key&&other.modifiers==modifiers){
+   s.notice="快捷键已用于「"+other.name+"」，请换一个按键。";return false;
+  }
+ }
+ return true;
+}
 bool SetHotkeyBinding(uint64_t id,int key,int modifiers){
- auto& s=Get();auto* h=FindHotkey(id);if(!h||!CanEditScope(h->scope)||(!key&&modifiers)||(key&&(!ValidPresetKey(key,modifiers)||IsMenuKey(key,s.data)))){s.notice="此按键不可用；当前面板键、Ctrl+F9、Esc、Enter 与系统组合键不能用于预设。";return false;}
- for(auto& other:s.data.hotkeys)if(other.id!=id&&other.scope==h->scope&&key&&other.key==key&&other.modifiers==modifiers){s.notice="当前装备已有方案使用此快捷键，请换一个按键。";return false;}
+ auto* h=FindHotkey(id);
+ if(!h||!CanEditScope(h->scope)||!BindingAvailable(*h,key,modifiers))return false;
  h->key=key;h->modifiers=modifiers;Changed("快捷键已保存："+PresetKeyName(key,modifiers));return true;
+}
+uint64_t CommitHotkeyDraft(){
+ auto& s=Get();auto candidate=s.hotkeyDraft;
+ if(candidate.scope.empty()||!CanEditScope(candidate.scope)){s.notice="当前装备已改变，请重新打开方案。";return 0;}
+ const bool creating=!candidate.id;
+ auto* original=FindHotkey(candidate.id);
+ if(!creating&&(!original||original->scope!=candidate.scope)){s.notice="原方案已变更，请重新打开。";return 0;}
+ if(!GoodName(candidate.name)){s.notice="请输入有效的方案名称（最多 160 字节）。";return 0;}
+ for(const auto& other:s.data.hotkeys){
+  if(other.id!=candidate.id&&other.scope==candidate.scope&&other.name==candidate.name){s.notice="当前装备已有同名方案，请修改名称。";return 0;}
+ }
+ if(!BindingAvailable(candidate,candidate.key,candidate.modifiers))return 0;
+ if(creating){
+  if(s.data.hotkeys.size()>=512){s.notice="方案数量已达上限。";return 0;}
+  candidate.id=s.data.nextId;
+ }
+ if(!ValidateHotkey(candidate,s.data)){s.notice="目标分组或预设已变更，请重新选择。";return 0;}
+ const auto id=candidate.id;
+ if(creating){s.data.hotkeys.push_back(std::move(candidate));++s.data.nextId;}
+ else *original=std::move(candidate);
+ Changed((creating?"已创建方案：":"已保存方案：")+s.hotkeyDraft.name);
+ s.hotkeyDraft={};s.captureHotkey=false;return id;
 }
 bool SetHotkeyTarget(uint64_t id,size_t index,TransformTarget target){
  auto* h=FindHotkey(id);if(!h||!CanEditScope(h->scope)||index>h->targets.size()||index>=64)return false;auto copy=*h;
  if(index==copy.targets.size())copy.targets.push_back(target);else copy.targets[index]=target;
  if(!ValidateHotkey(copy,Get().data))return false;h->targets=std::move(copy.targets);Changed("预设组合已保存");return true;
 }
-bool DeleteHotkey(uint64_t id){auto& s=Get();auto* h=FindHotkey(id);if(!h||!CanEditScope(h->scope))return false;std::erase_if(s.data.hotkeys,[&](auto& row){return row.id==id;});if(s.captureHotkey==id)s.captureHotkey=0;Changed("快捷键方案已删除");return true;}
+bool DeleteHotkey(uint64_t id){auto& s=Get();auto* h=FindHotkey(id);if(!h||!CanEditScope(h->scope))return false;std::erase_if(s.data.hotkeys,[&](auto& row){return row.id==id;});if(s.hotkeyDraft.id==id){s.hotkeyDraft={};s.captureHotkey=false;}Changed("快捷键方案已删除");return true;}
 bool RenameHotkey(uint64_t id,const std::string& name){auto& s=Get();auto* h=FindHotkey(id);if(!h||!CanEditScope(h->scope)||!GoodName(name))return false;for(auto& row:s.data.hotkeys)if(row.id!=id&&row.scope==h->scope&&row.name==name)return false;h->name=name;Changed("快捷键方案已重命名");return true;}
 static bool ApplyHotkeyBatch(const std::vector<uint64_t>& ids){
  auto& s=Get();if(!s.storageReady||!s.data.enabled||!s.data.hotkeysEnabled||s.data.transformsEnabled||s.outfitChanging)return false;
@@ -76,7 +110,11 @@ bool ProcessPresetKeys(const std::array<bool,256>& keys,bool allowRuntime,bool a
  if(s.captureHotkey){
   if(!allowCapture)return false;if(keys[VK_ESCAPE]&&!before[VK_ESCAPE]){s.captureHotkey=0;s.notice="已取消快捷键录制";return false;}
   for(int key=8;key<256;key++)if(keys[key]&&!before[key]&&key!=VK_CONTROL&&key!=VK_SHIFT&&key!=VK_MENU&&!(key>=VK_LSHIFT&&key<=VK_RMENU)){
-   if(SetHotkeyBinding(s.captureHotkey,key,modifiers))s.captureHotkey=0;return false;
+   auto& draft=s.hotkeyDraft;
+   if(!draft.scope.empty()&&CanEditScope(draft.scope)&&BindingAvailable(draft,key,modifiers)){
+    draft.key=key;draft.modifiers=modifiers;s.captureHotkey=false;s.notice="已录制："+PresetKeyName(key,modifiers);
+   }
+   return false;
   }return false;
  }
  if(!allowRuntime||newlyAllowed||!s.data.hotkeysEnabled||s.data.transformsEnabled||!s.data.enabled||s.outfitChanging||(s.trackingPlayer&&(!s.outfit.ready||s.outfit.savePreview)))return false;
