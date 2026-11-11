@@ -210,10 +210,10 @@ bool PresetFileModal(const char* title,const char* caption,float width){
  return open;
 }
 bool BeginManager(bool* open){
- const char* label="差分管理器 · 世界版 1.3.3###WorldDiffInternal";
+ const char* label="差分管理器 · 世界版 " WORLDDIFF_VERSION_TEXT "###WorldDiffInternal";
  if(!paper::active)return ImGui::Begin(label,open,ImGuiWindowFlags_NoCollapse);
  ImGui::PushStyleColor(ImGuiCol_Text,paper::colors->onTitle);ImGui::PushFont(PaperBold(),ImGui::GetFontSize());
- bool shown=ImGui::Begin("    差分管理器  |  世界版  1.3.3###WorldDiffInternal",open,ImGuiWindowFlags_NoCollapse);
+ bool shown=ImGui::Begin("    差分管理器  |  世界版  " WORLDDIFF_VERSION_TEXT "###WorldDiffInternal",open,ImGuiWindowFlags_NoCollapse);
  ImGui::PopFont();ImGui::PopStyleColor();
  if(shown&&paper::IsGlass())GlassWindowTint(false,paper::glass.window);
  else if(shown){

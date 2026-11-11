@@ -27,7 +27,7 @@ void NativeBody(safetyhook::Context& ctx){
 bool __fastcall DispatchQuery(uintptr_t ctx,uintptr_t b,uintptr_t q,uintptr_t d){
  Trace trace(ctx,q);
  const bool original=query(ctx,b,q,d);
- return filter(ctx,q,original,!trace.native);
+ return filter(ctx,q,d,original,!trace.native);
 }
 void CallQuery(safetyhook::Context& ctx){
  const bool visible=DispatchQuery(ctx.rcx,ctx.rdx,ctx.r8,ctx.r9);

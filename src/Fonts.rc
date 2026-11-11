@@ -1,3 +1,31 @@
 #include "FontIds.h"
+#include "Version.h"
+#include <winver.h>
+
+1 VERSIONINFO
+ FILEVERSION WORLDDIFF_VERSION_RESOURCE
+ PRODUCTVERSION WORLDDIFF_VERSION_RESOURCE
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_DLL
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "FileVersion", WORLDDIFF_VERSION_TEXT
+            VALUE "ProductVersion", WORLDDIFF_VERSION_TEXT
+            VALUE "ProductName", "ArmorVariantManager-World"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END
+
 WORLDDIFF_FONT_REGULAR RCDATA "third_party/noto/NotoSansSC-Regular.otf"
 WORLDDIFF_FONT_BOLD    RCDATA "third_party/noto/NotoSansSC-Bold.otf"
+311 RCDATA "src/shaders/DissolveCoverage.hlsl"
+312 RCDATA "src/shaders/AmberCrystal.hlsl"

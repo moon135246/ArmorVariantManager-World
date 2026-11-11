@@ -3,6 +3,19 @@
 #endif
 #define DIRECTINPUT_VERSION 0x0800
 #include "Overlay.h"
+#include "Version.h"
+#include "SceneRenderer.h"
+#ifdef WORLDDIFF_SILVER_FLOW
+#include "SilverFlow.h"
+#include "SilverBindings.h"
+#include <wrl/client.h>
+#endif
+#ifdef WORLDDIFF_DISSOLVE_PROBE
+#include "DissolveProbe.h"
+#endif
+#ifdef WORLDDIFF_HANDOFF_TRIAL
+#include "SceneHandoff.h"
+#endif
 #include "ClassicTheme.h"
 #include "State.h"
 #include "NativeInput.h"
@@ -131,6 +144,13 @@ HRESULT WINAPI Present(IDXGISwapChain* swap,UINT sync,UINT flags){
    if(ready&&swap==bound&&is12&&!dx12::UsesQueue(queue))Teardown();
    if(!ready&&!Initialize(swap,queue,dx12Call))Teardown();
    if(ready&&swap==bound){
+#ifdef WORLDDIFF_DISSOLVE_PROBE
+    if(is12)worlddiff::dissolve_probe::NextFrame();
+#endif
+#ifdef WORLDDIFF_HANDOFF_TRIAL
+    if(is12)worlddiff::scene_handoff::NextFrame();
+#endif
+    worlddiff::scene_renderer::NextFrame(is12);
     int key;std::string menuLabel;float uiScale;bool startupNotice,capturing;app::UiTheme uiTheme;{std::lock_guard stateLock(app::Get().mutex);uiScale=app::Get().data.scale;uiTheme=app::Get().data.theme;key=app::Get().data.menuKey;menuLabel=app::MenuKeyName(app::Get().data);capturing=app::Get().captureHotkey!=0;startupNotice=app::Get().loaded&&app::Get().data.showStartupNotice;}
     static unsigned previous=0;static bool panicPrevious=false;unsigned down=!Key(VK_CONTROL)?((Key(key?key:VK_F9)?1u:0u)|(!key&&Key(VK_HOME)?2u:0u)):0;if((down&~previous)&&!capturing&&GetForegroundWindow()==window&&(DWORD)(GetTickCount()-messageToggleAt.load())>250){SetVisible(!open);messageToggleAt=GetTickCount();}previous=down;
     if(!autoOpened&&RuntimeState()&&RuntimeState()->rowCount>0){std::lock_guard stateLock(app::Get().mutex);autoOpened=true;if(app::Get().data.autoOpen)SetVisible(true);}
@@ -150,7 +170,7 @@ HRESULT WINAPI Present(IDXGISwapChain* swap,UINT sync,UINT flags){
      }else{
       ImGui::SetNextWindowPos({26,28});ImGui::SetNextWindowBgAlpha(.84f);
       ImGui::Begin("##WorldDiffToast",nullptr,ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoInputs|ImGuiWindowFlags_NoSavedSettings);
-      ImGui::TextColored({.33f,.72f,.78f,1},"世界版差分管理器 1.3.3 已加载");
+      ImGui::TextColored({.33f,.72f,.78f,1},"世界版差分管理器 " WORLDDIFF_VERSION_TEXT " 已加载");
       ImGui::Text("%s 打开面板  |  Ctrl+F9 暂停控制",menuLabel.c_str());ImGui::End();
      }
     }
@@ -196,10 +216,16 @@ void Capture12(safetyhook::Context& ctx){CapturePresent(ctx,true);}
 void Capture11(safetyhook::Context& ctx){CapturePresent(ctx,false);}
 
 }
+#ifdef WORLDDIFF_SILVER_FLOW
+#include "SilverBindingEvents.inl"
+#endif
 bool Visible(){return open.load();}
 void SetVisible(bool show){bool old=open.exchange(show);if(!show){std::lock_guard stateLock(app::Get().mutex);app::Get().captureHotkey=0;app::Get().keysAllowed=false;}if(show)inputRequested=true;if(old!=show){if(show){ownInput=true;if(originalClip)originalClip(nullptr);else ClipCursor(nullptr);ownInput=false;}else{NativeInputClose();std::lock_guard lock(clipMutex);if(originalClip)originalClip(hasGameClip&&GetForegroundWindow()==window?&lastGameClip:nullptr);}RuntimeLog("Panel %s (blocked cursor warps=%llu)",show?"opened":"closed",blockedWarps.load());}}
 const char* BackendStatus(){return ready?(is12?"DirectX 12 · 游戏命令队列":"DirectX 11"):deviceLost?"设备已重置，面板停止":"等待游戏渲染";}
 void WorkerTick(){
+#ifdef WORLDDIFF_SILVER_FLOW
+ StartMaterialBindingRecords();
+#endif
  if(inputRequested&&!inputInstalled)InstallInput();
  static std::string last;std::ifstream f(PluginDirectory()/L"WorldDiff"/L"WorldDiff.control",std::ios::binary);std::string command;std::getline(f,command);if(command.empty()||command==last)return;last=command;
  if(command.rfind("open",0)==0)SetVisible(true);else if(command.rfind("close",0)==0)SetVisible(false);else if(command.rfind("reload",0)==0){std::lock_guard lock(app::Get().mutex);app::Load();}else if(command.rfind("save",0)==0){std::lock_guard lock(app::Get().mutex);app::Save();}
@@ -212,6 +238,30 @@ bool Install(){
     !present_source::Matches(dx11Call,present_source::kDx11Signature)){
   RuntimeLog("Overlay: game Present signature mismatch; no graphics hook installed.");return false;
  }
+#ifdef WORLDDIFF_SILVER_FLOW
+ wchar_t exe[32768]{},backend[16]{};
+ GetModuleFileNameW(nullptr,exe,32768);
+ const auto options=std::filesystem::path(exe).parent_path()/L"graphics_option.ini";
+ GetPrivateProfileStringW(L"GraphicsOption",L"DirectX12Enable",L"Off",backend,16,options.c_str());
+ if(!_wcsicmp(backend,L"On")) {
+  Microsoft::WRL::ComPtr<ID3D12Device> device;
+  if(SUCCEEDED(D3D12CreateDevice(nullptr,D3D_FEATURE_LEVEL_11_0,IID_PPV_ARGS(&device)))) {
+   auto methods=*reinterpret_cast<void***>(device.Get());
+   // Only extend roots once the material PSO creation path is available.
+   const bool installed=Hook(methods[10],reinterpret_cast<void*>(&silver::CreatePipeline),silver::originalPipeline) &&
+                        Hook(methods[16],reinterpret_cast<void*>(&silver::CreateRoot),silver::originalRoot);
+   RuntimeLog("Silver flow: DX12 material creation %s",installed?"ready":"unavailable");
+   if(installed) {
+    Microsoft::WRL::ComPtr<ID3D12Device1> v1;
+    Microsoft::WRL::ComPtr<ID3D12PipelineLibrary> library;
+    if(SUCCEEDED(device.As(&v1))&&SUCCEEDED(v1->CreatePipelineLibrary(nullptr,0,IID_PPV_ARGS(&library)))) {
+     auto entry=(*reinterpret_cast<void***>(library.Get()))[9];
+     Hook(entry,reinterpret_cast<void*>(&silver::LoadGraphics),silver::originalLibrary);
+    }
+   }
+  }
+ }
+#endif
  auto h12=safetyhook::MidHook::create(dx12Call,Capture12,safetyhook::MidHook::StartDisabled);
  auto h11=safetyhook::MidHook::create(dx11Call,Capture11,safetyhook::MidHook::StartDisabled);
  if(!h12||!h11){RuntimeLog("Overlay: game Present hook creation failed.");return false;}

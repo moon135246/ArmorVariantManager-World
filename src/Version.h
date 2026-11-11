@@ -1,0 +1,4 @@
+#pragma once
+
+#define WORLDDIFF_VERSION_TEXT "1.4.0"
+#define WORLDDIFF_VERSION_RESOURCE 1,4,0,0

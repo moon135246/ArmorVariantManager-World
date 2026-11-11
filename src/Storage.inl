@@ -3,17 +3,22 @@ bool IsCurrentModel(const std::string& path){auto& s=Get();return !s.trackingPla
 bool CanEditScope(const std::string& scope){auto& s=Get();if(!s.storageReady||s.blockedScopes.count(scope)||s.outfitChanging)return false;if(!s.trackingPlayer)return true;return s.outfit.ready&&std::any_of(s.outfit.paths.begin(),s.outfit.paths.end(),[&](auto& p){return !p.empty()&&Equip(p)==scope;});}
 bool SaveSettings(){
  auto& s=Get();if(!s.storageReady)return false;auto& d=s.data;if(d.transformsEnabled&&d.hotkeysEnabled){s.notice="变身与预设快捷键不能同时开启，未保存设置";return false;}std::ostringstream text;
- text<<"WorldDiffSettings "<<129<<"\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.hideDragHint<<' '<<d.transformsEnabled<<' '<<d.autoFind<<' '<<d.showStartupNotice<<' '<<d.hotkeysEnabled<<' '<<static_cast<int>(d.theme)<<' '<<d.worldDiffPriority<<'\n';
+ text<<"WorldDiffSettings "<<132<<"\nSET "<<d.enabled<<' '<<d.autoDefault<<' '<<d.autoOpen<<' '<<d.menuKey<<' '<<d.scale<<' '<<d.hideDragHint<<' '<<d.transformsEnabled<<' '<<d.autoFind<<' '<<d.showStartupNotice<<' '<<d.hotkeysEnabled<<' '<<static_cast<int>(d.theme)<<' '<<d.worldDiffPriority<<' '<<d.dissolveEnabled<<' '<<d.dissolveMs<<' '<<static_cast<int>(d.dissolveStyle)<<'\n';
  if(s.panelWidth>0)text<<"WINDOW "<<s.panelWidth<<' '<<s.panelHeight<<'\n';
  std::string before;if(!ReadText(s.configPath,before)||(!before.empty()&&before==text.str()))return before==text.str();
  if(!AtomicText(s.configPath,text.str())){s.notice="设置保存失败，尚未保存的编辑仍在内存中";return false;}return true;
 }
 bool LoadSettings(){
  auto& s=Get();std::ifstream in(s.configPath,std::ios::binary);std::string magic,tag;unsigned version=0;Document d;
- if(!(in>>magic>>version)||magic!="WorldDiffSettings"||(version!=117&&version!=121&&version!=122&&version!=123&&version!=124&&version!=128&&version!=129)||!(in>>tag)||tag!="SET"||!(in>>d.enabled>>d.autoDefault>>d.autoOpen>>d.menuKey>>d.scale>>d.hideDragHint>>d.transformsEnabled>>d.autoFind)||(version>=121&&!(in>>d.showStartupNotice))||(version>=122&&!(in>>d.hotkeysEnabled))||(d.hotkeysEnabled&&d.transformsEnabled)||!ValidMenuKey(d.menuKey)||(version<128&&(d.menuKey<0x70||d.menuKey>0x87))||d.scale<.65f||d.scale>1.7f){s.notice="Settings.cfg 无效，原文件保留";return false;}
+ if(!(in>>magic>>version)||magic!="WorldDiffSettings"||(version!=117&&version!=121&&version!=122&&version!=123&&version!=124&&version!=128&&version!=129&&version!=130&&version!=131&&version!=132)||!(in>>tag)||tag!="SET"||!(in>>d.enabled>>d.autoDefault>>d.autoOpen>>d.menuKey>>d.scale>>d.hideDragHint>>d.transformsEnabled>>d.autoFind)||(version>=121&&!(in>>d.showStartupNotice))||(version>=122&&!(in>>d.hotkeysEnabled))||(d.hotkeysEnabled&&d.transformsEnabled)||!ValidMenuKey(d.menuKey)||(version<128&&(d.menuKey<0x70||d.menuKey>0x87))||d.scale<.65f||d.scale>1.7f){s.notice="Settings.cfg 无效，原文件保留";return false;}
  int theme=static_cast<int>(d.theme);
  if(version>=123&&(!(in>>theme)||theme<0||theme>static_cast<int>(UiTheme::Glass))){s.notice="设置中的界面风格无效，原文件保留";return false;}
  if(version>=129&&!(in>>d.worldDiffPriority)){s.notice="设置中的插件优先级无效，原文件保留";return false;}
+ if(version>=130 && (!(in>>d.dissolveEnabled>>d.dissolveMs) || d.dissolveMs<50 || d.dissolveMs>10000)){s.notice="溶解设置无效，原文件保留";return false;}
+ if(version>=131){
+  int style=0;if(!(in>>style)||style<0||style>static_cast<int>(version==131?dissolve::Style::Amber:dissolve::Style::Ink)){s.notice="溶解风格无效，原文件保留";return false;}
+  d.dissolveStyle=static_cast<dissolve::Style>(style);
+ }
  int width=0,height=0;
  in>>std::ws;
  if((version==124||(version>=128&&!in.eof()))&&(!(in>>tag>>width>>height)||tag!="WINDOW"||width<=0||height<=0)){
@@ -22,7 +27,7 @@ bool LoadSettings(){
  in>>std::ws;if(!in.eof()){s.notice="设置文件含有未知内容，已停止读取";return false;}
  if(version<128&&d.menuKey==VK_F9)d.menuKey=0;
  s.panelWidth=width;s.panelHeight=height;s.panelSizeDirty=false;
- auto& to=s.data;to.theme=static_cast<UiTheme>(theme);to.worldDiffPriority=d.worldDiffPriority;to.enabled=d.enabled;to.autoDefault=d.autoDefault;to.autoOpen=d.autoOpen;to.menuKey=d.menuKey;to.scale=d.scale;to.hideDragHint=d.hideDragHint;to.transformsEnabled=d.transformsEnabled;to.autoFind=d.autoFind;to.showStartupNotice=d.showStartupNotice;to.hotkeysEnabled=d.hotkeysEnabled;s.captureHotkey=0;s.keysAllowed=false;return true;
+ auto& to=s.data;to.dissolveStyle=d.dissolveStyle;to.dissolveEnabled=d.dissolveEnabled;to.dissolveMs=d.dissolveMs;to.theme=static_cast<UiTheme>(theme);to.worldDiffPriority=d.worldDiffPriority;to.enabled=d.enabled;to.autoDefault=d.autoDefault;to.autoOpen=d.autoOpen;to.menuKey=d.menuKey;to.scale=d.scale;to.hideDragHint=d.hideDragHint;to.transformsEnabled=d.transformsEnabled;to.autoFind=d.autoFind;to.showStartupNotice=d.showStartupNotice;to.hotkeysEnabled=d.hotkeysEnabled;s.captureHotkey=0;s.keysAllowed=false;return true;
 }
 namespace {
 bool CompleteMapping(const std::string& scope,const File& file){

@@ -1,6 +1,7 @@
 #pragma once
 #include "Protocol.h"
 #include "UiTheme.h"
+#include "DissolveStyle.h"
 #include "ModelCatalog.h"
 #include "Transform.h"
 #include <filesystem>
@@ -39,6 +40,9 @@ struct Document {
  std::map<std::pair<std::string,uint32_t>,std::string> materialNames;
  UiTheme theme=UiTheme::ClassicWhite;
  bool worldDiffPriority=true;
+ bool dissolveEnabled=true;
+ int dissolveMs=900;
+ dissolve::Style dissolveStyle=dissolve::DefaultStyle;
  bool enabled=true,autoDefault=true,autoOpen=false,autoFind=true,hideDragHint=false,transformsEnabled=true,showStartupNotice=true,hotkeysEnabled=false;int menuKey=0; // 0: default F9 or Home; otherwise one custom key.
  float scale=1.0f;
  uint64_t nextId=1;std::vector<Group> groups;

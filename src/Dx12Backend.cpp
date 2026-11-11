@@ -2,6 +2,9 @@
 //  Dx12Backend.cpp -- 见 Dx12Backend.h 的说明
 // ===========================================================================
 #include "Dx12Backend.h"
+#ifdef WORLDDIFF_SILVER_FLOW
+#include "SilverFlow.h"
+#endif
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -196,6 +199,9 @@ bool Init(IDXGISwapChain* swap, ID3D12CommandQueue* queue) {
     }
 
     g_ready = true;
+#ifdef WORLDDIFF_SILVER_FLOW
+    worlddiff::silver::SetDevice(g_device);
+#endif
     guard.ok = true;
     snprintf(g_status, sizeof(g_status), "DX12 就绪（%u 个后备缓冲，格式 %d）",
              g_bufferCount, (int)g_format);
@@ -276,6 +282,9 @@ bool RecreateBackBuffers(IDXGISwapChain* swap) {
 }
 
 void Shutdown() {
+#ifdef WORLDDIFF_SILVER_FLOW
+    worlddiff::silver::SetDevice(nullptr);
+#endif
     if (g_ready) {
         ReleaseBackBuffers();
         ImGui_ImplDX12_Shutdown();

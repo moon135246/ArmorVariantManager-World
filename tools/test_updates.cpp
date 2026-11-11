@@ -7,16 +7,31 @@
 #include <stdexcept>
 namespace updateqa {std::map<std::string,ImRect> items;std::vector<std::string> texts;}
 namespace ImGui {
+bool UpdateTrackedCombo(const char* label,const char* preview,ImGuiComboFlags flags=0){
+ bool open=BeginCombo(label,preview,flags);if(!open)updateqa::items[label]={GetItemRectMin(),GetItemRectMax()};return open;
+}
+bool UpdateTrackedOption(const char* label,bool selected=false,ImGuiSelectableFlags flags=0,const ImVec2& size=ImVec2(0,0)){
+ bool hit=Selectable(label,selected,flags,size);updateqa::items[label]={GetItemRectMin(),GetItemRectMax()};return hit;
+}
 bool UpdateTrackedButton(const char* label,const ImVec2& size=ImVec2(0,0)){bool hit=Button(label,size);updateqa::items[label]={GetItemRectMin(),GetItemRectMax()};return hit;}
 bool UpdateTrackedCheckbox(const char* label,bool* value){bool hit=Checkbox(label,value);updateqa::items[label]={GetItemRectMin(),GetItemRectMax()};return hit;}
 void UpdateTrackedText(const char* text,const char* end=nullptr){updateqa::texts.emplace_back(text,end?end:text+std::strlen(text));TextUnformatted(text,end);}
+bool UpdateTrackedSlider(const char* label,float* value,float low,float high,const char* fmt,ImGuiSliderFlags flags=0){
+ bool hit=SliderFloat(label,value,low,high,fmt,flags);updateqa::items[label]={GetItemRectMin(),GetItemRectMax()};return hit;
+}
 }
 #define Button UpdateTrackedButton
 #define Checkbox UpdateTrackedCheckbox
+#define SliderFloat UpdateTrackedSlider
+#define BeginCombo UpdateTrackedCombo
+#define Selectable UpdateTrackedOption
 #define TextUnformatted UpdateTrackedText
 #include "../src/Panel.cpp"
+#undef Selectable
+#undef BeginCombo
 #undef Button
 #undef Checkbox
+#undef SliderFloat
 #undef TextUnformatted
 #include "save_imgui_frame.inl"
 #include "../src/EmbeddedFonts.h"
@@ -92,6 +107,27 @@ int main(int argc,char** argv){try{
  auto center=updateqa::items.at("显示启动提示").GetCenter();io.AddMousePosEvent(center.x,center.y);io.AddMouseButtonEvent(0,true);draw(cases[1],3,false);io.AddMouseButtonEvent(0,false);draw(cases[1],3,false);
  check(!state.data.showStartupNotice,"real settings checkbox disables the startup toast");state.data.showStartupNotice=true;check(LoadSettings()&&!state.data.showStartupNotice,"real checkbox persists the preference immediately");
  for(int i=0;i<3;i++)draw(cases[1],3,false);
+ check(updateqa::items.count("启用网格溶解")&&updateqa::items.count("过渡时长"),"dissolve controls are visible in Settings");
+ auto slider=updateqa::items.at("过渡时长");auto oldMs=state.data.dissolveMs;
+ auto clickStyleItem=[&](const char* label) {
+  auto r=updateqa::items.at(label);io.AddMousePosEvent(r.Min.x+12,r.GetCenter().y);
+  io.AddMouseButtonEvent(0,true);draw(cases[1],3,false);io.AddMouseButtonEvent(0,false);draw(cases[1],3,false);
+  draw(cases[1],3,false);
+ };
+ clickStyleItem("溶解风格");
+ check(updateqa::items.at("银紫流光").Min.y<updateqa::items.at("琥珀裂晶").Min.y,"silver appears above amber");
+ clickStyleItem("银紫流光");
+ check(state.data.dissolveStyle==dissolve::Style::Silver && state.data.dissolveMs==oldMs,"real combo selects silver and retains duration");
+ state.data.dissolveStyle=dissolve::Style::Amber;
+ check(LoadSettings()&&state.data.dissolveStyle==dissolve::Style::Silver,"combo selection survives reload");
+ clickStyleItem("溶解风格");
+ check(updateqa::items.at("琥珀裂晶").Min.y<updateqa::items.at("墨染洇花").Min.y,"ink is the third style");
+ clickStyleItem("墨染洇花");state.data.dissolveStyle=dissolve::Style::Silver;
+ check(LoadSettings()&&state.data.dissolveStyle==dissolve::Style::Ink&&state.data.dissolveMs==oldMs,"ink selection persists with shared duration");
+ io.AddMousePosEvent(slider.Min.x+15,slider.GetCenter().y);io.AddMouseButtonEvent(0,true);draw(cases[1],3,false);
+ io.AddMouseButtonEvent(0,false);draw(cases[1],3,false);auto savedMs=state.data.dissolveMs;
+ check(savedMs!=oldMs && savedMs>=50 && savedMs<=10000,"duration slider changes the interval");
+ state.data.dissolveMs=oldMs;check(LoadSettings()&&state.data.dissolveMs==savedMs,"slider release persists the interval");
  check(updateqa::items.count("差分管理器优先于变身插件")&&state.data.worldDiffPriority,"priority checkbox is present and enabled by default");
  center=updateqa::items.at("差分管理器优先于变身插件").GetCenter();io.AddMousePosEvent(center.x,center.y);io.AddMouseButtonEvent(0,true);draw(cases[1],3,false);io.AddMouseButtonEvent(0,false);draw(cases[1],3,false);
  check(!state.data.worldDiffPriority,"real priority checkbox switches to controller priority");state.data.worldDiffPriority=true;check(LoadSettings()&&!state.data.worldDiffPriority,"priority checkbox saves immediately");

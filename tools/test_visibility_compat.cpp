@@ -17,7 +17,8 @@ bool basicValue=false,extendedValue=false,extendedEnabled=true,extendedMatch=tru
 thread_local bool handled=false;
 struct Object {uint32_t unused=0;uint16_t id=0,pad=0;};
 struct Fixture {bool native=true,fade=true,hidden=false,priority=true,managed=true,active=true;};
-bool Filter(uintptr_t ctx,uintptr_t,bool original,bool controlled){
+bool Filter(uintptr_t ctx,uintptr_t,uintptr_t drawContext,bool original,bool controlled){
+ if(drawContext!=reinterpret_cast<uintptr_t>(&reinterpret_cast<Fixture*>(ctx)->fade))return !original;
  handled=controlled;auto& f=*reinterpret_cast<Fixture*>(ctx);
  return f.managed&&f.active?ResolveVisibility(original,f.hidden,controlled,f.priority):original;
 }

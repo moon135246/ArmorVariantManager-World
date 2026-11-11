@@ -1,4 +1,5 @@
 #include <windows.h>
+#include "Version.h"
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
@@ -9,7 +10,14 @@
 #include "RenderPolicy.h"
 #include "State.h"
 #include "Overlay.h"
+#include "SceneRenderer.h"
 #include "VisibilityQueryHook.h"
+#ifdef WORLDDIFF_DISSOLVE_PROBE
+#include "DissolveProbe.h"
+#endif
+#ifdef WORLDDIFF_HANDOFF_TRIAL
+#include "SceneHandoff.h"
+#endif
 #include "safetyhook.hpp"
 
 namespace {
@@ -114,14 +122,28 @@ bool PolicyOwnerMatches(const ModelPolicy& p,uintptr_t localEntity){
   return armor&&*(uintptr_t*)armor==p.actor&&*(uintptr_t*)(armor+offsets[p.part])==p.context&&*(uintptr_t*)(p.context+0x2A0)==p.resource&&*(uintptr_t*)(p.resource+0xC8)==p.meshes&&*(uintptr_t*)(p.resource+0x400)==p.names&&*(uint32_t*)(p.resource+0xE4)==p.materialCount;
  }__except(EXCEPTION_EXECUTE_HANDLER){return false;}
 }
-bool FilterVisibility(uintptr_t ctx,uintptr_t q,bool visible,bool controllerHandled){
+bool FilterVisibility(uintptr_t ctx,uintptr_t q,[[maybe_unused]] uintptr_t drawContext,bool visible,bool controllerHandled){
  if(!shared||shared->ready!=1)return visible;
  auto policies=renderPolicies.load(std::memory_order_acquire);auto* policy=policies?policies->Find(ctx):nullptr;auto now=GetTickCount();
  if(!policy||(DWORD)(now-policies->tick)>=1500||!PolicyOwnerMatches(*policy,policies->localEntity))return visible;
  Identity id{};if(!ReadIdentity(ctx,q,&id,false))return visible;
  const bool active=policies->enabled&&shared->enabled&&(DWORD)(now-(DWORD)shared->heartbeat)<5000&&PolicyMatches(*policy,id.resource,id.index,id.material,id.count)&&id.index<policy->groups.size()&&policy->groups[id.index]==id.group&&PathMatches(id.resource,policy->path.c_str());
  const bool hidden=active&&policy->hidden[id.index]!=0;
- const bool resolved=active?ResolveVisibility(visible,hidden,controllerHandled&&visualControllerLoaded.load(std::memory_order_relaxed),policies->worldDiffPriority):visible;
+ const bool handled=controllerHandled&&visualControllerLoaded.load(std::memory_order_relaxed);
+ bool resolved=active?ResolveVisibility(visible,hidden,handled,policies->worldDiffPriority):visible;
+ if(active && policy->local && !policy->preview) {
+  const bool shown=ResolveVisibility(visible,false,handled,policies->worldDiffPriority);
+#ifdef WORLDDIFF_HANDOFF_TRIAL
+  if(scene_handoff::Requested()) {
+   if(policies->worldDiffPriority)resolved=scene_handoff::Admit(*policy,id.index,shown,resolved);
+  } else
+#endif
+  if(policies->dissolveEnabled)resolved=scene_renderer::Admit(*policy,id.index,shown,resolved,handled&&!policies->worldDiffPriority);
+ }
+#ifdef WORLDDIFF_DISSOLVE_PROBE
+ if(policy->local&&!policy->preview)
+  dissolve_probe::Observe(ctx,q,drawContext,policy->part,id.index,id.material,visible,resolved,active?policy:nullptr);
+#endif
  // Telemetry exhaustion must never disable visibility control.
  if(auto* r=FindRow(ctx,q)){InterlockedIncrement(&r->hits);InterlockedExchange(&r->lastTick,(LONG)now);InterlockedExchange(&r->originalVisible,visible?1:0);InterlockedExchange(&r->hide,visible&&!resolved?1:0);if(visible&&!resolved)InterlockedIncrement(&r->hiddenHits);}
  return resolved;
@@ -174,9 +196,17 @@ DWORD WINAPI Start(void* arg){
  RuntimeLog("Visibility arbitration installed: direct caller plus %zu virtual dispatch references; original vtable identities preserved.",dispatchSlots.size());
  wchar_t gameExe[32768];GetModuleFileNameW(nullptr,gameExe,32768);
  app::Initialize(shared,pluginDirectory,std::filesystem::path(gameExe).parent_path());
- SetMessage("WorldDiff 1.3.3 internal ready; default panel keys: F9 / Home.");InterlockedExchange(&shared->ready,1);
+ SetMessage("WorldDiff " WORLDDIFF_VERSION_TEXT " internal ready; default panel keys: F9 / Home.");InterlockedExchange(&shared->ready,1);
  if(!overlay::Install())RuntimeLog("Overlay initialization failed; visibility controls remain available to diagnostics.");
- for(;;){visualControllerLoaded.store(GetModuleHandleW(L"visual_controller_v5.dll")||GetModuleHandleW(L"MHWI-VisualControllerExtended.dll"),std::memory_order_relaxed);app::Tick();overlay::WorkerTick();Sleep(100);}
+ for(;;){visualControllerLoaded.store(GetModuleHandleW(L"visual_controller_v5.dll")||GetModuleHandleW(L"MHWI-VisualControllerExtended.dll"),std::memory_order_relaxed);app::Tick();overlay::WorkerTick();
+#ifdef WORLDDIFF_DISSOLVE_PROBE
+  dissolve_probe::Tick(pluginDirectory / L"WorldDiff");
+#endif
+#ifdef WORLDDIFF_HANDOFF_TRIAL
+  scene_handoff::Tick(pluginDirectory / L"WorldDiff",std::filesystem::path(gameExe).parent_path());
+#endif
+  scene_renderer::Tick(pluginDirectory / L"WorldDiff");
+  Sleep(100);}
 }
 }
 namespace worlddiff {

@@ -1,4 +1,5 @@
 #pragma once
+#include "Version.h"
 #include "imgui.h"
 #include "UiTheme.h"
 #include <algorithm>
@@ -158,7 +159,7 @@ inline void DrawStartupNotice(const char* menuKey, float scale,const Palette& c)
         draw->AddText(font, size*scale, point(x,centerY-size*.5f), color, label);
     };
 
-    constexpr const char* title = "世界版差分管理器 1.3.3";
+    constexpr const char* title = "世界版差分管理器 " WORLDDIFF_VERSION_TEXT;
     constexpr const char* status = "已加载";
     constexpr const char* pauseKey = "Ctrl+F9";
     float statusW = width(bold,16,status)+12;
@@ -171,7 +172,7 @@ inline void DrawStartupNotice(const char* menuKey, float scale,const Palette& c)
         rect(1,34,cardW-2,1,c.edge);
         text(12,17.5f,bold,20,c.onTitle,"世界版差分管理器");
         float versionX=12+width(bold,20,"世界版差分管理器")+7;
-        text(versionX,17.5f,regular,15,c.muted,"1.3.3");
+        text(versionX,17.5f,regular,15,c.muted,WORLDDIFF_VERSION_TEXT);
         GlassSurface(draw,point(cardW-9-statusW,8),point(cardW-9,28),10*scale,rgb(0x478ff8),rgb(0x255fc2),c.primary);
     }else{
     rect(0,0,cardW,35,c.title);

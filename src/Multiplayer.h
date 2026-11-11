@@ -17,10 +17,11 @@ class PlayerPolicyController {
  struct ActorRuntime {std::array<uintptr_t,5> contexts{},resources{};std::array<uint64_t,5> stamps{};std::map<std::string,ScopeRuntime> scopes;};
  using Key=std::tuple<uintptr_t,uintptr_t,uintptr_t,uintptr_t>;
  std::map<Key,ActorRuntime> actors;uint64_t epoch=0;
+ std::shared_ptr<const RenderPolicies> previousDissolvePolicies;
 public:
  size_t peers=0,matched=0;
  size_t RuntimeCount()const{return actors.size();}
- std::shared_ptr<const RenderPolicies> Build(const std::vector<ActorFrame>&,const OutfitSnapshot& local,const Document&,const TransformRuntime&,const std::set<std::string>& allowedScopes,uint64_t generation,DWORD now);
+ std::shared_ptr<const RenderPolicies> Build(const std::vector<ActorFrame>&,const OutfitSnapshot& local,const Document&,const TransformRuntime&,const std::set<std::string>& allowedScopes,uint64_t generation,DWORD now,bool trackDissolve=false);
 };
 void UpdatePlayerPolicies();
 void ResetPlayerPolicies();

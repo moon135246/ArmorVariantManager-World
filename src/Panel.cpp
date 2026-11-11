@@ -1,4 +1,5 @@
 #include "Overlay.h"
+#include "Version.h"
 #include "State.h"
 #include "ArmorNames.h"
 #include "NativeInput.h"
@@ -329,7 +330,7 @@ void AboutPanel(){
  PaperKicker("//  ABOUT",14);
  auto path=Get().directory/L"更新日志.md";
  if(!updateTabVisible||!updateNotes.loaded||updateNotes.path!=path){updateNotes.Load(path);updateNotice.clear();}updateTabVisible=true;
- SectionTitle("差分管理器 · 世界版 1.3.3");ImGui::TextUnformatted("插件作者：明月别枝(moon)");ImGui::Separator();
+ SectionTitle("差分管理器 · 世界版 " WORLDDIFF_VERSION_TEXT);ImGui::TextUnformatted("插件作者：明月别枝(moon)");ImGui::Separator();
  if(Button("编辑更新日志")){
   wchar_t folder[MAX_PATH]{};STARTUPINFOW start{sizeof(start)};PROCESS_INFORMATION process{};
   if(GetWindowsDirectoryW(folder,MAX_PATH)){
@@ -379,6 +380,30 @@ void SettingsPanel(){
   ImGui::EndCombo();
  }Tip("默认 F9 或 Home 均可开关面板；选择其他选项后，只使用选定的一个键。不能与预设快捷键相同。");
  ImGui::SetNextItemWidth(S(220));if(ImGui::SliderFloat("界面缩放",&s.data.scale,.7f,1.5f,"%.2f"))Changed();
+ ImGui::Separator();SectionTitle("网格溶解");
+ ImGui::BeginDisabled(!s.storageReady);
+ if(SidebarCheckbox("启用网格溶解",&s.data.dissolveEnabled) && !SaveSettings())s.data.dissolveEnabled=!s.data.dissolveEnabled;
+ Tip("在 DX12 场景中，当前角色的网格会随显示和隐藏逐步变化。");
+ ImGui::BeginDisabled(!s.data.dissolveEnabled);
+ ImGui::SetNextItemWidth(std::min(S(210),ImGui::GetContentRegionAvail().x*.55f));
+ if(SidebarCombo("溶解风格",dissolve::StyleNames[static_cast<int>(s.data.dissolveStyle)])){
+  for(auto style:{dissolve::Style::Silver,dissolve::Style::Amber,dissolve::Style::Ink}){
+   const bool selected=style==s.data.dissolveStyle;
+   if(ImGui::Selectable(dissolve::StyleNames[static_cast<int>(style)],selected)&&!selected){
+    const auto previous=s.data.dissolveStyle;s.data.dissolveStyle=style;
+    if(!SaveSettings())s.data.dissolveStyle=previous;
+   }
+   if(selected)ImGui::SetItemDefaultFocus();
+  }
+  ImGui::EndCombo();
+ }
+ float seconds=s.data.dissolveMs/1000.f;
+ ImGui::SetNextItemWidth(S(220));
+ if(ImGui::SliderFloat("过渡时长",&seconds,.05f,10.f,"%.2f 秒",ImGuiSliderFlags_Logarithmic|ImGuiSliderFlags_AlwaysClamp))
+  s.data.dissolveMs=std::clamp(static_cast<int>(std::lround(seconds*1000.f)),50,10000);
+ if(ImGui::IsItemDeactivatedAfterEdit())SaveSettings();
+ Tip("时长越短，溶解越快。Ctrl + 单击可直接输入秒数。");
+ ImGui::EndDisabled();ImGui::EndDisabled();
  ImGui::Separator();SectionTitle("插件兼容");
  ImGui::BeginDisabled(!s.storageReady);
  if(SidebarCheckbox("差分管理器优先于变身插件",&s.data.worldDiffPriority)){

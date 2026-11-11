@@ -92,6 +92,49 @@ int main(){try{
  local.instance.outfit.savePreview=true;policy=build({local,b});check(policy->Find(1000)&&!policy->Find(3000),"save selection controls only its explicit avatar");local.instance.outfit.savePreview=false;
  policy=build({local,a});auto* p=policy->Find(2000);check(p&&!PolicyHides(*p,999,0,0,2)&&!PolicyHides(*p,10000,9,0,2)&&!PolicyHides(*p,10000,0,1,2)&&!PolicyHides(*p,10000,0,0,3),"render mask rejects resource, index, material and mesh table mismatch");
  // Read-only profile loading must not import files or change local edits.
+ {
+  PlayerPolicyController transitions;
+  auto source=TestModel();
+  const Target first{source->relativePath,0,true},second{source->relativePath,1,true};
+  auto localActor=Frame(500,5000,true,source),peer=Frame(600,6000,false,source);
+  auto d=HealthDocument(*source);d.dissolveMs=400;d.groups.front().working.hidden.insert(second);
+  TransformRuntime tr;
+  auto update=[&](DWORD tick,bool enabled=true){
+   return transitions.Build({localActor,peer},localActor.instance.outfit,d,tr,{source->equip},0,tick,enabled);
+  };
+  const auto baseline=update(100);
+  check(baseline->Find(5000)->transitions.empty(),"initial outfit starts in its saved state");
+  d.groups.front().working.hidden={first};
+  const auto switchFrame=update(200);
+  const auto& localPolicy=*switchFrame->Find(5000);
+  auto out=localPolicy.TransitionFor(0),in=localPolicy.TransitionFor(1);
+  check(out&&in&&out->durationMs==400&&in->durationMs==400&&out->keepSuffix&&!in->keepSuffix&&in->delayMs==0,"configured duration for independent outgoing and incoming rows");
+  check(switchFrame->Find(6000)->transitions.empty(),"shared outfit on peer never inherits local phase");
+  check(out->At(400)==.5f&&in->At(400)==.5f,"original snapshot retains the sampled frame's phases");
+  d.dissolveStyle=dissolve::Style::Silver;
+  const auto steady=update(350);
+  check(steady->Find(5000)->TransitionFor(0)->changedAt==200,"policy refresh preserves transition start");
+  d.groups.front().working.hidden={second};
+  const auto reversed=update(400);
+  auto reverse=reversed->Find(5000)->TransitionFor(0);
+  check(reverse && reverse->style==dissolve::Style::Amber,"in-flight reversal keeps the original style");
+  check(reverse&&reverse->keepSuffix&&reverse->At(400)==.5f&&reverse->to==0&&reverse->delayMs==0&&reverse->durationMs==200,
+        "mid-transition reversal continues from current coverage");
+  check(reversed->Find(5000)->TransitionFor(1) && !reversed->Find(5000)->TransitionFor(1)->keepSuffix,"reversing a reveal preserves the selected triangles");
+  check(update(600)->Find(5000)->transitions.empty(),"completed transitions retire");
+  d.groups.front().working.hidden={};
+  check(update(600)->Find(5000)->TransitionFor(1)->delayMs==0,"standalone reveal begins immediately");
+  check(update(610)->Find(5000)->TransitionFor(1)->style==dissolve::Style::Silver,"next fresh transition uses selected silver");
+  localActor.instance.token++;
+  check(update(700)->Find(5000)->transitions.empty(),"replacement actor token cancels previous transition");
+  d.groups.front().working.hidden={first};
+  check(update(800,false)->Find(5000)->transitions.empty()&&update(900)->Find(5000)->transitions.empty(),
+        "immediate mode drops previous transition history");
+  d.groups.front().working.hidden={};
+  check(update(3000)->Find(5000)->transitions.empty(),"stale snapshots never animate");
+  auto wrap=dissolve::Retarget(0,UINT32_MAX-100,0,true,false);
+  check(wrap.At(99)==.5f&&wrap.Finished(299),"32-bit clock rollover preserves B progress");
+ }
  auto temporary=std::filesystem::temp_directory_path()/(L"WorldDiff119-profile-test-"+std::to_wstring(GetCurrentProcessId()));std::filesystem::create_directories(temporary);
  auto& s=Get();s.directory=temporary;s.trackingPlayer=false;s.data=HealthDocument(*other);s.models={*other};s.storageReady=true;
  check(ExportProfile(other->equip),"create canonical profile fixture");auto before=Snapshot();auto scopesBefore=s.loadedScopes;auto fingerprintsBefore=s.loadedFingerprints;bool dirtyBefore=s.dirty;auto filesBefore=std::distance(std::filesystem::recursive_directory_iterator(temporary),std::filesystem::recursive_directory_iterator{});Document loaded;std::string revision;
