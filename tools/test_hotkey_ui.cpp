@@ -49,10 +49,20 @@ int main(int argc,char** argv){try{
  auto snap=[&](const char* suffix){if(argc>1){auto folder=std::string(argv[1])+suffix;SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",folder.c_str());SaveCurrentFrame();SetEnvironmentVariableA("WORLDDIFF_QA_PREVIEW",nullptr);}};
  auto nextId=s.data.nextId;
  click("新建方案");check(s.data.hotkeys.empty()&&s.data.nextId==nextId&&!s.hotkeyDraft.scope.empty(),"New opens a draft without allocating a saved scheme");
- settle();strcpy_s(ui::hotkeyName,"轻装");std::array<bool,256> keys{};ProcessPresetKeys(keys,false,true);click("录制快捷键");check(s.captureHotkey,"real record button arms draft capture");
+ settle();snap("_unbound");strcpy_s(ui::hotkeyName,"轻装");std::array<bool,256> keys{};ProcessPresetKeys(keys,false,true);click("录制快捷键");check(s.captureHotkey,"real record button arms draft capture");
  keys[VK_UP]=true;ProcessPresetKeys(keys,false,true);settle();check(!s.captureHotkey&&s.hotkeyDraft.key==VK_UP&&s.data.hotkeys.empty(),"recording only changes draft");
- click("添加目标分组");settle();click(Find(main)->name.c_str());
- check(s.hotkeyDraft.targets.size()==1&&s.hotkeyDraft.targets[0].preset==shown.id,"adding the chosen group starts from its selected preset");
+ Group coatGroup;coatGroup.id=s.data.nextId++;coatGroup.scope=model.equip;coatGroup.name="上衣";
+ Preset coatPreset;coatPreset.id=s.data.nextId++;coatPreset.name="默认上衣";coatGroup.presets={coatPreset};coatGroup.selected=coatPreset.id;
+ s.data.groups.push_back(coatGroup);
+ click("##选择要添加的分组");settle();
+ check(s.hotkeyDraft.targets.empty()&&keyui::items.contains("上衣"),"arrow opens the group picker without adding a target");
+ snap("_split");click("上衣");
+ check(s.hotkeyDraft.targets.size()==1&&s.hotkeyDraft.targets.front().group==coatGroup.id&&s.hotkeyDraft.targets.front().preset==coatPreset.id,"dropdown adds exactly the chosen group");
+ click("移除");click("添加目标分组");click("添加目标分组");
+ check(s.hotkeyDraft.targets.size()==1&&s.hotkeyDraft.targets.front().group==main&&s.hotkeyDraft.targets.front().preset==shown.id,"body directly adds the main list once with its selected preset");
+ click("##选择要添加的分组");settle();
+ check(keyui::items.contains("上衣")&&!keyui::items.contains("主列表"),"arrow remains usable after the main list has been added");
+ io.AddKeyEvent(ImGuiKey_Escape,true);draw();io.AddKeyEvent(ImGuiKey_Escape,false);settle();
  // Both selectors fill their cell. Repeated frames must not feed their
  // measured widths back into an increasingly uneven split.
  auto originalTheme=s.data.theme;
@@ -76,7 +86,7 @@ int main(int argc,char** argv){try{
  click("新建方案");strcpy_s(ui::hotkeyName,"轻装");click("创建方案");
  check(s.data.hotkeys.size()==1&&s.notice.find("同名")!=std::string::npos&&keyui::items.count("创建方案"),"duplicate name keeps the new draft and original");
  strcpy_s(ui::hotkeyName,"全装");click("录制快捷键");keys={};ProcessPresetKeys(keys,false,true);keys[VK_LEFT]=true;ProcessPresetKeys(keys,false,true);settle();
- click("添加目标分组");settle();click(Find(main)->name.c_str());click("##组合预设");settle();click("显示");click("创建方案");auto second=ui::recentHotkey;
+ click("添加目标分组");settle();click("##组合预设");settle();click("显示");click("创建方案");auto second=ui::recentHotkey;
  check(s.data.hotkeys.size()==2&&FindHotkey(id)->key==VK_UP&&FindHotkey(id)->targets.front().preset==p.id&&FindHotkey(second)->key==VK_LEFT,"creating a second scheme preserves the first");
  // Distinct presets on the same two groups must be distinguishable before Apply.
  {

@@ -146,20 +146,32 @@ void HotkeyDraftTargets(PresetHotkey& draft){
  auto& groups=Get().data.groups;
 
  auto included=[&](uint64_t id){return std::any_of(draft.targets.begin(),draft.targets.end(),[&](const auto& t){return t.group==id;});};
- ImGui::AlignTextToFramePadding();SectionTitle("目标分组");HotkeyInline(HotkeyButtonWidth("添加目标分组"),true);
- if(Button("添加目标分组"))ImGui::OpenPopup("添加分组");
- if(ImGui::BeginPopup("添加分组")){
+ const auto& main=Main(draft.scope);
+ const float h=ImGui::GetFrameHeight();
+ const float bodyWidth=HotkeyButtonWidth("添加目标分组");
+ ImGui::AlignTextToFramePadding();SectionTitle("目标分组");HotkeyInline(bodyWidth+h,true);
+ ImGui::BeginDisabled(draft.targets.size()>=64);
+ ImGui::BeginDisabled(included(main.id));
+ if(paper::active)ImGui::PushStyleColor(ImGuiCol_Button,paper::colors->button);
+ if(ImGui::Button("添加目标分组",{bodyWidth,h}))draft.targets.push_back({main.id,main.selected});
+ if(paper::active)ImGui::PopStyleColor();
+ ImGui::EndDisabled();
+ Tip("直接添加主列表；右侧箭头可选择其他分组。");
+ ImGui::SameLine(0,0);
+ ImGui::SetNextWindowSizeConstraints({bodyWidth+h,0},{FLT_MAX,ImGui::GetTextLineHeightWithSpacing()*12});
+ if(SidebarCombo("##选择要添加的分组",nullptr,ImGuiComboFlags_NoPreview|ImGuiComboFlags_PopupAlignLeft)){
   bool available=false;
   for(const auto& g:groups){
-   if(g.scope!=draft.scope||g.presets.empty()||included(g.id))continue;
+   if(g.scope!=draft.scope||(!g.main&&g.presets.empty())||included(g.id))continue;
    available=true;
    ImGui::PushID(std::to_string(g.id).c_str());
    if(ImGui::Selectable((g.global?"[全局] "+g.name:g.name).c_str()))draft.targets.push_back({g.id,g.selected});
    ImGui::PopID();
   }
-  if(!available)ImGui::TextWrapped("没有可添加的分组，请先保存分组预设。");
-  ImGui::EndPopup();
+  if(!available)ImGui::TextDisabled("没有可添加的分组");
+  ImGui::EndCombo();
  }
+ ImGui::EndDisabled();
  if(draft.targets.empty())return;
  if(!ImGui::BeginTable("快捷键目标",3,ImGuiTableFlags_SizingStretchSame))return;
  ImGui::TableSetupColumn("分组",ImGuiTableColumnFlags_WidthStretch);
@@ -212,16 +224,20 @@ void HotkeyEditor(){
   TextField("##快捷键名称","输入方案名称",hotkeyName,sizeof(hotkeyName));
   if(ImGui::IsItemClicked())s.captureHotkey=false;
   ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::AlignTextToFramePadding();ImGui::TextColored(muted,"快捷键");
-  ImGui::TableNextColumn();HotkeyChip(HotkeyLabel(draft));
+  ImGui::TableNextColumn();
+  const float rowHeight=ImGui::GetFrameHeight();
+  auto key=HotkeyLabel(draft);
+  if(paper::active)InlineChip(key.c_str(),rowHeight);
+  else{ImGui::AlignTextToFramePadding();ImGui::TextUnformatted(key.c_str());}
   if(s.captureHotkey){
    ImGui::TextWrapped("请按快捷键，可带 Ctrl / Shift / Alt。");
    if(Button("取消录制"))s.captureHotkey=false;
   }else{
    HotkeyInline(HotkeyButtonWidth("录制快捷键"));
-   if(Button("录制快捷键")){NativeInputClose();s.captureHotkey=true;}
+   if(PanelButton("录制快捷键",{0,rowHeight})){NativeInputClose();s.captureHotkey=true;}
    if(draft.key){
     HotkeyInline(HotkeyButtonWidth("清除按键"));
-    if(Button("清除按键")){draft.key=0;draft.modifiers=0;}
+    if(PanelButton("清除按键",{0,rowHeight})){draft.key=0;draft.modifiers=0;}
    }
   }
   ImGui::EndTable();

@@ -73,10 +73,12 @@ bool PanelButton(const char* label,ImVec2 size,ButtonTone tone=ButtonTone::Norma
  if(ImGui::IsItemFocused())draw->AddRect(lo,hi,ImGui::GetColorU32(paper::colors->muted),paper::IsGlass()?S(10):0);
  ImGui::PopFont();return hit;
 }
-void InlineChip(const char* label){
+void InlineChip(const char* label,float rowHeight=0){
  auto* font=PaperBold();float size=S(17),pad=S(6);
  float width=font->CalcTextSizeA(size,FLT_MAX,0,label).x+2*pad;
- ImGui::Dummy({width,ImGui::GetFontSize()});auto lo=ImGui::GetItemRectMin(),hi=ImGui::GetItemRectMax();
+ const float chipHeight=ImGui::GetFontSize();
+ ImGui::Dummy({width,rowHeight>0?rowHeight:chipHeight});auto lo=ImGui::GetItemRectMin(),hi=ImGui::GetItemRectMax();
+ lo.y=std::floor((lo.y+hi.y-chipHeight)*.5f);hi.y=lo.y+chipHeight;
  auto* d=ImGui::GetWindowDrawList();if(paper::IsGlass())paper::GlassSurface(d,lo,hi,S(6),IM_COL32_WHITE,paper::glass.keycap,paper::glass.edge);
  else d->AddRectFilled(lo,hi,paper::colors->keycap);
  d->AddText(font,size,{lo.x+pad,lo.y+(hi.y-lo.y-size)*.5f},paper::colors->text,label);
