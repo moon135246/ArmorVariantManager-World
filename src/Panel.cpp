@@ -245,6 +245,34 @@ void MeshNotePopup(){
   if(model!=s.models.end()&&SetMeshNote(*model,meshNoteTarget.value,meshNote))ImGui::CloseCurrentPopup();else s.notice="备注过长、包含控制字符或网格已失效";
  }ImGui::SameLine();if(Button("取消##网格备注"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
 }
+#ifdef WORLDDIFF_HEIGHT_TRIAL
+// Keep the controls in the footer when the mesh list is scrolled or filtered.
+void HeightFooter(bool narrow) {
+ auto c=height_trial::GetControls();
+ ImGui::Separator();
+ if(!c.available){ImGui::TextDisabled("陷地修复 · 此测试版适用于天狐冰狼全套");return;}
+ auto resetAndHelp=[&]{
+  if(Button("归零"))height_trial::SetControls(true,0);
+  ImGui::SameLine();
+  ImGui::SmallButton("i##陷地说明");
+  if(ImGui::IsItemHovered()||ImGui::IsItemFocused())ImGui::SetTooltip("调整本机猎人的显示高度。换装或退出后重置，当前测试值不写入预设。");
+ };
+ if(PanelCheckbox("陷地修复",&c.enabled))height_trial::SetControls(c.enabled,c.cm);
+ ImGui::SameLine();
+ if(narrow){resetAndHelp();}
+ ImGui::AlignTextToFramePadding();ImGui::TextUnformatted("高度 (cm)");ImGui::SameLine();
+ float trailing=S(65)+ImGui::GetStyle().ItemSpacing.x;
+ if(!narrow)trailing+=ImGui::CalcTextSize("归零").x+ImGui::CalcTextSize("i").x+
+     ImGui::GetStyle().FramePadding.x*4+ImGui::GetStyle().ItemSpacing.x*2;
+ ImGui::SetNextItemWidth(std::max(S(24),ImGui::GetContentRegionAvail().x-trailing));
+ if(ImGui::SliderFloat("##陷地滑杆",&c.cm,-10.f,50.f,"%.1f",ImGuiSliderFlags_AlwaysClamp))
+  height_trial::SetControls(c.enabled,c.cm);
+ ImGui::SameLine();ImGui::SetNextItemWidth(S(65));
+ if(ImGui::InputFloat("##陷地数值",&c.cm,0,0,"%.1f",ImGuiInputTextFlags_EnterReturnsTrue))
+  height_trial::SetControls(c.enabled,c.cm);
+ if(!narrow){ImGui::SameLine();resetAndHelp();}
+}
+#endif
 void TargetsPanel(){
  auto& state=Get();auto* current=Find(groupId);if(current&&ActivePreset(*current)&&!creating){ImGui::TextColored(accent,"变身正在控制当前组；基础预设与默认项保持原样");if(Button("暂停变身并编辑")){state.data.transformsEnabled=false;ResetTransforms();Changed("变身已暂停，可以编辑基础显隐");}}
  auto& s=Get();auto* g=Find(groupId);if(!g){ImGui::TextDisabled("等待装备加载…");return;}
@@ -261,7 +289,12 @@ void TargetsPanel(){
 
  const char* parts[]={"全部","头部","身体","手臂","腰部","腿部"};float rowWidth=ImGui::GetContentRegionAvail().x,used=0;for(int p=-1;p<5;p++){float buttonWidth=std::min(rowWidth,ImGui::CalcTextSize(parts[p+1]).x+S(20));if(used&&used+S(8)+buttonWidth<=rowWidth){ImGui::SameLine(0,S(8));used+=S(8);}else used=0;if(PartButton(parts[p+1],part==p,buttonWidth))part=p;used+=buttonWidth;}
  ImGui::Separator();
- ImGui::BeginChild("材质滚动区",ImVec2(0,-S(meshMode&&!creating?52.f:28.f)));
+ float footer=S(meshMode&&!creating?52.f:28.f);
+#ifdef WORLDDIFF_HEIGHT_TRIAL
+ const bool narrow=ImGui::GetContentRegionAvail().x<S(350);
+ footer=(std::max(S(30),ImGui::GetFrameHeight())+ImGui::GetStyle().ItemSpacing.y)*(narrow?2:1)+ImGui::GetStyle().ItemSpacing.y*2+S(8);
+#endif
+ ImGui::BeginChild("材质滚动区",ImVec2(0,-footer));
  std::string filter=Lower(search);DWORD now=GetTickCount();bool any=false;
  for(int slot=0;slot<6;slot++)for(auto& model:s.models){if(model.equip!=outfit||!IsCurrentModel(model.relativePath)||PartIndex(model.part)!=slot||(part!=-1&&part!=slot))continue;auto path=Normalize(model.relativePath);bool active=s.trackingPlayer||s.lastSeen.count(path)&&(DWORD)(now-s.lastSeen[path])<1800;std::string head=std::string(PartName(slot))+"  ·  "+model.display+(active?"  [已加载]":"  [待加载]");ImGui::PushID(path.c_str());
   bool expanded;
@@ -305,8 +338,15 @@ void TargetsPanel(){
   }ImGui::PopID();
  }
  if(!any)ImGui::TextColored(muted,"尚无匹配材质。\n请进入场景、选择装备，或清空搜索。");
- ImGui::EndChild();ImGui::TextColored(muted,creating?"勾选 = 加入分组；普通组不能重复占用成员":"勾选 = 显示；取消 = 隐藏；恢复时保留游戏自身显隐");
+#ifndef WORLDDIFF_HEIGHT_TRIAL
+ ImGui::EndChild();
+#endif
+ ImGui::TextColored(muted,creating?"勾选 = 加入分组；普通组不能重复占用成员":"勾选 = 显示；取消 = 隐藏；恢复时保留游戏自身显隐");
  if(meshMode&&!creating)ImGui::TextColored(muted,"拖动网格名称调整顺序；右键编辑备注");MeshNotePopup();
+#ifdef WORLDDIFF_HEIGHT_TRIAL
+ ImGui::EndChild();
+ HeightFooter(narrow);
+#endif
 }
 #include "HotkeyPanel.inl"
 #include "TransformPanel.inl"
@@ -359,12 +399,6 @@ void AboutPanel(){
 }
 void SettingsPanel(){
  PaperKicker("//  SETTINGS",14);
-#ifdef WORLDDIFF_HEIGHT_TRIAL
- ImGui::Text("天狐陷地实测 · 当前请求 %+d cm",height_trial::Height());
- if(Button("开始 0 → +10 → 0 cm"))height_trial::StartSequence();
- ImGui::SameLine();if(Button("立即归零"))height_trial::Reset();
- ImGui::TextWrapped("穿戴天狐冰狼全套时，每阶段持续 8 秒。可以关闭面板观察脚底、衣服和武器。");
-#endif
  auto& s=Get();const char* themes[]={"基础","经典白","经典黑","玻璃态"};
  ImGui::SetNextItemWidth(std::min(S(210),ImGui::GetContentRegionAvail().x*.55f));
  if(SidebarCombo("界面风格",themes[static_cast<int>(s.data.theme)])){

@@ -3,7 +3,7 @@
 namespace worlddiff::height_trial {
 void Install();
 void Tick();
-void StartSequence();
-void Reset();
-int Height();
+struct Controls { bool available, enabled; float cm; };
+Controls GetControls();
+void SetControls(bool enabled, float cm);
 }
