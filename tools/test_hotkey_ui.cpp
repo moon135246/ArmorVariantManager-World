@@ -6,9 +6,9 @@
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
-namespace keyui {bool applyDisabled=false;std::map<std::string,ImRect> items;std::vector<std::string> text;}
+namespace keyui {int removeButtons=0;bool applyDisabled=false;std::map<std::string,ImRect> items;std::vector<std::string> text;}
 namespace ImGui {
-bool KeyTrackedButton(const char* label,const ImVec2& size=ImVec2(0,0)){auto hit=Button(label,size);if(std::strcmp(label,"应用预设")==0)keyui::applyDisabled=(GetCurrentContext()->LastItemData.ItemFlags&ImGuiItemFlags_Disabled)!=0;keyui::items[label]={GetItemRectMin(),GetItemRectMax()};return hit;}
+bool KeyTrackedButton(const char* label,const ImVec2& size=ImVec2(0,0)){auto hit=Button(label,size);if(std::strcmp(label,"应用预设")==0)keyui::applyDisabled=(GetCurrentContext()->LastItemData.ItemFlags&ImGuiItemFlags_Disabled)!=0;keyui::items[label]={GetItemRectMin(),GetItemRectMax()};if(std::strcmp(label,"移除")==0)keyui::items["移除行"+std::to_string(keyui::removeButtons++)]=keyui::items[label];return hit;}
 bool KeyTrackedCheckbox(const char* label,bool* value){auto hit=Checkbox(label,value);keyui::items[label]={GetItemRectMin(),GetItemRectMax()};return hit;}
 bool KeyTrackedCombo(const char* label,const char* preview,ImGuiComboFlags flags=0){auto bounds=ImRect(GetCursorScreenPos(),GetCursorScreenPos());auto hit=BeginCombo(label,preview,flags);if(!hit)bounds={GetItemRectMin(),GetItemRectMax()};else{auto& last=GetCurrentContext()->LastItemData;bounds=last.Rect;}keyui::items[label]=bounds;return hit;}
 bool KeyTrackedSelectable(const char* label,bool selected=false,ImGuiSelectableFlags flags=0,const ImVec2& size=ImVec2(0,0)){auto hit=Selectable(label,selected,flags,size);keyui::items[label]={GetItemRectMin(),GetItemRectMax()};return hit;}
@@ -39,7 +39,7 @@ int main(int argc,char** argv){try{
  Model model;model.equip="pl105_0000";model.part="body";model.relativePath="pl\\f_equip\\pl105_0000\\body\\mod\\f_body105_0000";s.models={model};auto main=Main(model.equip).id;Preset p;p.id=s.data.nextId++;p.name="隐藏";p.rules.hidden.insert({model.relativePath,0,true});Preset shown;shown.id=s.data.nextId++;shown.name="显示";Find(main)->presets={p,shown};Find(main)->selected=shown.id;ui::outfit=model.equip;ui::groupId=main;s.data.hideDragHint=true;
  ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DeltaTime=1.f/60;ImFontGlyphRangesBuilder range;range.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());range.AddText("编辑明月别枝预设快捷键互斥录制黎明巫女↑↓←→");ImVector<ImWchar> glyphs;range.BuildRanges(&glyphs);if(!worlddiff::fonts::LoadPanelFonts(*io.Fonts,glyphs.Data))return 1;unsigned char* atlas;int w,h;io.Fonts->GetTexDataAsRGBA32(&atlas,&w,&h);auto& style=ImGui::GetStyle();style.FramePadding={9,6};style.ItemSpacing={10,8};style.FrameRounding=6;style.ChildRounding=8;style.Colors[ImGuiCol_WindowBg]={.078f,.094f,.125f,.97f};style.Colors[ImGuiCol_ChildBg]={.122f,.149f,.188f,.98f};style.Colors[ImGuiCol_Button]={.13f,.30f,.35f,1};style.Colors[ImGuiCol_Text]={.945f,.957f,.972f,1};style.Colors[ImGuiCol_CheckMark]={.33f,.72f,.78f,1};
  struct Case {float x,y,scale,width,height;};Case cases[]={{1920,1080,.7f,1022,595},{1920,1080,1,1460,850},{1920,1080,1,1050,620},{1280,720,1,1050,620},{3840,2160,1.5f,2190,1275}};auto active=cases[1];int page=2;
- auto draw=[&]{io.DisplaySize={active.x,active.y};s.data.scale=active.scale;ui::tab=page;keyui::items.clear();keyui::text.clear();ImGui::NewFrame();ImGui::SetWindowPos("###WorldDiffInternal",{20,20});ImGui::SetWindowSize("###WorldDiffInternal",{active.width,active.height});ui::DrawPanel();ImGui::Render();};
+ auto draw=[&]{io.DisplaySize={active.x,active.y};s.data.scale=active.scale;ui::tab=page;keyui::items.clear();keyui::removeButtons=0;keyui::text.clear();ImGui::NewFrame();ImGui::SetWindowPos("###WorldDiffInternal",{20,20});ImGui::SetWindowSize("###WorldDiffInternal",{active.width,active.height});ui::DrawPanel();ImGui::Render();};
  auto settle=[&]{for(int i=0;i<3;i++)draw();};auto click=[&](const char* label){auto it=keyui::items.find(label);if(it==keyui::items.end())throw std::runtime_error(std::string("missing widget: ")+label);auto point=it->second.GetCenter();io.AddMousePosEvent(point.x,point.y);io.AddMouseButtonEvent(0,true);draw();io.AddMouseButtonEvent(0,false);draw();draw();};
  auto modalActive=[&]{for(auto* window:ImGui::GetCurrentContext()->Windows)if(window->Active&&std::strstr(window->Name,"功能互斥提示"))return true;return false;};
  settle();check(keyui::items.count("预设快捷键")&&keyui::items.count("设置")&&keyui::items.count("关于"),"five tabs use the requested ordering and abbreviated names");check(keyui::items.at("预设快捷键").Min.x>keyui::items.at("变身与条件").Min.x&&keyui::items.at("设置").Min.x>keyui::items.at("预设快捷键").Min.x,"shortcut tab sits between transformation and settings at standard width");
@@ -68,7 +68,11 @@ int main(int argc,char** argv){try{
  check(MoveGroupBefore(sleeveGroup.id,coatGroup.id),"reorder eligible groups");
  click("添加目标分组");click("添加目标分组");click("添加目标分组");
  check(s.hotkeyDraft.targets.size()==3&&s.hotkeyDraft.targets[0].group==main&&s.hotkeyDraft.targets[1].group==sleeveGroup.id&&s.hotkeyDraft.targets[1].preset==sleeveGroup.selected&&s.hotkeyDraft.targets[2].group==coatGroup.id,"consecutive clicks follow the current displayed order and selected presets");
- click("移除");click("移除");
+ click("移除行0");click("添加目标分组");
+ check(s.hotkeyDraft.targets.size()==3&&s.hotkeyDraft.targets[0].group==sleeveGroup.id&&s.hotkeyDraft.targets[1].group==coatGroup.id&&s.hotkeyDraft.targets[2].group==main,"removing the main list makes it the next addition while keeping existing rows in place");
+ click("移除行0");click("移除行0");click("添加目标分组");
+ check(s.hotkeyDraft.targets.size()==2&&s.hotkeyDraft.targets[0].group==main&&s.hotkeyDraft.targets[1].group==sleeveGroup.id,"after multiple removals the earliest missing non-main group wins");
+ click("移除");
  check(s.hotkeyDraft.targets.size()==1&&s.hotkeyDraft.targets.front().group==main&&s.hotkeyDraft.targets.front().preset==shown.id,"body directly adds the main list once with its selected preset");
  click("##选择要添加的分组");settle();
  check(keyui::items.contains("上衣")&&!keyui::items.contains("主列表"),"arrow remains usable after the main list has been added");
