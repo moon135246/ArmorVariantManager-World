@@ -81,9 +81,9 @@ void InlineChip(const char* label){
  else d->AddRectFilled(lo,hi,paper::colors->keycap);
  d->AddText(font,size,{lo.x+pad,lo.y+(hi.y-lo.y-size)*.5f},paper::colors->text,label);
 }
-bool PanelCheckbox(const char* label,bool* value,bool sidebar=false){
+bool PanelCheckbox(const char* label,bool* value,bool sidebar=false,bool useFrameHeight=false){
  if(!paper::active)return ImGui::Checkbox(label,value);
- ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,ImVec2(ImGui::GetStyle().FramePadding.x,sidebar?std::max(0.f,(S(25)-ImGui::GetFontSize())*.5f):S(3)));
+ ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,ImVec2(ImGui::GetStyle().FramePadding.x,useFrameHeight?ImGui::GetStyle().FramePadding.y:sidebar?std::max(0.f,(S(25)-ImGui::GetFontSize())*.5f):S(3)));
  if(sidebar||paper::IsNight()||paper::IsGlass()){
   // Keep the native checkbox hit target, label and keyboard navigation.
   for(auto col:{ImGuiCol_FrameBg,ImGuiCol_FrameBgHovered,ImGuiCol_FrameBgActive,ImGuiCol_CheckboxSelectedBg,ImGuiCol_CheckMark})

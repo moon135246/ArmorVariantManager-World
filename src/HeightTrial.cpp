@@ -5,21 +5,14 @@
 #include <atomic>
 #include <cmath>
 #include <cstring>
-#include <algorithm>
 #include <mutex>
 
 namespace worlddiff::height_trial {
 namespace {
 std::atomic<uintptr_t> target{};
-std::atomic<ULONGLONG> start{};
-std::atomic<unsigned> frames{};
+std::atomic<uintptr_t> bodyResource{};
 std::atomic<float> applied{};
-std::mutex controlMutex;
-bool enabled=false;
-float draftCm=10.0f;
 SafetyHookMid fullPose, partialPose;
-constexpr auto outfit = "pl\\f_equip\\pl105_0000\\";
-constexpr char bodyPath[] = "pl\\f_equip\\pl105_0000\\body\\mod\\f_body105_0000";
 
 // Both pose loops have just computed a fresh world matrix. The leg IK targets
 // are parentless too. Preserve their displacement relative to the hips.
@@ -32,25 +25,13 @@ void Adjust(SafetyHookContext& context) {
         if (*reinterpret_cast<unsigned char*>(joint + 0xa4) != 255 ||
             *reinterpret_cast<uintptr_t*>(joint + 0xb0) != actor) return;
         auto model = *reinterpret_cast<uintptr_t*>(actor + 0x2a0);
-        if (!model || memcmp(reinterpret_cast<const char*>(model + 12),bodyPath,sizeof(bodyPath))) return;
+        if (!model || model!=bodyResource.load(std::memory_order_relaxed)) return;
         auto& y = *reinterpret_cast<float*>(joint + 0x54);
-        if (std::isfinite(y)) { y += cm; ++frames; }
+        if (std::isfinite(y)) y += cm;
     } __except(EXCEPTION_EXECUTE_HANDLER) {}
 }
 void FullPose(SafetyHookContext& context) { if (context.rsi) Adjust(context); }
 void PartialPose(SafetyHookContext& context) { if (context.rbp) Adjust(context); }
-}
-Controls GetControls() {
-    std::lock_guard lock(controlMutex);
-    return {target.load()!=0,enabled,draftCm};
-}
-void SetControls(bool on, float cm) {
-    std::lock_guard lock(controlMutex);
-    if(!target.load() || !std::isfinite(cm)) return;
-    start=0;
-    draftCm=std::round(std::clamp(cm,-10.0f,50.0f)*10.0f)/10.0f;
-    enabled=on;
-    applied=on?draftCm:0.0f;
 }
 void Install() {
     auto base=reinterpret_cast<unsigned char*>(GetModuleHandleW(nullptr));
@@ -64,26 +45,18 @@ void Install() {
     RuntimeLog("Height trial: world joint callbacks %s",fullPose && partialPose?"ready":"unavailable");
 }
 void Tick() {
-    auto model=app::ReadPlayerOutfit();
-    bool eligible=fullPose && partialPose && model.ready;
-    for(const auto& path:model.paths) eligible=eligible && path.starts_with(outfit);
-    auto actor=eligible?model.entity:0;
-    std::lock_guard lock(controlMutex);
-    if(target.load()!=actor) {
-        applied=0; start=0; enabled=false; draftCm=10; target=actor;
+    auto& state=app::Get();
+    std::lock_guard lock(state.mutex);
+    const auto& model=state.outfit;
+    const auto height=app::WornEquipmentHeight(model);
+    if (!height.enabled || !fullPose || !partialPose || !model.resources[1]) {
+        applied=0;
+        target=0;
+        return;
     }
-    // The local diagnostic retains the three-stage sequence from Beta.2.
-    static const auto trigger=PluginDirectory()/L"WorldDiff"/L"height-sequence.test";
-    std::error_code error;
-    if(actor && std::filesystem::remove(trigger,error)) {
-        frames=0; applied=0; enabled=false; draftCm=10;
-        start=GetTickCount64(); RuntimeLog("Gait trial: start 0/+10/0");
-    }
-    auto begin=start.load();
-    if(!begin) return;
-    auto elapsed=GetTickCount64()-begin;
-    enabled=elapsed>=8000 && elapsed<16000;
-    applied=enabled?10.0f:0.0f;
-    if(elapsed>=24000) { RuntimeLog("Gait trial: completed, adjusted roots=%u",frames.load()); start=0; }
+    if (target.load()!=model.entity || bodyResource.load()!=model.resources[1]) applied=0;
+    bodyResource=model.resources[1];
+    target=model.entity;
+    applied=height.tenthsCm/10.f;
 }
 }

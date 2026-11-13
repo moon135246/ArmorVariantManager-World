@@ -34,7 +34,13 @@ struct MeshBinding {
  std::string model;
  uint32_t index=0,material=0,ordinal=0,vertices=0,indices=0,lod=0;
 };
+struct EquipmentHeight {
+ bool enabled=false;
+ int tenthsCm=0;
+ bool operator==(const EquipmentHeight&) const = default;
+};
 struct Document {
+ std::map<std::string,EquipmentHeight> equipmentHeights;
  // Geometry for rules parked on a non-renderable model until a variant returns.
  std::vector<MeshBinding> inactiveMeshes;
  std::map<std::pair<std::string,uint32_t>,std::string> materialNames;
@@ -100,6 +106,9 @@ struct State {
 State& Get();
 void Initialize(SharedState*,const std::filesystem::path& pluginDir,const std::filesystem::path& gameRoot);
 void Tick();
+EquipmentHeight GetEquipmentHeight(const std::string& scope);
+void SetEquipmentHeight(const std::string& scope,EquipmentHeight value);
+EquipmentHeight WornEquipmentHeight(const OutfitSnapshot& outfit);
 void Changed(const std::string& message={});
 bool Save();bool Load();
 std::string Normalize(std::string);

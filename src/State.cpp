@@ -19,6 +19,26 @@ bool InGroup(const Group& g,const std::string& model,uint32_t material){if(Equip
 bool RuleHidden(const Rules& r,const std::string& p,uint32_t mesh,uint32_t material){if(r.shown.count({p,mesh,true}))return false;return r.hidden.count({p,mesh,true})||r.hidden.count({p,material,false});}
 bool GlobalHidden(const std::string& p,uint32_t mesh,uint32_t material){for(auto& g:Get().data.groups)if(g.global&&InGroup(g,p,material)&&RuleHidden(EffectiveRules(g),p,mesh,material))return true;return false;}
 bool Hidden(const std::string& p,uint32_t mesh,uint32_t material){if(GlobalHidden(p,mesh,material))return true;if(auto* owner=Owner(p,material))return RuleHidden(EffectiveRules(*owner),p,mesh,material);for(auto& g:Get().data.groups)if(g.main&&g.scope==Equip(p))return RuleHidden(EffectiveRules(g),p,mesh,material);return false;}
+EquipmentHeight GetEquipmentHeight(const std::string& scope){
+ auto& heights=Get().data.equipmentHeights;
+ auto it=heights.find(scope);
+ return it==heights.end()?EquipmentHeight{}:it->second;
+}
+void SetEquipmentHeight(const std::string& scope,EquipmentHeight value){
+ if(scope.empty()||!CanEditScope(scope))return;
+ value.tenthsCm=std::clamp(value.tenthsCm,-100,500);
+ if(value==GetEquipmentHeight(scope))return;
+ if(value==EquipmentHeight{})Get().data.equipmentHeights.erase(scope);
+ else Get().data.equipmentHeights[scope]=value;
+ Main(scope);
+ Changed();
+}
+EquipmentHeight WornEquipmentHeight(const OutfitSnapshot& outfit){
+ if(!outfit.ready||outfit.paths[4].empty())return {};
+ const auto scope=Equip(outfit.paths[4]);
+ if(!Get().data.enabled||!CanEditScope(scope))return {};
+ return GetEquipmentHeight(scope);
+}
 void Changed(const std::string& text){auto& s=Get();s.dirty=true;s.dirtyAt=GetTickCount();if(!text.empty())s.notice=text;}
 static void ClearMaterialMeshOverrides(Rules& r,const Target& material){auto& s=Get();for(auto& m:s.models)if(Normalize(m.relativePath)==material.model)for(auto& mesh:m.meshes)if(mesh.materialId<m.materials.size()&&m.materials[mesh.materialId].hash==material.value){r.hidden.erase({material.model,mesh.index,true});r.shown.erase({material.model,mesh.index,true});}}
 void SetVisible(Group& g,const Target& t,bool visible){

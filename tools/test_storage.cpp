@@ -142,8 +142,37 @@ int main(int argc,char** argv){try{
  auto beforeSceneSwitch=Read(liveFile);auto preview=inspected;preview.savePreview=true;Follow(preview);check(s.outfit.ready&&s.outfit.savePreview&&Find(gid),"save preview activates the same equipment profile without changing its identity");
  FollowPlayerOutfit({});check(!CanEditScope(a.equip)&&!IsLocalModelContext(preview.contexts[2]),"leaving save selection immediately clears preview editing and visibility");
  Follow(inspected);check(s.outfit.ready&&!s.outfit.savePreview&&Read(liveFile)==beforeSceneSwitch,"gameplay retakes even identical cached contexts without rewriting the WDP");
+ SetEquipmentHeight(a.equip,{true,87});Follow(bathSnapshot);SetEquipmentHeight(b.equip,{false,-12});
+ Follow(inspected);check(WornEquipmentHeight(s.outfit)==EquipmentHeight{true,87},"outfit change flushes and restores the first equipment height");
+ Follow(bathSnapshot);check(WornEquipmentHeight(s.outfit)==EquipmentHeight{false,-12},"returning to disabled equipment restores its remembered offset without enabling it");
+ Follow(inspected);
  auto mixed=inspected;mixed.paths[0]=bathSnapshot.paths[0];mixed.resources[0]=bathSnapshot.resources[0];mixed.contexts[0]=bathSnapshot.contexts[0];Follow(mixed);check(s.loadedScopes.size()==2&&IsCurrentModel(mixed.paths[0])&&!IsCurrentModel(inspected.paths[0]),"mixed appearance includes only actually worn parts and scopes");
  FollowPlayerOutfit({});check(!CanEditScope(a.equip)&&!IsLocalModelContext(inspected.contexts[2]),"missing player disables editing and local visibility overrides");
+ Reset(root/L"equipment-height");s.models={a,b};Main(a.equip);Main(b.equip);
+ SetEquipmentHeight(a.equip,{true,105});SetEquipmentHeight(b.equip,{false,-32});
+ check(SaveEquipmentProfiles(),"height alone creates equipment files");
+ const auto heightFile=s.directory/L"Presets/pl105_0000.wdp";
+ auto heightContent=Read(heightFile);
+ check(heightContent.find("HEIGHT 1 105")!=std::string::npos,"WDP stores enabled and tenths of a cm");
+ s.data.equipmentHeights.clear();
+ check(LoadEquipmentProfile(a.equip)&&LoadEquipmentProfile(b.equip)&&GetEquipmentHeight(a.equip)==EquipmentHeight{true,105}&&GetEquipmentHeight(b.equip)==EquipmentHeight{false,-32},"reload both heights including disabled draft");
+ OutfitSnapshot worn;worn.ready=true;worn.paths[1]=a.relativePath;worn.paths[4]=b.relativePath;
+ check(WornEquipmentHeight(worn)==EquipmentHeight{false,-32},"mixed outfit takes leg scope only");
+ worn.paths[4]=a.relativePath;check(WornEquipmentHeight(worn)==EquipmentHeight{true,105},"switch back restores leg scope");
+ auto& baseGroup=Main(a.equip);
+ check(SavePreset(baseGroup,"差分")&&ApplyPreset(baseGroup,baseGroup.selected)&&GetEquipmentHeight(a.equip)==EquipmentHeight{true,105},"visibility preset does not alter equipment height");
+ check(ExportProfile(a.equip,"同款外观")&&ApplyProfile(b.equip,"同款外观.wdp")&&GetEquipmentHeight(b.equip)==EquipmentHeight{true,105},"template import remaps height to destination equipment");
+ SetEquipmentHeight(a.equip,{});check(ExportProfile(a.equip,"旧格式")&&ApplyProfile(b.equip,"旧格式.wdp")&&GetEquipmentHeight(b.equip)==EquipmentHeight{},"legacy profile clears an earlier offset");
+ auto history=ProfileBackups(b.equip);bool restored=false;
+ for(const auto& name:history)if(Read(s.directory/L"Backups"/PathUtf8(b.equip)/PathUtf8(name)).find("HEIGHT 0 -32")!=std::string::npos){
+  restored=RestoreProfileBackup(b.equip,name)&&GetEquipmentHeight(b.equip)==EquipmentHeight{false,-32};break;
+ }
+ check(restored,"restoring a WDP backup restores both height fields");
+ check(ExportProfile(b.equip,"另一外观")&&ApplyProfile(a.equip,"同款外观.wdp")&&GetEquipmentHeight(a.equip)==EquipmentHeight{true,105},"switch to first appearance on the same equipment ID");
+ check(ApplyProfile(a.equip,"另一外观.wdp")&&GetEquipmentHeight(a.equip)==EquipmentHeight{false,-32},"same equipment ID restores second appearance values");
+ check(ApplyProfile(a.equip,"同款外观.wdp")&&GetEquipmentHeight(a.equip)==EquipmentHeight{true,105},"switching back restores first appearance values");
+ auto invalidHeight=heightContent;invalidHeight.replace(invalidHeight.find("HEIGHT 1 105"),12,"HEIGHT 1 501");Write(heightFile,invalidHeight);
+ check(!LoadEquipmentProfile(a.equip)&&GetEquipmentHeight(a.equip)==EquipmentHeight{}&&Read(heightFile)==invalidHeight,"invalid equipment height cannot be applied");
  if(argc>1){Reset(root/L"actual");auto input=PathUtf8(argv[1]);fs::copy(input,s.directory,fs::copy_options::recursive|fs::copy_options::overwrite_existing);s.models=LoadCatalog(argc>2?PathUtf8(argv[2]):fs::path{});auto actual=Read(s.directory/L"WorldDiff115.cfg");Document oldDocument;std::istringstream original(actual);check(ReadDocument(original,oldDocument),"real legacy document fixture is valid");check(!actual.empty()&&MigrateStorage(),"real copied game configuration migrates offline");check(fs::exists(s.directory/L"Presets/pl105_0000.wdp")&&fs::exists(s.configPath),"real migration produces equipment file and small settings");check(LoadEquipmentProfile("pl105_0000"),"real migrated WDP validates against installed model tables");
   size_t groups=0,presets=0,views=0,transforms=0;for(auto& g:oldDocument.groups)if(g.scope=="pl105_0000"){groups++;presets+=g.presets.size();}for(auto& [t,v]:oldDocument.meshDisplay)if(Equip(t.model)=="pl105_0000")views++;for(auto& r:oldDocument.transforms)if(r.scope=="pl105_0000")transforms++;size_t actualPresets=0;for(auto& g:s.data.groups)actualPresets+=g.presets.size();check(s.data.groups.size()==groups&&actualPresets==presets&&s.data.meshDisplay.size()==views&&s.data.transforms.size()==transforms,"real groups presets mesh notes order and transform counts all preserved");}
  std::cout<<"PASS "<<checks<<" storage and current-player appearance checks\nArtifacts "<<root.string()<<'\n';return 0;

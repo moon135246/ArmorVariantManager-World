@@ -13,8 +13,8 @@ set "PROBE_SOURCE="
 set "EFFECT_LIB="
 set "STYLE_FLAG="
 if "%~1"=="" (
-  set "STYLE_FLAG=/DWORLDDIFF_SILVER_FLOW"
-  set "PROBE_SOURCE=src\SilverGeometry.cpp src\SilverPipeline.cpp src\SilverBindings.cpp"
+  set "STYLE_FLAG=/DWORLDDIFF_SILVER_FLOW /DWORLDDIFF_HEIGHT_TRIAL"
+  set "PROBE_SOURCE=src\HeightTrial.cpp src\SilverGeometry.cpp src\SilverPipeline.cpp src\SilverBindings.cpp"
   set "EFFECT_LIB=d3dcompiler.lib"
 )
 if /i "%~1"=="silver-beta" (
