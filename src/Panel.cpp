@@ -1,5 +1,8 @@
 #include "Overlay.h"
 #include "Version.h"
+#ifdef WORLDDIFF_HEIGHT_TRIAL
+#include "HeightTrial.h"
+#endif
 #include "State.h"
 #include "ArmorNames.h"
 #include "NativeInput.h"
@@ -356,6 +359,12 @@ void AboutPanel(){
 }
 void SettingsPanel(){
  PaperKicker("//  SETTINGS",14);
+#ifdef WORLDDIFF_HEIGHT_TRIAL
+ ImGui::Text("天狐陷地实测 · 当前请求 %+d cm",height_trial::Height());
+ if(Button("开始 0 → +10 → 0 cm"))height_trial::StartSequence();
+ ImGui::SameLine();if(Button("立即归零"))height_trial::Reset();
+ ImGui::TextWrapped("穿戴天狐冰狼全套时，每阶段持续 8 秒。可以关闭面板观察脚底、衣服和武器。");
+#endif
  auto& s=Get();const char* themes[]={"基础","经典白","经典黑","玻璃态"};
  ImGui::SetNextItemWidth(std::min(S(210),ImGui::GetContentRegionAvail().x*.55f));
  if(SidebarCombo("界面风格",themes[static_cast<int>(s.data.theme)])){

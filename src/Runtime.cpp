@@ -12,6 +12,9 @@
 #include "Overlay.h"
 #include "SceneRenderer.h"
 #include "VisibilityQueryHook.h"
+#ifdef WORLDDIFF_HEIGHT_TRIAL
+#include "HeightTrial.h"
+#endif
 #ifdef WORLDDIFF_DISSOLVE_PROBE
 #include "DissolveProbe.h"
 #endif
@@ -198,6 +201,9 @@ DWORD WINAPI Start(void* arg){
  app::Initialize(shared,pluginDirectory,std::filesystem::path(gameExe).parent_path());
  SetMessage("WorldDiff " WORLDDIFF_VERSION_TEXT " internal ready; default panel keys: F9 / Home.");InterlockedExchange(&shared->ready,1);
  if(!overlay::Install())RuntimeLog("Overlay initialization failed; visibility controls remain available to diagnostics.");
+#ifdef WORLDDIFF_HEIGHT_TRIAL
+ height_trial::Install();
+#endif
  for(;;){visualControllerLoaded.store(GetModuleHandleW(L"visual_controller_v5.dll")||GetModuleHandleW(L"MHWI-VisualControllerExtended.dll"),std::memory_order_relaxed);app::Tick();overlay::WorkerTick();
 #ifdef WORLDDIFF_DISSOLVE_PROBE
   dissolve_probe::Tick(pluginDirectory / L"WorldDiff");
@@ -206,6 +212,9 @@ DWORD WINAPI Start(void* arg){
   scene_handoff::Tick(pluginDirectory / L"WorldDiff",std::filesystem::path(gameExe).parent_path());
 #endif
   scene_renderer::Tick(pluginDirectory / L"WorldDiff");
+#ifdef WORLDDIFF_HEIGHT_TRIAL
+  height_trial::Tick();
+#endif
   Sleep(100);}
 }
 }

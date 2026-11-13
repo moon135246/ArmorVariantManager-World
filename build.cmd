@@ -23,6 +23,12 @@ if /i "%~1"=="silver-beta" (
   set "PROBE_SOURCE=src\SilverGeometry.cpp src\SilverPipeline.cpp src\SilverBindings.cpp"
   set "EFFECT_LIB=d3dcompiler.lib"
 )
+if /i "%~1"=="height-beta" (
+  set "OUT=build\height-beta"
+  set "PROBE_FLAG=/DWORLDDIFF_HEIGHT_TRIAL /DWORLDDIFF_SILVER_FLOW"
+  set "PROBE_SOURCE=src\HeightTrial.cpp src\SilverGeometry.cpp src\SilverPipeline.cpp src\SilverBindings.cpp"
+  set "EFFECT_LIB=d3dcompiler.lib"
+)
 if /i "%~1"=="dissolve-probe" (
   set "OUT=build\dissolve-probe"
   set "PROBE_FLAG=/DWORLDDIFF_DISSOLVE_PROBE /DWORLDDIFF_HANDOFF_TRIAL"
