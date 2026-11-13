@@ -147,28 +147,38 @@ void HotkeyDraftTargets(PresetHotkey& draft){
 
  auto included=[&](uint64_t id){return std::any_of(draft.targets.begin(),draft.targets.end(),[&](const auto& t){return t.group==id;});};
  const auto& main=Main(draft.scope);
+ auto available=[&](const Group& g){return g.scope==draft.scope&&(g.main||!g.presets.empty())&&!included(g.id);};
+ const Group* next=&main;
+ if(included(main.id)){
+  const auto it=std::find_if(groups.begin(),groups.end(),available);
+  next=it==groups.end()?nullptr:&*it;
+ }
  const float h=ImGui::GetFrameHeight();
  const float bodyWidth=HotkeyButtonWidth("添加目标分组");
  ImGui::AlignTextToFramePadding();SectionTitle("目标分组");HotkeyInline(bodyWidth+h,true);
  ImGui::BeginDisabled(draft.targets.size()>=64);
- ImGui::BeginDisabled(included(main.id));
+ ImGui::BeginDisabled(!next);
  if(paper::active)ImGui::PushStyleColor(ImGuiCol_Button,paper::colors->button);
- if(ImGui::Button("添加目标分组",{bodyWidth,h}))draft.targets.push_back({main.id,main.selected});
+ if(ImGui::Button("添加目标分组",{bodyWidth,h})&&next)draft.targets.push_back({next->id,next->selected});
  if(paper::active)ImGui::PopStyleColor();
  ImGui::EndDisabled();
- Tip("直接添加主列表；右侧箭头可选择其他分组。");
+ if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)){
+  if(draft.targets.size()>=64)ImGui::SetTooltip("已达到 64 个目标分组上限");
+  else if(next)ImGui::SetTooltip("点击添加：%s",next->name.c_str());
+  else ImGui::SetTooltip("没有可添加的分组");
+ }
  ImGui::SameLine(0,0);
  ImGui::SetNextWindowSizeConstraints({bodyWidth+h,0},{FLT_MAX,ImGui::GetTextLineHeightWithSpacing()*12});
  if(SidebarCombo("##选择要添加的分组",nullptr,ImGuiComboFlags_NoPreview|ImGuiComboFlags_PopupAlignLeft)){
-  bool available=false;
+  bool any=false;
   for(const auto& g:groups){
-   if(g.scope!=draft.scope||(!g.main&&g.presets.empty())||included(g.id))continue;
-   available=true;
+   if(!available(g))continue;
+   any=true;
    ImGui::PushID(std::to_string(g.id).c_str());
    if(ImGui::Selectable((g.global?"[全局] "+g.name:g.name).c_str()))draft.targets.push_back({g.id,g.selected});
    ImGui::PopID();
   }
-  if(!available)ImGui::TextDisabled("没有可添加的分组");
+  if(!any)ImGui::TextDisabled("没有可添加的分组");
   ImGui::EndCombo();
  }
  ImGui::EndDisabled();

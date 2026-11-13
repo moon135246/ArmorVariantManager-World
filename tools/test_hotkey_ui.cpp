@@ -58,7 +58,17 @@ int main(int argc,char** argv){try{
  check(s.hotkeyDraft.targets.empty()&&keyui::items.contains("上衣"),"arrow opens the group picker without adding a target");
  snap("_split");click("上衣");
  check(s.hotkeyDraft.targets.size()==1&&s.hotkeyDraft.targets.front().group==coatGroup.id&&s.hotkeyDraft.targets.front().preset==coatPreset.id,"dropdown adds exactly the chosen group");
- click("移除");click("添加目标分组");click("添加目标分组");
+ Group sleeveGroup=coatGroup;sleeveGroup.id=s.data.nextId++;sleeveGroup.name="袖子";
+ sleeveGroup.presets[0].id=s.data.nextId++;sleeveGroup.selected=sleeveGroup.presets[0].id;
+ s.data.groups.push_back(sleeveGroup);
+ click("添加目标分组");click("添加目标分组");
+ check(s.hotkeyDraft.targets.size()==3&&s.hotkeyDraft.targets[1].group==main&&s.hotkeyDraft.targets[2].group==sleeveGroup.id,"skip manually picked coat while adding main then sleeve");
+ click("添加目标分组");check(s.hotkeyDraft.targets.size()==3,"no duplicate after exhausting eligible groups");
+ click("移除");click("移除");click("移除");
+ check(MoveGroupBefore(sleeveGroup.id,coatGroup.id),"reorder eligible groups");
+ click("添加目标分组");click("添加目标分组");click("添加目标分组");
+ check(s.hotkeyDraft.targets.size()==3&&s.hotkeyDraft.targets[0].group==main&&s.hotkeyDraft.targets[1].group==sleeveGroup.id&&s.hotkeyDraft.targets[1].preset==sleeveGroup.selected&&s.hotkeyDraft.targets[2].group==coatGroup.id,"consecutive clicks follow the current displayed order and selected presets");
+ click("移除");click("移除");
  check(s.hotkeyDraft.targets.size()==1&&s.hotkeyDraft.targets.front().group==main&&s.hotkeyDraft.targets.front().preset==shown.id,"body directly adds the main list once with its selected preset");
  click("##选择要添加的分组");settle();
  check(keyui::items.contains("上衣")&&!keyui::items.contains("主列表"),"arrow remains usable after the main list has been added");
