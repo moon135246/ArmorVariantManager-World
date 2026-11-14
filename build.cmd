@@ -55,4 +55,4 @@ if defined PROBE_FLAG exit /b 0
 if not exist "发布\nativePC\plugins" mkdir "发布\nativePC\plugins"
 copy /y %OUT%\WorldDiff.dll "发布\nativePC\plugins\WorldDiff.dll" >nul
 if errorlevel 1 exit /b 1
-echo [success] WorldDiff 1.4.0 in-game plugin built.
+echo [success] WorldDiff 1.5.0 in-game plugin built.
