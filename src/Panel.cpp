@@ -552,7 +552,7 @@ void DrawPanel(){
   const std::string_view loadedPrefix="已载入装备预设：";
   if(s.mismatchedScopes.count(outfit)){
    ImGui::AlignTextToFramePadding();
-   ImGui::TextColored(accent,"预设不匹配，可直接编辑；保存修改前备份旧文件。");
+   ImGui::TextColored(accent,"当前预设不匹配");
    Tip("旧预设尚未应用。可直接调整当前模型的部位、创建分组和预设。也可重新匹配当前文件，或使用上方查找按钮导入模板。仅查看不会修改旧文件。");
    ImGui::SameLine();
    if(Button("重新匹配当前文件"))if(RebindEquipmentProfile(outfit)){groupId=Main(outfit).id;creating=false;staged.clear();}
