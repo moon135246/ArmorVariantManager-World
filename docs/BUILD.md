@@ -26,6 +26,8 @@ build\test_hotkeys.exe
 
 ImGui／原生输入检查需要可交互 Windows 桌面。原生输入检查会创建临时测试窗口。离线预览渲染脚本另外需要 Python、NumPy 和 Pillow；普通 DLL 编译不依赖 Python。
 
+`tools\test-profile-mismatch.cmd` 编译后运行 `build\test_profile_mismatch.exe [preview-directory]`，在临时目录模拟同装备更换材质／模型、旧 WDP 不匹配、真实面板编辑和新预设保存。检查旧文件备份、失败重试、外部修改冲突、模板导入、备份恢复、四套主题及窄窗口；可选目录输出 ImGui 绘制数据，供 `render_imgui_preview.py` 渲染。不访问游戏或个人预设。
+
 界面测试和插件通过 Windows SDK 的资源编译器嵌入同一份 Noto Sans SC 正文与粗体，原生输入检查会核对实际选中的 GDI 字体。
 
 DX12 代理对象兼容性可运行 `tools\test-render-compat.cmd`，脚本编译后自动执行。它使用 WARP 和隐藏测试窗口，不读取游戏文件或个人配置。覆盖范围见 [MHWSS 兼容性说明](MHWSS_COMPATIBILITY.md)。

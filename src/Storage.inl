@@ -63,7 +63,18 @@ bool LoadEquipmentProfile(const std::string& scope){
  File file;bool readable=!ec&&ReadFile(path,file);
  if(!readable||!MatchesEquipment(scope,file)){
   if(readable&&CompleteMapping(scope,file)&&ApplyFile(scope,file,scope+".wdp"))return true;
-  EraseScope(scope);Main(scope);s.loadedScopes.insert(scope);s.blockedScopes.insert(scope);s.profileSnapshots.erase(scope);if(readable)s.loadedFingerprints[scope]=file.fingerprint;else s.loadedFingerprints.erase(scope);s.profileStatus[scope]="预设无效或与当前模型不匹配，请查找模板重新匹配；原文件保留";return false;
+  EraseScope(scope);Main(scope);s.loadedScopes.insert(scope);s.profileSnapshots.erase(scope);
+  if(readable){
+   s.blockedScopes.erase(scope);s.mismatchedScopes.insert(scope);s.loadedFingerprints[scope]=file.fingerprint;
+   EnsureTransformMode(s.data,scope); // Opening the conditions page must not change the draft.
+   // The blank draft is a baseline, not a request to overwrite the old file.
+   s.profileSnapshots[scope]=Fingerprint(ProfileText(scope,true));
+   s.profileStatus[scope]="当前预设与模型不匹配，可直接编辑当前模型";
+  }else{
+   s.blockedScopes.insert(scope);s.loadedFingerprints.erase(scope);
+   s.profileStatus[scope]="装备预设无法读取，原文件保留；请检查文件或导入有效模板";
+  }
+  ResetTransforms();return false;
  }
  StampCurrentViews(file.document);InstallDocument(scope,std::move(file.document));s.loadedFingerprints[scope]=file.fingerprint;s.profileSnapshots[scope]=Fingerprint(ProfileText(scope));s.profileStatus[scope]="已载入装备预设："+scope+".wdp";return true;
 }
@@ -75,8 +86,8 @@ std::vector<std::string> ProfileBackups(const std::string& scope){
 bool RestoreProfileBackup(const std::string& scope,const std::string& name){
  auto& s=Get();if(!CanEditScope(scope)||!SafeFile(name))return false;File file;if(!ReadFile(BackupFolder(scope)/PathUtf8(name),file)||!MatchesEquipment(scope,file)){s.notice="这份备份不匹配当前模型，未恢复";return false;}
  if(!SaveEquipmentProfiles())return false;std::string before;if(!ReadText(Folder()/PathUtf8(scope+".wdp"),before)||!Backup(scope,before,"restore"))return false;
- auto original=s.data;auto snapshots=s.profileSnapshots;StampCurrentViews(file.document);InstallDocument(scope,std::move(file.document));s.profileSnapshots.erase(scope);if(!before.empty())s.loadedFingerprints[scope]=Fingerprint(before);
- if(!ExportProfile(scope)){s.data=std::move(original);s.profileSnapshots=std::move(snapshots);ResetTransforms();return false;}TrimBackups(scope);Changed("已恢复当前装备的预设备份");return true;
+ auto original=s.data;auto snapshots=s.profileSnapshots,loaded=s.loadedFingerprints;auto mismatched=s.mismatchedScopes;StampCurrentViews(file.document);InstallDocument(scope,std::move(file.document));s.profileSnapshots.erase(scope);if(!before.empty())s.loadedFingerprints[scope]=Fingerprint(before);
+ if(!WriteProfile(scope,{},nullptr,mismatched.count(scope)!=0)){s.data=std::move(original);s.profileSnapshots=std::move(snapshots);s.loadedFingerprints=std::move(loaded);s.mismatchedScopes=std::move(mismatched);ResetTransforms();return false;}TrimBackups(scope);Changed("已恢复当前装备的预设备份");return true;
 }
 bool MigrateStorage(){
  auto& s=Get();InitializeProfiles();std::error_code ec;std::filesystem::path legacy;Document document;

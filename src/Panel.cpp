@@ -295,7 +295,8 @@ void TargetsPanel(){
  ImGui::Separator();
  const bool narrow=ImGui::GetContentRegionAvail().x<S(445);
  float footer=(ImGui::GetFrameHeight()+ImGui::GetStyle().ItemSpacing.y)*(narrow?2:1)+ImGui::GetStyle().ItemSpacing.y*2+S(8);
- ImGui::BeginChild("材质滚动区",ImVec2(0,-footer));
+ // At minimum window height, let the page scroll instead of collapsing all parts.
+ ImGui::BeginChild("材质滚动区",ImVec2(0,std::max(S(120),ImGui::GetContentRegionAvail().y-footer)));
  std::string filter=Lower(search);DWORD now=GetTickCount();bool any=false;
  for(int slot=0;slot<6;slot++)for(auto& model:s.models){if(model.equip!=outfit||!IsCurrentModel(model.relativePath)||PartIndex(model.part)!=slot||(part!=-1&&part!=slot))continue;auto path=Normalize(model.relativePath);bool active=s.trackingPlayer||s.lastSeen.count(path)&&(DWORD)(now-s.lastSeen[path])<1800;std::string head=std::string(PartName(slot))+"  ·  "+model.display+(active?"  [已加载]":"  [待加载]");ImGui::PushID(path.c_str());
   bool expanded;
@@ -549,7 +550,13 @@ void DrawPanel(){
   auto bound=s.data.bindings.find(outfit);
   const std::string profileStatus=s.profileStatus.count(outfit)?s.profileStatus[outfit]:(bound==s.data.bindings.end()?"当前装备尚无预设，可查找模板或直接编辑":bound->second);
   const std::string_view loadedPrefix="已载入装备预设：";
-  if((paper::IsNight()||paper::IsGlass())&&profileStatus.starts_with(loadedPrefix)){
+  if(s.mismatchedScopes.count(outfit)){
+   ImGui::AlignTextToFramePadding();
+   ImGui::TextColored(accent,"预设不匹配，可直接编辑；保存修改前备份旧文件。");
+   Tip("旧预设尚未应用。可直接调整当前模型的部位、创建分组和预设。也可重新匹配当前文件，或使用上方查找按钮导入模板。仅查看不会修改旧文件。");
+   ImGui::SameLine();
+   if(Button("重新匹配当前文件"))if(RebindEquipmentProfile(outfit)){groupId=Main(outfit).id;creating=false;staged.clear();}
+  }else if((paper::IsNight()||paper::IsGlass())&&profileStatus.starts_with(loadedPrefix)){
    ImGui::TextColored(muted,"已载入装备预设");ImGui::SameLine();InlineChip(profileStatus.c_str()+loadedPrefix.size());
   }else ImGui::TextColored(muted,"%s",profileStatus.c_str());
   if(std::any_of(s.data.inactiveMeshes.begin(),s.data.inactiveMeshes.end(),[&](auto& b){return Equip(b.model)==outfit;})&&ImGui::TreeNode("待匹配网格")){
@@ -693,7 +700,7 @@ void DrawPanel(){
   }
   {
    SidebarSpacing body(themed&&tab!=0);
-   if(tab==4)AboutPanel();else if(tab==3)SettingsPanel();else if(!CanEditScope(outfit)){ImGui::TextWrapped("当前预设与模型不匹配。可重新匹配当前文件，或使用上方查找按钮导入模板。原文件会先备份。");if(Button("重新匹配当前文件"))if(RebindEquipmentProfile(outfit))groupId=Main(outfit).id;}else if(tab==0)TargetsPanel();else if(tab==2)HotkeyPanel();else TransformPanel();
+   if(tab==4)AboutPanel();else if(tab==3)SettingsPanel();else if(!CanEditScope(outfit)){ImGui::TextWrapped("当前装备暂时无法编辑，请检查上方提示。可使用查找按钮导入有效模板，原文件会先备份。");}else if(tab==0)TargetsPanel();else if(tab==2)HotkeyPanel();else TransformPanel();
   }
   if(themed){ImGui::EndChild();ImGui::PopID();}
   ImGui::EndChild();AutomationConflictPopup();

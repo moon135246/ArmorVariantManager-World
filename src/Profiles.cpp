@@ -71,7 +71,7 @@ void TrimBackups(const std::string& key){
  std::sort(files.begin(),files.end(),[](auto& a,auto& b){std::error_code ae,be;auto at=a.last_write_time(ae),bt=b.last_write_time(be);return at!=bt?at>bt:a.path()>b.path();});
  for(size_t i=5;i<files.size();i++)std::filesystem::remove(files[i].path(),ec);
 }
-void EraseScope(const std::string& scope){auto& s=Get();s.data.equipmentHeights.erase(scope);std::erase_if(s.data.inactiveMeshes,[&](auto& m){return Equip(m.model)==scope;});std::erase_if(s.data.materialNames,[&](auto& entry){return entry.first.first==scope;});std::erase_if(s.data.groups,[&](auto& g){return g.scope==scope;});std::erase_if(s.data.transforms,[&](auto& r){return r.scope==scope;});std::erase_if(s.data.hotkeys,[&](auto& h){return h.scope==scope;});if(s.hotkeyDraft.scope==scope)s.hotkeyDraft={};s.captureHotkey=false;s.keysAllowed=false;std::erase_if(s.data.meshDisplay,[&](auto& item){return Equip(item.first.model)==scope;});s.data.transformModes.erase(scope);s.data.bindings.erase(scope);}
+void EraseScope(const std::string& scope){auto& s=Get();s.mismatchedScopes.erase(scope);s.data.equipmentHeights.erase(scope);std::erase_if(s.data.inactiveMeshes,[&](auto& m){return Equip(m.model)==scope;});std::erase_if(s.data.materialNames,[&](auto& entry){return entry.first.first==scope;});std::erase_if(s.data.groups,[&](auto& g){return g.scope==scope;});std::erase_if(s.data.transforms,[&](auto& r){return r.scope==scope;});std::erase_if(s.data.hotkeys,[&](auto& h){return h.scope==scope;});if(s.hotkeyDraft.scope==scope)s.hotkeyDraft={};s.captureHotkey=false;s.keysAllowed=false;std::erase_if(s.data.meshDisplay,[&](auto& item){return Equip(item.first.model)==scope;});s.data.transformModes.erase(scope);s.data.bindings.erase(scope);}
 void InstallDocument(const std::string& scope,Document doc){
  auto& s=Get();EraseScope(scope);s.data.equipmentHeights.insert(doc.equipmentHeights.begin(),doc.equipmentHeights.end());s.data.materialNames.insert(doc.materialNames.begin(),doc.materialNames.end());s.data.inactiveMeshes.insert(s.data.inactiveMeshes.end(),doc.inactiveMeshes.begin(),doc.inactiveMeshes.end());std::set<uint64_t> used;for(auto& g:s.data.groups){used.insert(g.id);for(auto& p:g.presets)used.insert(p.id);}for(auto& r:s.data.transforms)used.insert(r.id);for(auto& h:s.data.hotkeys)used.insert(h.id);
  s.data.nextId=std::max(s.data.nextId,doc.nextId);auto unique=[&](uint64_t old){if(!used.insert(old).second){while(used.count(s.data.nextId))s.data.nextId++;old=s.data.nextId++;used.insert(old);}return old;};
@@ -84,6 +84,7 @@ void InstallDocument(const std::string& scope,Document doc){
 }
 }
 static std::string ProfileText(const std::string& scope,bool freshIdentity=false){
+ freshIdentity=freshIdentity||Get().mismatchedScopes.count(scope)!=0;
  auto& s=Get();Document part;for(auto& h:s.data.hotkeys)if(h.scope==scope){part.hotkeys.push_back(h);part.nextId=std::max(part.nextId,h.id+1);}if(auto mode=s.data.transformModes.find(scope);mode!=s.data.transformModes.end())part.transformModes[scope]=mode->second;for(auto& r:s.data.transforms)if(r.scope==scope){part.transforms.push_back(r);part.nextId=std::max(part.nextId,r.id+1);}for(auto& g:s.data.groups)if(g.scope==scope){part.groups.push_back(g);part.nextId=std::max(part.nextId,g.id+1);for(auto& p:g.presets)part.nextId=std::max(part.nextId,p.id+1);}if(part.groups.empty())return {};
  for(auto& [target,view]:s.data.meshDisplay)if(Equip(target.model)==scope)part.meshDisplay[target]=view;
  std::set<Target> referenced;
@@ -101,7 +102,10 @@ static std::string ProfileText(const std::string& scope,bool freshIdentity=false
  std::set<std::pair<std::string,uint32_t>> signatures;
  File metadata;if(!freshIdentity)ReadFile(Folder()/PathUtf8(scope+".wdp"),metadata);if(metadata.source!=scope)metadata={};
  if(!freshIdentity&&metadata.meshes.empty()){auto binding=s.data.bindings.find(scope);if(binding!=s.data.bindings.end())ReadFile(Folder()/PathUtf8(binding->second),metadata);if(metadata.source!=scope)metadata={};}
- for(auto& m:s.models)if(m.equip==scope&&(!s.trackingPlayer||IsCurrentModel(m.relativePath))){auto path=Normalize(m.relativePath);
+ // Flush against the last accepted outfit even when the actor is temporarily absent.
+ // FollowPlayerOutfit replaces these paths/models only after pending edits are saved.
+ auto savedModel=[&](const Model& m){return !s.trackingPlayer||std::find(s.outfit.paths.begin(),s.outfit.paths.end(),Normalize(m.relativePath))!=s.outfit.paths.end();};
+ for(auto& m:s.models)if(m.equip==scope&&savedModel(m)){auto path=Normalize(m.relativePath);
   if(s.migrating){std::vector<MeshBinding> prior;for(auto& mesh:metadata.meshes)if(mesh.model==path)prior.push_back(mesh);bool verified=prior.size()==m.meshes.size()&&!prior.empty();
    for(auto& mesh:m.meshes){auto old=std::find_if(prior.begin(),prior.end(),[&](auto& row){return row.index==mesh.index;});if(old==prior.end()||mesh.materialId>=m.materials.size()||old->material!=m.materials[mesh.materialId].hash||old->vertices!=mesh.vertexCount||old->indices!=mesh.indexCount||old->lod!=mesh.lod)verified=false;}
    if(!verified){metadata.stamps.erase(path);continue;}
@@ -153,13 +157,13 @@ static bool WriteProfile(const std::string& scope,const std::string& requested,s
  std::string before;if(!ReadText(path,before)){s.notice="预设文件读取失败，已停止保存："+name;return false;}
  if(requested.empty()&&!s.migrating&&before.empty()&&s.loadedFingerprints.count(scope)){s.notice="装备预设已被外部删除，请导出预设保留编辑，或重新读取当前装备文件";return false;}
  if(requested.empty()&&!s.migrating&&!before.empty()&&(!s.loadedFingerprints.count(scope)||s.loadedFingerprints[scope]!=Fingerprint(before))){s.notice="装备预设已被外部修改，请重新载入后再编辑："+name;return false;}
- auto key=requested.empty()?scope:"Template-"+Utf8(path.stem().wstring());bool backup=!existingFile&&!before.empty()&&content!=before&&(!requested.empty()||!s.backedUpScopes.count(scope));
+ auto key=requested.empty()?scope:"Template-"+Utf8(path.stem().wstring());bool backup=!existingFile&&!before.empty()&&content!=before&&(!requested.empty()||!s.backedUpScopes.count(scope)||s.mismatchedScopes.count(scope));
  if(backup&&!Backup(key,before,requested.empty()?"edit":"export")){s.notice="备份失败，未替换预设文件";return false;}
  if((existingFile||content!=before)&&!AtomicText(path,content,!existingFile)){
   if(reportCollision())return false;
   s.notice="预设文件保存失败："+name;return false;}
  if(backup){TrimBackups(key);if(requested.empty())s.backedUpScopes.insert(scope);}
- if(requested.empty()){s.data.bindings[scope]=name;s.loadedScopes.insert(scope);s.loadedFingerprints[scope]=fingerprint;s.profileSnapshots[scope]=fingerprint;s.profileStatus[scope]="已载入装备预设："+name;}
+ if(requested.empty()){s.data.bindings[scope]=name;s.loadedScopes.insert(scope);s.loadedFingerprints[scope]=fingerprint;s.profileSnapshots[scope]=fingerprint;s.mismatchedScopes.erase(scope);s.profileStatus[scope]="已载入装备预设："+name;}
  return true;
 }
 bool ExportProfile(const std::string& scope,const std::string& requested,std::string* existingFile){

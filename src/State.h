@@ -96,6 +96,8 @@ struct State {
  bool trackingPlayer=false,storageReady=true,outfitChanging=false;
  OutfitSnapshot outfit,pendingOutfit;DWORD outfitSince=0;
  std::set<std::string> loadedScopes,blockedScopes,backedUpScopes;
+ // Valid WDP for another model: edit a fresh draft, preserve disk until it changes.
+ std::set<std::string> mismatchedScopes;
  std::map<std::string,std::string> profileStatus;
  std::map<std::string,uintptr_t> modelResources;
  TransformRuntime transform;
