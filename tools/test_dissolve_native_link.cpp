@@ -17,7 +17,10 @@
 #ifdef WORLDDIFF_TEST_SILVER
 #include "../src/SilverFlow.h"
 #include "../src/SilverBindings.h"
+#include <atomic>
 #include <cstdarg>
+#include <latch>
+#include <thread>
 namespace worlddiff {
 void RuntimeLog(const char* format,...) {
     va_list args;va_start(args,format);vfprintf(stderr,format,args);va_end(args);fputc('\n',stderr);
@@ -122,7 +125,8 @@ Blob extendSignature(const Blob& captured) {
 }
 int wmain(int argc,wchar_t** argv) {
     try {
-        if(argc!=6)throw std::runtime_error("usage: test_dissolve_native_link vs.cso ps.cso root.cso layout.txt hardware|warp");
+        if(argc!=6 && argc!=7)
+            throw std::runtime_error("usage: test_dissolve_native_link vs.cso ps.cso root.cso layout.txt hardware|warp [concurrent-rounds]");
         auto vs=loadBlob(argv[1]),ps=loadBlob(argv[2]),root=loadBlob(argv[3]);
         std::ifstream layout{std::filesystem::path(argv[4])};
         auto number=[&](){unsigned n=0;if(!(layout>>n))throw std::runtime_error("missing layout field");return n;};
@@ -167,9 +171,40 @@ int wmain(int argc,wchar_t** argv) {
         // The game can create its signature before the material plugin starts.
         check(device->CreateRootSignature(0,root->GetBufferPointer(),root->GetBufferSize(),IID_PPV_ARGS(&gameRoot)),"pre-existing game root");
         d.pRootSignature=gameRoot.Get();
-        check(CreatePipeline(device.Get(),&d,IID_PPV_ARGS(&gamePSO)),"game material");
         // The captured armor color/depth shaders supply UV_Pack; the three-target pass uses generic coverage.
         const unsigned expectedStage=d.NumRenderTargets==6?2u:d.NumRenderTargets==0?1u:4u;
+        if(argc==7) {
+            if(expectedStage==4)throw std::runtime_error("concurrency check requires an armor color or depth pass");
+            std::size_t parsed{};
+            const auto rounds=std::stoul(argv[6],&parsed);
+            if(argv[6][parsed] || rounds==0 || rounds>10000)throw std::runtime_error("invalid concurrent round count");
+            constexpr unsigned threadCount=12;
+            std::atomic_uint failures{};
+            std::latch start{1};
+            std::vector<std::jthread> threads;
+            try {
+                for(unsigned i=0;i<threadCount;++i)threads.emplace_back([&] {
+                    start.wait();
+                    for(unsigned round=0;round<rounds;++round) {
+                        ComPtr<ID3D12PipelineState> pso;
+                        if(FAILED(CreatePipeline(device.Get(),&d,IID_PPV_ARGS(&pso))) || !pso) {
+                            ++failures;
+                            continue;
+                        }
+                        for(auto style:{worlddiff::dissolve::Style::Silver,worlddiff::dissolve::Style::Amber,worlddiff::dissolve::Style::Ink})
+                            if(Stage(pso.Get(),style)!=expectedStage || Stage(pso.Get(),style,true)!=expectedStage)++failures;
+                    }
+                });
+            } catch(...) {
+                start.count_down();
+                throw;
+            }
+            start.count_down();
+            threads.clear();
+            if(failures.load())throw std::runtime_error("concurrent material pipelines failed: "+std::to_string(failures.load()));
+            std::cout<<"PASS concurrent pipeline creation, threads="<<threadCount<<", total="<<threadCount*rounds<<'\n';
+        }
+        check(CreatePipeline(device.Get(),&d,IID_PPV_ARGS(&gamePSO)),"game material");
         for(auto style:{worlddiff::dissolve::Style::Silver,worlddiff::dissolve::Style::Amber,worlddiff::dissolve::Style::Ink})
             if(Stage(gamePSO.Get(),style,true)!=expectedStage)throw std::runtime_error("material UV pipeline readiness");
         if(Stage(gamePSO.Get())!=(d.NumRenderTargets==6?2u:d.NumRenderTargets==0?1u:4u))
@@ -203,6 +238,8 @@ int wmain(int argc,wchar_t** argv) {
             check(list->Close(),"close list");
         }
         std::cout<<"PASS game silver flow pipeline, targets="<<d.NumRenderTargets<<'\n';
+#else
+        if(argc==7)throw std::runtime_error("concurrency check requires WORLDDIFF_TEST_SILVER");
 #endif
         auto create=[&](const Blob& signature) {
             ComPtr<ID3D12RootSignature> rs;ComPtr<ID3D12PipelineState> pipeline;

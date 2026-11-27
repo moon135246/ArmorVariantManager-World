@@ -28,6 +28,7 @@ const GUID uvAmberEdge={0x01b89e73,0x1fe3,0x4a82,{0xba,0x73,0x6f,0x57,0x6a,0x7f,
 const GUID nativeSilver={0x82fa6c33,0x147b,0x4663,{0xba,0xcf,0xbb,0x26,0x51,0xc5,0x9b,0xd1}};
 const GUID nativeViolet={0xb182579f,0x19c8,0x4998,{0x83,0x17,0xd3,0x71,0x32,0x2d,0xb0,0x96}};
 using Blob=ComPtr<ID3DBlob>;
+using ShaderBytes=std::vector<unsigned char>;
 using Requirements=std::array<dissolve::TableRequirement,4>;
 struct Layout {
     ComPtr<ID3D12RootSignature> native,sibling;
@@ -141,8 +142,16 @@ std::string EffectSource(WORD resource) {
     const auto* data=static_cast<const char*>(LockResource(loaded));
     return data?std::string(data,SizeofResource(self,id)):std::string{};
 }
-struct Programs { Blob gs,edge,hull,domain,crystalColor,uvGs,uvHull; };
-Programs ProgramsFor(const D3D12_SHADER_BYTECODE& vs) {
+ShaderBytes CopyBytecode(const Blob& blob) {
+    if(!blob)return {};
+    const auto* begin=static_cast<const unsigned char*>(blob->GetBufferPointer());
+    return {begin,begin+blob->GetBufferSize()};
+}
+D3D12_SHADER_BYTECODE Bytecode(const ShaderBytes& shader) {
+    return {shader.data(),shader.size()};
+}
+struct Programs { ShaderBytes gs,edge,hull,domain,crystalColor,uvGs,uvHull; };
+const Programs* ProgramsFor(const D3D12_SHADER_BYTECODE& vs) {
     ComPtr<ID3D12ShaderReflection> reflect;
     D3D12_SHADER_DESC description{};
     if(FAILED(D3DReflect(vs.pShaderBytecode,vs.BytecodeLength,IID_PPV_ARGS(&reflect))) ||
@@ -174,18 +183,19 @@ Programs ProgramsFor(const D3D12_SHADER_BYTECODE& vs) {
     static std::unordered_map<std::string,Programs> compiled;
     std::lock_guard lock(mutex);
     const auto key=fields.str();
-    if(const auto it=compiled.find(key);it!=compiled.end())return it->second;
+    if(const auto it=compiled.find(key);it!=compiled.end())return &it->second;
     static const std::string silverSource=EffectSource(311),amberSource=EffectSource(312);
     const auto prefix=key+interpolation.str()+"\n#define SILVER_GAME_FIELD 1\n#define DISSOLVE_POSITIONS_REGISTER register(t0,space31)\n"
                          "#define DISSOLVE_SETTINGS_REGISTER register(b0,space31)\n"
                          "#define DISSOLVE_MASK_REGISTER register(t1,space31)\n"
                          "#define DISSOLVE_MASK_LAYOUT_REGISTER register(b1,space31)\n";
     Programs shaders;
-    auto compile=[&](const std::string& source,const char* name,const char* profile,Blob& output) {
-        Blob error;
+    auto compile=[&](const std::string& source,const char* name,const char* profile,ShaderBytes& output) {
+        Blob shader,error;
         if(FAILED(D3DCompile(source.data(),source.size(),name,nullptr,nullptr,name,profile,
-            D3DCOMPILE_ENABLE_STRICTNESS|D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&output,&error)))
+            D3DCOMPILE_ENABLE_STRICTNESS|D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&shader,&error)))
             RuntimeLog("Silver flow shader %s: %s",name,error?static_cast<const char*>(error->GetBufferPointer()):"compile failed");
+        else output=CopyBytecode(shader);
     };
     auto source=prefix+silverSource;
     compile(source,"CoverageGS","gs_5_1",shaders.gs);
@@ -200,8 +210,9 @@ Programs ProgramsFor(const D3D12_SHADER_BYTECODE& vs) {
         compile(uvSource+silverSource,"CoverageGS","gs_5_1",shaders.uvGs);
         compile(uvSource+amberSource,"AmberHS","hs_5_1",shaders.uvHull);
     }
-    compiled.emplace(key,shaders);
-    return shaders;
+    // Compiler blobs stay local: their reference counts are unsafe to share across threads.
+    // Cached bytecode is immutable, and insertion/rehash does not invalidate pointers to entries.
+    return &compiled.emplace(key,std::move(shaders)).first->second;
 }
 bool ArmorPass(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& d) {
     if(!d.pRootSignature || !d.VS.BytecodeLength || d.GS.BytecodeLength || d.HS.BytecodeLength ||
@@ -216,11 +227,11 @@ bool ArmorPass(const D3D12_GRAPHICS_PIPELINE_STATE_DESC& d) {
     }
     return skin && pos;
 }
-Blob Solid(const char* source) {
+ShaderBytes Solid(const char* source) {
     Blob shader;
     D3DCompile(source,strlen(source),nullptr,nullptr,nullptr,"main","ps_5_0",
                D3DCOMPILE_OPTIMIZATION_LEVEL3,0,&shader,nullptr);
-    return shader;
+    return CopyBytecode(shader);
 }
 void EdgeBlend(D3D12_GRAPHICS_PIPELINE_STATE_DESC& d) {
     d.DepthStencilState.DepthFunc=D3D12_COMPARISON_FUNC_EQUAL;
@@ -240,12 +251,12 @@ void EdgeBlend(D3D12_GRAPHICS_PIPELINE_STATE_DESC& d) {
 }
 void PrepareBands(ID3D12Device* device,const D3D12_GRAPHICS_PIPELINE_STATE_DESC& source,ID3D12PipelineState* owner) {
     if(source.NumRenderTargets!=6)return;
-    static const Blob core=Solid("float4 main():SV_Target{return float4(.95,.91,1,.94);}");
-    static const Blob glow=Solid("float4 main():SV_Target{return float4(.62,.39,.86,.57);}");
-    if(!core||!glow)return;
+    static const ShaderBytes core=Solid("float4 main():SV_Target{return float4(.95,.91,1,.94);}");
+    static const ShaderBytes glow=Solid("float4 main():SV_Target{return float4(.62,.39,.86,.57);}");
+    if(core.empty()||glow.empty())return;
     auto d=source;d.CachedPSO={};EdgeBlend(d);
-    auto make=[&](const Blob& shader,const GUID& id) {
-        d.PS={shader->GetBufferPointer(),shader->GetBufferSize()};
+    auto make=[&](const ShaderBytes& shader,const GUID& id) {
+        d.PS=Bytecode(shader);
         ComPtr<ID3D12PipelineState> edge;
         if(FAILED(originalPipeline(device,&d,IID_PPV_ARGS(&edge))))return false;
         return SUCCEEDED(owner->SetPrivateDataInterface(id,edge.Get()));
@@ -273,29 +284,28 @@ void Register(ID3D12Device* device,const D3D12_GRAPHICS_PIPELINE_STATE_DESC* src
         PrepareExistingLayouts(device);
         const auto* layout=KnownLayout(src->pRootSignature);
         if(!layout)return;
-        auto shaders=ProgramsFor(src->VS);
-        if(!shaders.gs||!shaders.edge)return;
+        const auto* shaders=ProgramsFor(src->VS);
+        if(!shaders||shaders->gs.empty()||shaders->edge.empty())return;
         auto make=[&](dissolve::Style style,bool uv) {
             const bool amber=style==dissolve::Style::Amber;
-            const auto& gs=uv?shaders.uvGs:shaders.gs;
-            const auto& hull=uv?shaders.uvHull:shaders.hull;
+            const auto& gs=uv?shaders->uvGs:shaders->gs;
+            const auto& hull=uv?shaders->uvHull:shaders->hull;
             const GUID& surfaceKey=amber?(uv?uvAmberSurface:amberSurface):(uv?uvSilverSurface:flowSurface);
             const GUID& edgeKey=amber?(uv?uvAmberEdge:amberEdge):(uv?uvSilverEdge:flowEdge);
             auto d=*src;d.pRootSignature=layout->sibling.Get();d.CachedPSO={};
             if(amber) {
-                if(!hull||!shaders.domain||!shaders.crystalColor)return false;
+                if(hull.empty()||shaders->domain.empty()||shaders->crystalColor.empty())return false;
                 d.PrimitiveTopologyType=D3D12_PRIMITIVE_TOPOLOGY_TYPE_PATCH;
-                d.HS={hull->GetBufferPointer(),hull->GetBufferSize()};
-                d.DS={shaders.domain->GetBufferPointer(),shaders.domain->GetBufferSize()};
+                d.HS=Bytecode(hull);
+                d.DS=Bytecode(shaders->domain);
             } else {
-                if(!gs)return false;
-                d.GS={gs->GetBufferPointer(),gs->GetBufferSize()};
+                if(gs.empty())return false;
+                d.GS=Bytecode(gs);
             }
             ComPtr<ID3D12PipelineState> surface,edge;
             if(FAILED(originalPipeline(device,&d,IID_PPV_ARGS(&surface))))return false;
             if(d.NumRenderTargets) {
-                auto& ps=amber?shaders.crystalColor:shaders.edge;
-                d.PS={ps->GetBufferPointer(),ps->GetBufferSize()};EdgeBlend(d);
+                d.PS=Bytecode(amber?shaders->crystalColor:shaders->edge);EdgeBlend(d);
                 if(FAILED(originalPipeline(device,&d,IID_PPV_ARGS(&edge))))return false;
                 if(FAILED(owner->SetPrivateDataInterface(edgeKey,edge.Get())))return false;
             }

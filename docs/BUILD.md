@@ -38,6 +38,7 @@ DX12 代理对象兼容性可运行 `tools\test-render-compat.cmd`，脚本编�
 
 - `test_profiles.exe <isolated-root>`：历史跨装备测试，需要符合其模型／材质约束的隔离夹具；省略参数时旧测试会使用开发期默认游戏路径，不建议这样运行。
 - `test_mesh_order.exe <isolated-root>`：真实 MOD3／MRL3 顺序与回退检查。
+- `tools\test-dissolve-native-link.cmd <vs.cso> <ps.cso> <root.cso> <layout.txt> hardware|warp [concurrent-rounds]`：使用已有 DX12 管线夹具检查溶解管线链接。末尾提供轮数时，以 12 个线程对同一颜色或深度管线并发建管线，检查三种风格的通用及 UV 管线就绪状态。夹具取自本地捕获，运行时无需游戏进程。
 - `test_variant_profiles.exe [isolated-model-root legacy-mei-wdp]`：不传参数运行合成材质映射检查；可选参数使用本地 Mei 夹具核对全部规则。
 - `test_storage.exe [isolated-model-root legacy-cfg]`：可选的真实旧数据迁移分支。
 - `test_hotkeys.exe [legacy-wdp [chat-fixture-directory]]`：可选旧 WDP 和聊天开闭字段回放；不传参数使用合成数据。
